@@ -1,0 +1,21 @@
+name: Complete Workflow
+
+on: [push, pull_request]
+
+env:
+  PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+  FORCE_COLOR: "1"
+
+jobs:
+  pre-commit-check:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    uses: ./.github/workflows/pre-commit-check.yml
+    secrets: inherit
+  run-tests:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    uses: ./.github/workflows/run-tests.yml
+    secrets: inherit

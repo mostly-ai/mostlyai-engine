@@ -1,0 +1,65 @@
+site_name: "mostlyai-engine"
+site_url: "https://mostly-ai.github.io/mostlyai-engine/"
+repo_url: "https://github.com/mostly-ai/mostlyai-engine"
+repo_name: "mostly-ai/mostlyai-engine"
+
+theme:
+  name: material
+  logo: logo.png
+  favicon: favicon.png
+  font:
+    text: Lato
+  features:
+    - navigation.top
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - content.code.select
+    - content.code.copy
+    - navigation.footer
+
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-2
+        name: Switch to light mode
+
+nav:
+  - Getting started: index.md
+  - API Reference: api.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            heading_level: 3
+            show_root_toc_entry: false
+            show_root_heading: false
+            show_object_full_path: true
+            show_bases: false
+            show_docstring: true
+            show_source: false
+            show_signature: true
+            separate_signature: true
+            show_docstring_examples: true
+            docstring_section_style: table
+            extensions:
+            - griffe_fieldz
+            docstring_style: google
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - toc:
+      permalink: true

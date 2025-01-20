@@ -1,0 +1,18 @@
+{
+    "consistency_correction_tf": [],
+    "model_size": {
+        "embed.tgt.__ridx": 5,
+        "embed.tgt.__stop": 2,
+        "embed.tgt.c0__tokens": 9,
+        "embed.ctx.c0__nan": 2,
+        "embed.ctx.c0__year": 12,
+        "embed.ctx.c0__month": 6,
+        "embed.ctx.c0__day": 9,
+        "embed.ctx.c1__cat": 5,
+        "context_0": 256,
+        "history_0": 256,
+        "reg.tgt.__ridx_0": 16,
+        "reg.tgt.__stop_0": 16,
+        "reg.tgt.c0__tokens_0": 32
+    }
+}

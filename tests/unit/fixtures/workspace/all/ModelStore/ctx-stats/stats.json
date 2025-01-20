@@ -1,0 +1,68 @@
+{
+    "columns": {
+        "deathDate": {
+            "cardinalities": {
+                "nan": 2,
+                "year": 136,
+                "month": 12,
+                "day": 31
+            },
+            "has_nan": true,
+            "has_time": false,
+            "has_ms": false,
+            "min_values": {
+                "year": 1884,
+                "month": 1,
+                "day": 1,
+                "hour": 0,
+                "minute": 0,
+                "second": 0,
+                "ms_E2": 0,
+                "ms_E1": 0,
+                "ms_E0": 0
+            },
+            "max_values": {
+                "year": 2019,
+                "month": 12,
+                "day": 31,
+                "hour": 0,
+                "minute": 0,
+                "second": 0,
+                "ms_E2": 0,
+                "ms_E1": 0,
+                "ms_E0": 0
+            },
+            "min5": [
+                "1884-04-29",
+                "1884-09-26",
+                "1886-02-13",
+                "1886-05-21",
+                "1886-08-09"
+            ],
+            "max5": [
+                "2019-11-23",
+                "2019-09-07",
+                "2019-09-06",
+                "2019-09-06",
+                "2019-08-26"
+            ],
+            "encoding_type": "TABULAR_DATETIME",
+            "tf_name": "c0"
+        },
+        "bats": {
+            "no_of_rare_categories": 0,
+            "codes": {
+                "_RARE_": 0,
+                "": 1,
+                "B": 2,
+                "L": 3,
+                "R": 4
+            },
+            "cardinalities": {
+                "cat": 5
+            },
+            "encoding_type": "TABULAR_CATEGORICAL",
+            "tf_name": "c1"
+        }
+    }
+}

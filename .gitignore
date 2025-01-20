@@ -1,0 +1,9 @@
+__pycache__/
+.idea/
+.vscode/
+.ipynb_checkpoints/
+.DS_Store
+dist/
+examples/*-ws/
+LICENSE_HEADER
+/site/

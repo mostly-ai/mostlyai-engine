@@ -1,0 +1,59 @@
+name: Run Tests
+
+on: [workflow_call]
+
+jobs:
+  run-tests-unit-and-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: uv sync --frozen --extra cpu
+      - name: Run tests -> unit
+        run: uv run pytest tests/unit
+      - name: Build mkdocs
+        run: uv run mkdocs build --strict
+
+  run-tests-end-to-end-sequential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: uv sync --frozen --extra cpu --no-group docs
+      - name: Run tests -> end_to_end -> sequential
+        run: uv run pytest tests/end_to_end/test_tabular_sequential.py
+      - name: Run tests -> end_to_end -> sequential context
+        run: uv run pytest tests/end_to_end/test_tabular_sequential_context.py
+
+  run-tests-end-to-end-nonsequential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: uv sync --frozen --extra cpu --no-group docs
+      - name: Run tests -> end_to_end all except sequential
+        run: uv run pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/

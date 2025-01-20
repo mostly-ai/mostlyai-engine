@@ -1,0 +1,90 @@
+{
+    "no_of_training_records": 5400,
+    "no_of_validation_records": 0,
+    "seq_len": {
+        "cnt_lengths": {
+            "1": 6000
+        }
+    },
+    "columns": {
+        "desc": {
+            "has_na": false,
+            "cnt_values": {
+                "a": 0,
+                "d": 0,
+                "e": 0,
+                "f": 0,
+                "g": 0,
+                "h": 0,
+                "i": 0,
+                "l": 0,
+                "n": 0,
+                "p": 0,
+                "r": 0,
+                "s": 0,
+                "t": 0,
+                "w": 0,
+                "y": 0,
+                "▁": 0,
+                "an": 0,
+                "ay": 0,
+                "de": 0,
+                "er": 0,
+                "han": 0,
+                "lay": 0,
+                "play": 0,
+                "▁han": 0,
+                "▁play": 0,
+                "ded": 0,
+                "▁handed": 6000,
+                "▁player": 6000,
+                "gh": 0,
+                "igh": 0,
+                "righ": 0,
+                "▁righ": 0,
+                "▁right": 3690,
+                "is": 0,
+                "▁is": 3062,
+                "as": 0,
+                "was": 0,
+                "▁was": 2938,
+                "ef": 0,
+                "lef": 0,
+                "▁lef": 0,
+                "▁left": 2310
+            },
+            "cnt_lengths": {
+                "4": 6000
+            },
+            "merges": [
+                "a n",
+                "a y",
+                "d e",
+                "e r",
+                "h an",
+                "l ay",
+                "p lay",
+                "▁ han",
+                "▁ play",
+                "de d",
+                "▁han ded",
+                "▁play er",
+                "g h",
+                "i gh",
+                "r igh",
+                "▁ righ",
+                "▁righ t",
+                "i s",
+                "▁ is",
+                "a s",
+                "w as",
+                "▁ was",
+                "e f",
+                "l ef",
+                "▁ lef",
+                "▁lef t"
+            ],
+            "encoding_type": "LANGUAGE_TEXT"
+        }
+    }
+}
