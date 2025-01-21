@@ -11,20 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 
-from mostlyai.engine.logging import setup_logging
-from mostlyai.engine.splitting import split
-from mostlyai.engine.analysis import analyze
-from mostlyai.engine.training import train
-from mostlyai.engine.encoding import encode
-from mostlyai.engine.generation import generate
+import sys
+import logging
+
+_default_handler = logging.StreamHandler(stream=sys.stdout)
+_default_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)-7s: %(message)s"))
+_default_handler.setLevel(logging.INFO)
+
+_LOG = logging.getLogger(__name__.rsplit(".", 1)[0])
 
 
-__all__ = ["split", "analyze", "encode", "train", "generate"]
-__version__ = "1.0.0"
+def setup_logging() -> None:
+    _LOG.addHandler(_default_handler)
+    _LOG.setLevel(logging.INFO)
+    _LOG.propagate = False
 
-# suppress specific warning related to os.fork() in multi-threaded processes
-warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*multi-threaded.*fork.*")
 
-setup_logging()
+def unset_logging() -> None:
+    _LOG.removeHandler(_default_handler)
+    _LOG.setLevel(logging.NOTSET)
+    _LOG.propagate = True
