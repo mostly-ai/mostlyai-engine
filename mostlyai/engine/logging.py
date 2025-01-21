@@ -19,7 +19,7 @@ _default_handler = logging.StreamHandler(stream=sys.stdout)
 _default_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)-7s: %(message)s"))
 _default_handler.setLevel(logging.INFO)
 
-_LOG = logging.getLogger(__name__.rsplit(".", 1)[0])
+_LOG = logging.getLogger(__name__.rsplit(".", 1)[0])  # get the logger with the root module name (mostlyai.engine)
 
 
 def setup_logging() -> None:
