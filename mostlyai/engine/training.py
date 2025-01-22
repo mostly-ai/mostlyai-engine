@@ -26,8 +26,8 @@ from mostlyai.engine._workspace import resolve_model_type
 def train(
     *,
     model: str | None = None,
-    max_training_time: float = 60.0,
-    max_epochs: float = 100.0,
+    max_training_time: float = 14400.0,  # 10 days
+    max_epochs: float = 100.0,  # 100 epochs
     batch_size: int | None = None,
     gradient_accumulation_steps: int | None = None,
     enable_flexible_generation: bool = True,
