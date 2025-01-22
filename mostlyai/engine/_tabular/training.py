@@ -339,8 +339,8 @@ def _calculate_average_trn_loss(trn_sample_losses: list[torch.Tensor], n: int | 
 def train(
     *,
     model: str = "MOSTLY_AI/Medium",
-    max_training_time: float = 60.0,
-    max_epochs: float = 100.0,
+    max_training_time: float = 14400.0,  # 10 days
+    max_epochs: float = 100.0,  # 100 epochs
     batch_size: int | None = None,
     gradient_accumulation_steps: int | None = None,
     max_sequence_window: int = 100,

@@ -197,8 +197,8 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
 def train(
     *,
     model: str = "MOSTLY_AI/LSTMFromScratch-3m",
-    max_training_time: float = 60.0,
-    max_epochs: float = 100.0,
+    max_training_time: float = 14400.0,  # 10 days
+    max_epochs: float = 100.0,  # 100 epochs
     batch_size: int | None = None,
     gradient_accumulation_steps: int | None = None,
     enable_flexible_generation: bool = True,
