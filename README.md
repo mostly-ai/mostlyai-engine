@@ -42,6 +42,7 @@ pip install -U mostlyai-engine[gpu]
 from pathlib import Path
 import pandas as pd
 from mostlyai import engine
+
 engine.init_logging()
 
 # set up workspace
@@ -73,6 +74,7 @@ pd.read_parquet(ws / "SyntheticData") # load synthetic data
 from pathlib import Path
 import pandas as pd
 from mostlyai import engine
+
 engine.init_logging()
 
 # set up workspace
@@ -108,6 +110,7 @@ pd.read_parquet(ws / "SyntheticData") # load synthetic data
 from pathlib import Path
 import pandas as pd
 from mostlyai import engine
+
 engine.init_logging()
 
 # set up workspace
