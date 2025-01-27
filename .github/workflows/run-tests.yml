@@ -10,11 +10,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.10'
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.13'
+          python-version: '3.10'
       - name: Install dependencies
         run: uv sync --frozen --extra cpu
       - name: Run tests -> unit
@@ -29,11 +29,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.10'
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.13'
+          python-version: '3.10'
       - name: Install dependencies
         run: uv sync --frozen --extra cpu --no-group docs
       - name: Run tests -> end_to_end -> sequential
@@ -48,11 +48,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.10'
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.13'
+          python-version: '3.10'
       - name: Install dependencies
         run: uv sync --frozen --extra cpu --no-group docs
       - name: Run tests -> end_to_end all except sequential
