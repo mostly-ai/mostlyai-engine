@@ -59,7 +59,10 @@ engine.split(                         # split data as PQT files for `trn` + `val
 )
 engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelData/tgt-stats/stats.json`
 engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(workspace_dir=ws)        # train model and store to `{ws}/ModelData/model-data`
+engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
+    workspace_dir=ws,
+    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
+)
 engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```
@@ -93,7 +96,7 @@ engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws
 engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
 engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
     workspace_dir=ws,
-    max_training_time=2,              # limit TRAIN to 1 minute for demo purposes
+    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
 )
 engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
