@@ -42,6 +42,7 @@ pip install -U mostlyai-engine[gpu]
 from pathlib import Path
 import pandas as pd
 from mostlyai import engine
+engine.init_logging()
 
 # set up workspace
 ws = Path("ws-tabular-flat")
@@ -69,6 +70,7 @@ pd.read_parquet(ws / "SyntheticData") # load synthetic data
 from pathlib import Path
 import pandas as pd
 from mostlyai import engine
+engine.init_logging()
 
 # set up workspace
 ws = Path("ws-tabular-sequential")
@@ -103,6 +105,7 @@ pd.read_parquet(ws / "SyntheticData") # load synthetic data
 from pathlib import Path
 import pandas as pd
 from mostlyai import engine
+engine.init_logging()
 
 # set up workspace
 ws = Path("ws-language-flat")

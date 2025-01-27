@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 
-from mostlyai.engine.logging import setup_logging
+from mostlyai.engine.logging import init_logging
 from mostlyai.engine.splitting import split
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.training import train
@@ -21,10 +21,8 @@ from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
 
 
-__all__ = ["split", "analyze", "encode", "train", "generate"]
+__all__ = ["split", "analyze", "encode", "train", "generate", "init_logging"]
 __version__ = "1.0.0"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*multi-threaded.*fork.*")
-
-setup_logging()
