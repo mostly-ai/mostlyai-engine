@@ -43,8 +43,9 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-# set up workspace
+# set up workspace and default logging
 ws = Path("ws-tabular-flat")
+engine.init_logging()
 
 # load original data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
@@ -73,8 +74,11 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-# set up workspace
+engine.init_logging()
+
+# set up workspace and default logging
 ws = Path("ws-tabular-sequential")
+engine.init_logging()
 
 # load original data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
@@ -107,8 +111,9 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-# set up workspace
+# init workspace and logging
 ws = Path("ws-language-flat")
+engine.init_logging()
 
 # load original data
 trn_df = pd.read_parquet("https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/headlines/headlines.parquet")
