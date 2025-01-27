@@ -14,16 +14,34 @@
 
 import sys
 import logging
+from pathlib import Path
 
 _LOG = logging.getLogger(__name__.rsplit(".", 1)[0])  # get the logger with the root module name (mostlyai.engine)
 
 
-def init_logging() -> None:
-    default_handler = logging.StreamHandler(stream=sys.stdout)
-    default_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)-7s: %(message)s"))
-    default_handler.setLevel(logging.INFO)
+def init_logging(log_file: str | Path | None = None) -> None:
+    """
+    Initialize the logging configuration. Either log to stdout or to a file.
+
+    Args:
+        log_file:
+    """
+
+    if log_file:
+        # log to file
+        log_file = Path(log_file).absolute()
+        if log_file.exists() and log_file.is_dir():
+            log_file = log_file / "mostlyai-engine.log"
+        else:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(log_file, mode="a")
+    else:
+        # log to stdout
+        handler = logging.StreamHandler(stream=sys.stdout)
+    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)-7s: %(message)s"))
+    handler.setLevel(logging.INFO)
 
     if not _LOG.hasHandlers():
-        _LOG.addHandler(default_handler)
+        _LOG.addHandler(handler)
         _LOG.setLevel(logging.INFO)
         _LOG.propagate = False
