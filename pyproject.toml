@@ -73,9 +73,9 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mostly-ai/mostlyai-engine"
-Documentation = "https://mostly-ai.github.io/mostlyai-engine/"
-Source = "https://github.com/mostly-ai/mostlyai-engine"
+homepage = "https://github.com/mostly-ai/mostlyai-engine"
+repository = "https://github.com/mostly-ai/mostlyai-engine"
+documentation = "https://mostly-ai.github.io/mostlyai-engine/"
 
 [tool.uv]
 default-groups = ["test", "dev", "docs"]
