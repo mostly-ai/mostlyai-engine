@@ -24,7 +24,7 @@ def init_logging(log_file: str | Path | None = None) -> None:
     Initialize the logging configuration. Either log to stdout or to a file.
 
     Args:
-        log_file:
+        log_file: The path to the log file. If not provided, logs will be printed to stdout.
     """
 
     if log_file:
