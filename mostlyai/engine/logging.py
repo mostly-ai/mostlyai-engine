@@ -14,7 +14,6 @@
 
 import sys
 import logging
-from pathlib import Path
 
 _LOG = logging.getLogger(__name__.rsplit(".", 1)[0])  # get the logger with the root module name (mostlyai.engine)
 
