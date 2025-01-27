@@ -30,7 +30,7 @@ pip install -U mostlyai-engine
 
 or alternatively for a GPU setup:
 ```bash
-pip install -U mostlyai-engine[gpu]
+pip install -U 'mostlyai-engine[gpu]'
 ```
 
 
