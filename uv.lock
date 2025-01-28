@@ -1,34 +1,26 @@
 version = 1
 requires-python = ">=3.10"
 resolution-markers = [
-    "python_full_version >= '3.13' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "python_full_version < '3.11' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu')",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu')",
-    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu')",
-    "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version >= '3.12' and extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.11.*' and extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version < '3.11' and extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
+    "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version < '3.11'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 conflicts = [[
     { package = "mostlyai-engine", extra = "cpu" },
     { package = "mostlyai-engine", extra = "gpu" },
+    { package = "mostlyai-engine", extra = "rocm" },
 ]]
 
 [[package]]
@@ -42,9 +34,9 @@ dependencies = [
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or extra != 'extra-15-mostlyai-engine-cpu'" },
-    { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "extra == 'extra-15-mostlyai-engine-cpu' or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" }, marker = "(extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra != 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/89/e2/94937840162a87baa6b56c82247bbb06690b290ad3da0f083192d7b539a9/accelerate-0.31.0.tar.gz", hash = "sha256:b5199865b26106ccf9205acacbe8e4b3b428ad585e7c472d6a46f6fb75b6c176", size = 307110 }
 wheels = [
@@ -263,8 +255,8 @@ dependencies = [
     { name = "packaging" },
     { name = "pathspec" },
     { name = "platformdirs" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d8/0d/cc2fb42b8c50d80143221515dd7e4766995bd07c56c9a3ed30baf080b6dc/black-24.10.0.tar.gz", hash = "sha256:846ea64c97afe3bc677b761787993be4991810ecc7a4a937816dd6bddedc4875", size = 645813 }
 wheels = [
@@ -561,7 +553,7 @@ name = "cryptography"
 version = "44.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'darwin') or (platform_python_implementation != 'PyPy' and extra != 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/91/4c/45dfa6829acffa344e3967d6006ee4ae8be57af746ae2eba1c431949b32c/cryptography-44.0.0.tar.gz", hash = "sha256:cd4e834f340b4293430701e772ec543b0fbe6c2dea510a5286fe0acabe153a02", size = 710657 }
 wheels = [
@@ -1159,7 +1151,7 @@ name = "jaraco-context"
 version = "6.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "backports-tarfile", marker = "python_full_version < '3.12' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "backports-tarfile", marker = "python_full_version < '3.12' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/df/ad/f3777b81bf0b6e7bc7514a1656d3e637b2e8e15fab2ce3235730b3e7a4e6/jaraco_context-6.0.1.tar.gz", hash = "sha256:9bae4ea555cf0b14938dc0aee7c9f32ed303aa20a3b73e7dc80111628792d1b3", size = 13912 }
 wheels = [
@@ -1331,13 +1323,13 @@ name = "keyring"
 version = "25.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "importlib-metadata", marker = "python_full_version < '3.12' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.12' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
     { name = "jaraco-classes" },
     { name = "jaraco-context" },
     { name = "jaraco-functools" },
-    { name = "jeepney", marker = "sys_platform == 'linux' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "pywin32-ctypes", marker = "sys_platform == 'win32' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "secretstorage", marker = "sys_platform == 'linux' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "jeepney", marker = "sys_platform == 'linux' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "pywin32-ctypes", marker = "sys_platform == 'win32' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "secretstorage", marker = "sys_platform == 'linux' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/70/09/d904a6e96f76ff214be59e7aa6ef7190008f52a0ab6689760a98de0bf37d/keyring-25.6.0.tar.gz", hash = "sha256:0b39998aa941431eb3d9b0d4b2460bc773b9df6fed7621c2dfb291a7e0187a66", size = 62750 }
 wheels = [
@@ -1578,7 +1570,7 @@ version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
     { name = "ghp-import" },
     { name = "jinja2" },
     { name = "markdown" },
@@ -1723,7 +1715,7 @@ wheels = [
 
 [[package]]
 name = "mostlyai-engine"
-version = "1.0.1"
+version = "1.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
@@ -1740,21 +1732,25 @@ dependencies = [
     { name = "rich" },
     { name = "setuptools" },
     { name = "tokenizers" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "extra == 'extra-15-mostlyai-engine-cpu' or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" }, marker = "(extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra != 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
     { name = "transformers" },
 ]
 
 [package.optional-dependencies]
 cpu = [
-    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" } },
 ]
 gpu = [
     { name = "bitsandbytes" },
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
     { name = "vllm" },
+]
+rocm = [
+    { name = "pytorch-triton-rocm" },
+    { name = "torch", version = "2.5.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" } },
+    { name = "torchvision", version = "0.20.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" } },
 ]
 
 [package.dev-dependencies]
@@ -1791,13 +1787,15 @@ requires-dist = [
     { name = "peft", specifier = ">=0.11.1,<0.12" },
     { name = "psutil", specifier = ">=5.9.5,<6" },
     { name = "pyarrow", specifier = ">=16.0.0" },
+    { name = "pytorch-triton-rocm", marker = "extra == 'rocm'", specifier = ">=3.1.0", index = "https://download.pytorch.org/whl/rocm6.1", conflict = { package = "mostlyai-engine", extra = "rocm" } },
     { name = "rich", specifier = ">=13.9.4,<14" },
     { name = "setuptools", specifier = ">=75.0.0,<76" },
     { name = "tokenizers", specifier = ">=0.20.1,<0.21" },
-    { name = "torch", marker = "sys_platform == 'darwin'", specifier = "==2.5.1" },
-    { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = "==2.5.1" },
-    { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.5.1+cpu", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "mostlyai-engine", extra = "cpu" } },
-    { name = "torch", marker = "extra == 'gpu'", specifier = "==2.5.1" },
+    { name = "torch", specifier = ">=2.5.1" },
+    { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "mostlyai-engine", extra = "cpu" } },
+    { name = "torch", marker = "extra == 'gpu'", specifier = ">=2.5.1" },
+    { name = "torch", marker = "extra == 'rocm'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/rocm6.1", conflict = { package = "mostlyai-engine", extra = "rocm" } },
+    { name = "torchvision", marker = "extra == 'rocm'", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/rocm6.1", conflict = { package = "mostlyai-engine", extra = "rocm" } },
     { name = "transformers", specifier = ">=4.45.2,<5" },
     { name = "vllm", marker = "extra == 'gpu'", specifier = ">=0.6.4,<0.7" },
 ]
@@ -2254,9 +2252,9 @@ dependencies = [
     { name = "numpy" },
     { name = "opt-einsum" },
     { name = "scipy" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or extra != 'extra-15-mostlyai-engine-cpu'" },
-    { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "extra == 'extra-15-mostlyai-engine-cpu' or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" }, marker = "(extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra != 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/77/22/5238f00f2c1c04e86e8a05fd6219e169af0369c881e8d7dbbaaee629d111/opacus-1.5.2.tar.gz", hash = "sha256:167b66a5f7d5313df396dda143f21d2303b82e554b6798b30675a04103afaeb6", size = 143371 }
 wheels = [
@@ -2485,9 +2483,9 @@ dependencies = [
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or extra != 'extra-15-mostlyai-engine-cpu'" },
-    { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "extra == 'extra-15-mostlyai-engine-cpu' or (extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-15-mostlyai-engine-gpu' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-rocm')" },
+    { name = "torch", version = "2.5.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" }, marker = "(extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (extra != 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm') or (extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
     { name = "tqdm" },
     { name = "transformers" },
 ]
@@ -2994,6 +2992,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bc/57/e84d88dfe0aec03b7a2d4327012c1627ab5f03652216c63d49846d7a6c58/python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca", size = 39115 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a", size = 19863 },
+]
+
+[[package]]
+name = "pytorch-triton-rocm"
+version = "3.1.0"
+source = { registry = "https://download.pytorch.org/whl/rocm6.1" }
+dependencies = [
+    { name = "filelock" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.1.0-cp310-cp310-linux_x86_64.whl", hash = "sha256:328592189d7f7bbebdfdcb806c02970977f124d756e7915ff8ff8493f2d12802" },
+    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.1.0-cp311-cp311-linux_x86_64.whl", hash = "sha256:4b0a563986aa591ecbbfd69d53f171447f64ba453cecaafd80d853b3f1047eca" },
+    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.1.0-cp312-cp312-linux_x86_64.whl", hash = "sha256:3b56b87886d03dcf3aeb8f78f372f5da60b29ffdffcba5cd767b4bfdec47175b" },
 ]
 
 [[package]]
@@ -3538,8 +3549,8 @@ name = "secretstorage"
 version = "3.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'darwin' or extra != 'extra-15-mostlyai-engine-cpu' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "jeepney", marker = "sys_platform != 'darwin' or extra != 'extra-15-mostlyai-engine-cpu' or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/53/a4/f48c9d79cb507ed1373477dbceaba7401fd8a23af63b837fa61f1dcd3691/SecretStorage-3.3.3.tar.gz", hash = "sha256:2403533ef369eca6d2ba81718576c5e0f564d5cca1b58f73a8b23e7d4eeebd77", size = 19739 }
 wheels = [
@@ -3799,18 +3810,31 @@ name = "torch"
 version = "2.5.1"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
 resolution-markers = [
-    "python_full_version >= '3.12' and sys_platform == 'darwin'",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
-    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "filelock", marker = "sys_platform == 'darwin'" },
-    { name = "fsspec", marker = "sys_platform == 'darwin'" },
-    { name = "jinja2", marker = "sys_platform == 'darwin'" },
-    { name = "networkx", marker = "sys_platform == 'darwin'" },
-    { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform == 'darwin'" },
-    { name = "sympy", marker = "sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cuda-cupti-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cuda-nvrtc-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cuda-runtime-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cudnn-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cufft-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-curand-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cusolver-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-cusparse-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'" },
+    { name = "sympy" },
+    { name = "triton", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "typing-extensions" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:269b10c34430aa8e9643dbe035dc525c4a9b1d671cd3dbc8ecbcaed280ae322d" },
@@ -3826,21 +3850,21 @@ name = "torch"
 version = "2.5.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.13' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "python_full_version < '3.11' and sys_platform == 'darwin' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu'",
-    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')",
-    "python_full_version >= '3.12' and extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version == '3.11.*' and extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
-    "python_full_version < '3.11' and extra != 'extra-15-mostlyai-engine-cpu' and extra != 'extra-15-mostlyai-engine-gpu'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version < '3.11'",
 ]
 dependencies = [
     { name = "filelock" },
@@ -3882,39 +3906,47 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.5.1+cpu"
-source = { registry = "https://download.pytorch.org/whl/cpu" }
+version = "2.5.1+rocm6.1"
+source = { registry = "https://download.pytorch.org/whl/rocm6.1" }
 resolution-markers = [
-    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux')",
-    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
-    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
-    "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "filelock", marker = "sys_platform != 'darwin'" },
-    { name = "fsspec", marker = "sys_platform != 'darwin'" },
-    { name = "jinja2", marker = "sys_platform != 'darwin'" },
-    { name = "networkx", marker = "sys_platform != 'darwin'" },
-    { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform != 'darwin'" },
-    { name = "sympy", marker = "sys_platform != 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "pytorch-triton-rocm", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'" },
+    { name = "sympy" },
+    { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp310-cp310-linux_x86_64.whl", hash = "sha256:7f91a2200e352745d70e22396bd501448e28350fbdbd8d8b1c83037e25451150" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp310-cp310-win_amd64.whl", hash = "sha256:df93157482b672892d29134d3fae9d38ba3219702faedd79f407eb36774c56ce" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp311-cp311-linux_x86_64.whl", hash = "sha256:07d7c9e069123d5af08b0cf0013d74f680b2d8be7d9e2cf561a52c90c55d9409" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp311-cp311-win_amd64.whl", hash = "sha256:81531d4d5ca74163dc9574b87396531e546a60cceb6253303c7db6a21e867fdf" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp312-cp312-linux_x86_64.whl", hash = "sha256:4856f9d6925121d13c2df07aa7580b767f449dfe71ae5acde9c27535d5da4840" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp312-cp312-win_amd64.whl", hash = "sha256:a6b720410350765d3d77c01a5ce098a6c45af446284e45e87a98b8a16e7d564d" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp313-cp313-linux_x86_64.whl", hash = "sha256:5dbbdf83caa90d0bcaa50e4933ca424889133b35226db79000877d4ec5d9ea37" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.5.1%2Brocm6.1-cp310-cp310-linux_x86_64.whl", hash = "sha256:f11ccf017dddb8fa9cc3d2acb20a0a91a33a9ab704c1f354e808064d658c8710" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.5.1%2Brocm6.1-cp311-cp311-linux_x86_64.whl", hash = "sha256:ba54392acd63348a4c269dee4ed8b2c90a84ac54db4e1b4bab107a0ccced59a2" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.5.1%2Brocm6.1-cp312-cp312-linux_x86_64.whl", hash = "sha256:b8241e9339dfabe9e0c09913d1c6c45a600aa7c15e3baa5d96ecb0af3654bf7d" },
 ]
 
 [[package]]
 name = "torchvision"
 version = "0.20.1"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
 dependencies = [
     { name = "numpy" },
     { name = "pillow" },
@@ -3933,6 +3965,26 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d4/75/00a852275ade58d3dc474530f7a7b6bc999a817148f0eb59d4fde12eb955/torchvision-0.20.1-cp312-cp312-manylinux1_x86_64.whl", hash = "sha256:17cd78adddf81dac57d7dccc9277a4d686425b1c55715f308769770cb26cad5c", size = 7240323 },
     { url = "https://files.pythonhosted.org/packages/af/f0/ca1445406eb12cbeb7a41fc833a1941ede78e7c55621198b83ecd7bcfd0f/torchvision-0.20.1-cp312-cp312-manylinux2014_aarch64.whl", hash = "sha256:9f853ba4497ac4691815ad41b523ee23cf5ba4f87b1ce869d704052e233ca8b7", size = 14266936 },
     { url = "https://files.pythonhosted.org/packages/c3/18/00993d420b1d6e88582e51d4bc82c824c99a2e9c045d50eaf9b34fff729a/torchvision-0.20.1-cp312-cp312-win_amd64.whl", hash = "sha256:4a330422c36dbfc946d3a6c1caec3489db07ecdf3675d83369adb2e5a0ca17c4", size = 1562392 },
+]
+
+[[package]]
+name = "torchvision"
+version = "0.20.1+rocm6.1"
+source = { registry = "https://download.pytorch.org/whl/rocm6.1" }
+resolution-markers = [
+    "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version < '3.11'",
+]
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "torch", version = "2.5.1+rocm6.1", source = { registry = "https://download.pytorch.org/whl/rocm6.1" } },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.20.1%2Brocm6.1-cp310-cp310-linux_x86_64.whl", hash = "sha256:08e5d2ae574ae92b3b3212d9e6e531009c44e0975b39b08e9ac3ba03dda68572" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.20.1%2Brocm6.1-cp311-cp311-linux_x86_64.whl", hash = "sha256:5d3ab077facb38de7b7cf5822cd1f88db793e910b1bdaf01d1611809bb95cb3e" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.20.1%2Brocm6.1-cp312-cp312-linux_x86_64.whl", hash = "sha256:da61b465edf1e69e71d13a0db51e40e6ab9320db5c6ab4436b755801b0fd18dc" },
 ]
 
 [[package]]
@@ -3986,7 +4038,7 @@ name = "twine"
 version = "6.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "keyring", marker = "(platform_machine != 'ppc64le' and platform_machine != 's390x') or (platform_machine == 'ppc64le' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (platform_machine == 's390x' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "keyring", marker = "(platform_machine != 'ppc64le' and platform_machine != 's390x') or (platform_machine == 'ppc64le' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (platform_machine == 'ppc64le' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (platform_machine == 'ppc64le' and extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm') or (platform_machine == 's390x' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (platform_machine == 's390x' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-rocm') or (platform_machine == 's390x' and extra == 'extra-15-mostlyai-engine-gpu' and extra == 'extra-15-mostlyai-engine-rocm')" },
     { name = "packaging" },
     { name = "pkginfo" },
     { name = "readme-renderer" },
@@ -4149,7 +4201,7 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "torchvision" },
+    { name = "torchvision", version = "0.20.1", source = { registry = "https://pypi.org/simple" } },
     { name = "tqdm" },
     { name = "transformers" },
     { name = "typing-extensions" },
