@@ -20,19 +20,25 @@ Create high-fidelity privacy-safe synthetic data:
 Note: This library is the underlying model engine of the [Synthetic Data SDK ✨](https://github.com/mostly-ai/mostlyai). Please refer to the latter, for an easy-to-use, higher-level software toolkit.
 
 
-## Installation
+## (Experimental) Installation of development version for AMD GPUs
 
-The latest release of `mostlyai-engine` can be installed via pip:
+**Prerequisites: install [uv](https://docs.astral.sh/uv/) package manager**
 
-```bash
-pip install -U mostlyai-engine
+```shell
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
 ```
 
-or alternatively for a GPU setup:
-```bash
-pip install -U 'mostlyai-engine[gpu]'
-```
+**Create the project environment**
 
+```shell
+git clone https://github.com/mostly-ai/mostlyai-engine.git
+cd mostlyai-engine
+git checkout rocm-support
+uv sync --frozen
+# build bitsandbytes and vllm from source as there're no pre-built ROCm wheels
+source install_bnb_vllm_rocm.sh
+```
 
 ## Quick start
 
