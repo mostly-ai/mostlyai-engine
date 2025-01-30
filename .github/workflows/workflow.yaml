@@ -13,9 +13,15 @@ jobs:
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
     uses: ./.github/workflows/pre-commit-check.yml
     secrets: inherit
-  run-tests:
+  run-tests-cpu:
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-    uses: ./.github/workflows/run-tests.yml
+    uses: ./.github/workflows/run-tests-cpu.yaml
+    secrets: inherit
+  run-tests-gpu:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    uses: ./.github/workflows/run-tests-gpu.yaml
     secrets: inherit
