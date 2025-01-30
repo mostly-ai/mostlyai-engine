@@ -20,8 +20,8 @@ jobs:
             with:
                 fetch-depth: 0
                 submodules: 'recursive'
-                
-                
+
+
           - name: Setup | uv
             uses: astral-sh/setup-uv@v5
             with:
