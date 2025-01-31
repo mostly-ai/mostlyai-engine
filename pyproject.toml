@@ -50,7 +50,8 @@ gpu = [
     "vllm>=0.6.4,<0.7",
 ]
 cpu = [
-    "torch>=2.5.1"
+    "torch==2.5.1+cpu; sys_platform == 'linux'",
+    "torch>=2.5.1; sys_platform != 'linux'",
 ]
 
 [dependency-groups]
@@ -92,7 +93,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cpu", extra = "cpu"},
+  { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'"},
 ]
 
 [tool.hatch.build.targets.sdist]
