@@ -210,8 +210,7 @@ def generate(
             False  # needed for gated hf models that are not sharded, otherwise GatedRepoError in vLLM
         )
         # set the default env var so that we don't pass it explicitly to vLLM
-        if not os.getenv("HF_TOKEN") and os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
-            os.environ["HF_TOKEN"] = os.getenv("MOSTLY_HUGGING_FACE_TOKEN", "")
+        os.environ["HF_TOKEN"] = os.getenv("MOSTLY_HUGGING_FACE_TOKEN", os.getenv("HF_TOKEN", ""))
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
         if is_peft_adapter and device.type == "cuda":
