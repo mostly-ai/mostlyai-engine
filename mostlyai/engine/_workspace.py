@@ -168,21 +168,6 @@ class Workspace:
         self.generated_data_path = Path(self._ws_path) / Path(*generated_data)
         self.generated_data = make_path_desc(parts=generated_data, fetch_multiple=fetch_part_parquets)
 
-        # Report-related
-        self.report_ctx_data_path = self._ws_path / "report-ctx-data"
-        self.report_ctx_data = make_path_desc(
-            parts=["report-ctx-data"],
-            fetch_multiple=fetch_part_parquets,
-        )
-        self.report_trn_ctx_data = make_path_desc(
-            parts=["report-ctx-data"],
-            fetch_multiple=fetch_part_trn_parquets,
-        )
-        self.report_val_ctx_data = make_path_desc(
-            parts=["report-ctx-data"],
-            fetch_multiple=fetch_part_val_parquets,
-        )
-
 
 def ensure_workspace_dir(workspace_dir: str | Path) -> Path:
     workspace_dir = Path(workspace_dir)

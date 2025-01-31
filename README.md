@@ -30,7 +30,7 @@ pip install -U mostlyai-engine
 
 or alternatively for a GPU setup:
 ```bash
-pip install -U mostlyai-engine[gpu]
+pip install -U 'mostlyai-engine[gpu]'
 ```
 
 
@@ -43,8 +43,9 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-# set up workspace
+# set up workspace and default logging
 ws = Path("ws-tabular-flat")
+engine.init_logging()
 
 # load original data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
@@ -58,7 +59,10 @@ engine.split(                         # split data as PQT files for `trn` + `val
 )
 engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelData/tgt-stats/stats.json`
 engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(workspace_dir=ws)        # train model and store to `{ws}/ModelData/model-data`
+engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
+    workspace_dir=ws,
+    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
+)
 engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```
@@ -70,8 +74,11 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-# set up workspace
+engine.init_logging()
+
+# set up workspace and default logging
 ws = Path("ws-tabular-sequential")
+engine.init_logging()
 
 # load original data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
@@ -91,7 +98,7 @@ engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws
 engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
 engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
     workspace_dir=ws,
-    max_training_time=2,              # limit TRAIN to 1 minute for demo purposes
+    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
 )
 engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
@@ -104,8 +111,9 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-# set up workspace
+# init workspace and logging
 ws = Path("ws-language-flat")
+engine.init_logging()
 
 # load original data
 trn_df = pd.read_parquet("https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/headlines/headlines.parquet")
