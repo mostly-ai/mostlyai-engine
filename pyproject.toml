@@ -40,7 +40,7 @@ dependencies = [
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0,<0.31",
     "rich>=13.9.4,<14",
-    "torch>=2.5.1; sys_platform == 'darwin'",
+    "torch>=2.5.1",
 ]
 
 [project.optional-dependencies]
