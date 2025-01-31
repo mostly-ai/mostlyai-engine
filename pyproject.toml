@@ -51,7 +51,7 @@ gpu = [
 ]
 cpu = [
     "torch==2.5.1+cpu; sys_platform != 'darwin'",
-    "torch==2.5.1; sys_platform == 'darwin'"
+    "torch>=2.5.1; sys_platform == 'darwin'"
 ]
 
 [dependency-groups]
@@ -93,7 +93,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cpu", extra = "cpu"},
+  { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'"},
 ]
 
 [tool.hatch.build.targets.sdist]
