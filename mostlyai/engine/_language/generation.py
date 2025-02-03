@@ -125,7 +125,6 @@ def generate(
 ):
     _LOG.info("GENERATE_LANGUAGE started")
     t0_ = time.time()
-
     os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
     os.environ["VLLM_NO_DEPRECATION_WARNING"] = "1"
 
