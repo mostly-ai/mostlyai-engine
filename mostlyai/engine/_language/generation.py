@@ -28,6 +28,7 @@ from transformers import (
     PreTrainedTokenizerBase,
 )
 
+
 from mostlyai.engine._common import (
     persist_data_part,
     FixedSizeSampleBuffer,
@@ -127,7 +128,7 @@ def generate(
 
     os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
     os.environ["VLLM_NO_DEPRECATION_WARNING"] = "1"
-    
+
     @contextlib.contextmanager
     def tqdm_disabled():
         tqdm_disable = os.getenv("TQDM_DISABLE")
