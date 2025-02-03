@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import json
 import os
 
@@ -123,7 +124,20 @@ def generate(
 ):
     _LOG.info("GENERATE_LANGUAGE started")
     t0_ = time.time()
-    with ProgressCallbackWrapper(update_progress) as progress:
+
+    os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
+    os.environ["VLLM_NO_DEPRECATION_WARNING"] = "1"
+    
+    @contextlib.contextmanager
+    def tqdm_disabled():
+        tqdm_disable = os.getenv("TQDM_DISABLE")
+        os.environ["TQDM_DISABLE"] = "1"
+        try:
+            yield
+        finally:
+            os.environ["TQDM_DISABLE"] = tqdm_disable if tqdm_disable is not None else ""
+
+    with ProgressCallbackWrapper(update_progress) as progress, tqdm_disabled():
         device = (
             torch.device(device)
             if device is not None
