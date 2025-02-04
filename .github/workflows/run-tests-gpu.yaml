@@ -36,17 +36,17 @@ jobs:
           - name: Setup | Verify CUDA installation
             run: |
               nvcc --version
-              echo "Installed CUDA version is: ${{ steps.cuda-tolkit.outputs.cuda-version }}"
-              echo "CUDA installation path is: ${{ steps.cuda-tolkit.outputs.CUDA_PATH }}"
+              echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda-version }}"
+              echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
 
           - name: Setup | Dependencies
             run: uv sync --frozen --extra gpu --no-group docs
 
           - name: Run tests -> end_to_end -> sequential
-            run: uv run pytest tests/end_to_end/test_tabular_sequential.py
+            run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
 
           - name: Run tests -> end_to_end -> sequential context
-            run: uv run pytest tests/end_to_end/test_tabular_sequential_context.py
+            run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential_context.py
 
           - name: Run tests -> end_to_end all except sequential
-            run: uv run pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+            run: uv run pytest --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
