@@ -55,8 +55,17 @@ jobs:
             run: |
               python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
 
+          - name: Debug | Check available GPU drivers
+            run: ls /dev/nvidia* && lsmod | grep nvidia
+
           - name: Debug | Check available GPU-s
-            run: ls /dev/nvidia* && nvidia-smi || echo "No GPU available"
+            run: nvidia-smi || echo "No GPU available"
+
+          - name: Debug | Test GPU access from docker
+            run: docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+
+          - name: Debug | Run NVIDIA container toolkit
+            run : docker run --rm nvidia/container-toolkit:latest --version
 
           # - name: Run tests -> end_to_end -> sequential
           #   run: CUDA_VISIBLE_DEVICES=0 uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
