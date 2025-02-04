@@ -107,6 +107,7 @@ class VLLMEngine(LanguageEngine):
             enable_lora=True,
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
             swap_space=0,
+            disable_log_stats=True,
         )
         self._base_logits_processors = [MaskInvalidIndicesLogitsProcessor(self.llm.get_tokenizer())]
         self.tokenizer = AutoTokenizer.from_pretrained(
