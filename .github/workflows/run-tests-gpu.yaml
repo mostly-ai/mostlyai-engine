@@ -10,7 +10,7 @@ env:
 
 jobs:
     run-tests-gpu:
-        runs-on: gha-gpu-public
+        runs-on: gha-gpu-public-nvidia
         permissions:
             contents: read
             packages: write
