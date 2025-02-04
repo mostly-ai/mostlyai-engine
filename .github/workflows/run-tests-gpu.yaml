@@ -56,7 +56,7 @@ jobs:
               python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
 
           - name: Debug | Check available GPU drivers
-            run: ls /dev/nvidia* && lsmod | grep nvidia
+            run: ls /dev/nvidia* && lsmod | grep nvidia || echo "No NVIDIA kernel module found"
 
           - name: Debug | Check available GPU-s
             run: nvidia-smi || echo "No GPU available"
