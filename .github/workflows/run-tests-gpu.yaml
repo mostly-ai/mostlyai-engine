@@ -61,17 +61,11 @@ jobs:
           - name: Debug | Check available GPU-s
             run: nvidia-smi || echo "No GPU available"
 
-          - name: Debug | Test GPU access from docker
-            run: docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+          - name: Run tests -> end_to_end -> sequential
+            run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
 
-          - name: Debug | Run NVIDIA container toolkit
-            run : docker run --rm nvidia/container-toolkit:latest --version
+          - name: Run tests -> end_to_end -> sequential context
+            run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential_context.py
 
-          # - name: Run tests -> end_to_end -> sequential
-          #   run: CUDA_VISIBLE_DEVICES=0 uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
-
-          # - name: Run tests -> end_to_end -> sequential context
-          #   run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential_context.py
-
-          # - name: Run tests -> end_to_end all except sequential
-          #   run: uv run pytest --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+          - name: Run tests -> end_to_end all except sequential
+            run: uv run pytest --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
