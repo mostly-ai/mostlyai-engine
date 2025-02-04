@@ -21,7 +21,6 @@ jobs:
                 fetch-depth: 0
                 submodules: 'recursive'
 
-
           - name: Setup | uv
             uses: astral-sh/setup-uv@v5
             with:
@@ -31,8 +30,11 @@ jobs:
           - name: Setup | Dependencies
             run: uv sync --frozen --extra gpu --no-group docs
 
+          - name: Setup | Verify CUDA version
+            run: nvcc --version || echo "CUDA not found"
+
           - name: Run tests -> end_to_end -> sequential
-            run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
+            run: CUDA_VISIBLE_DEVICES=0 uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
 
           - name: Run tests -> end_to_end -> sequential context
             run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential_context.py
