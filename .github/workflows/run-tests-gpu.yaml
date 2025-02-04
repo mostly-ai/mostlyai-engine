@@ -27,20 +27,31 @@ jobs:
                 enable-cache: false
                 python-version: '3.10'
 
+          - name: Setup | Dependencies
+            run: uv sync --frozen --extra gpu --no-group docs
+
+          - name: Setup | Verify CUDA installation
+            run: |
+              nvcc --version && \
+              echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda }}" && \
+              echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}" || \
+              echo "CUDA not found"
+
           - name: Setup | Install CUDA
             id: cuda-toolkit
             uses: Jimver/cuda-toolkit@v0.2.21
             with:
-              cuda: '12.8.0'
+              cuda: '12.4.0'
 
           - name: Setup | Verify CUDA installation
             run: |
-              nvcc --version
-              echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda-version }}"
-              echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
+              nvcc --version && \
+              echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda }}" && \
+              echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}" || \
+              echo "CUDA not found"
 
-          - name: Setup | Dependencies
-            run: uv sync --frozen --extra gpu --no-group docs
+          - name: Check PyTorch and CUDA version
+            run: python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
 
           - name: Run tests -> end_to_end -> sequential
             run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
