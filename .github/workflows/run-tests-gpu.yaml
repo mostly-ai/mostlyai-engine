@@ -11,6 +11,9 @@ env:
 jobs:
     run-tests-gpu:
         runs-on: gha-gpu-public
+        container:
+            image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu20.04
+            options: --gpus all
         permissions:
             contents: read
             packages: write
@@ -30,11 +33,11 @@ jobs:
           - name: Setup | Dependencies
             run: uv sync --frozen --extra gpu --no-group docs
 
-          - name: Setup | Install CUDA
-            id: cuda-toolkit
-            uses: Jimver/cuda-toolkit@v0.2.21
-            with:
-              cuda: '12.4.0'
+          # - name: Setup | Install CUDA
+          #   id: cuda-toolkit
+          #   uses: Jimver/cuda-toolkit@v0.2.21
+          #   with:
+          #     cuda: '12.4.0'
 
           - name: Setup | Check for available GPU-s
             run: nvidia-smi
