@@ -10,7 +10,7 @@ env:
 
 jobs:
     run-tests-gpu:
-        runs-on: gha-gpu-public-nvidia
+        runs-on: gha-gpu-public
         permissions:
             contents: read
             packages: write
@@ -27,13 +27,6 @@ jobs:
               enable-cache: false
               python-version: '3.10'
 
-          # - name: Debug | Verify CUDA installation
-          #   run: |
-          #     nvcc --version && \
-          #     echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda }}" && \
-          #     echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}" || \
-          #     echo "CUDA not found"
-
           - name: Setup | Dependencies
             run: uv sync --frozen --extra gpu --no-group docs
 
@@ -42,21 +35,6 @@ jobs:
             uses: Jimver/cuda-toolkit@v0.2.21
             with:
               cuda: '12.4.0'
-
-          - name: Setup | Verify CUDA installation
-            run: |
-              nvcc --version && \
-              ls -l /usr/local/ && \
-              echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda }}" && \
-              echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}" || \
-              echo "CUDA not found"
-
-          - name: Debug | Check PyTorch and CUDA version
-            run: |
-              python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
-
-          - name: Debug | Check available GPU drivers
-            run: ls /dev/nvidia* && lsmod | grep nvidia || echo "No NVIDIA kernel module found"
 
           - name: Setup | Check for available GPU-s
             run: nvidia-smi
