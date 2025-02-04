@@ -53,6 +53,9 @@ jobs:
           - name: Check PyTorch and CUDA version
             run: python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
 
+          - name: Check GPU-s
+            run: nvidia-smi || echo "no GPU found"
+          
           - name: Run tests -> end_to_end -> sequential
             run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
 
