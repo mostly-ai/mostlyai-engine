@@ -38,4 +38,4 @@ jobs:
             run: uv run pytest tests/end_to_end/test_tabular_sequential_context.py
 
           - name: Run tests -> end_to_end all except sequential
-            run: uv run pytest -s --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+            run: uv run pytest --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
