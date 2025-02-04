@@ -37,11 +37,11 @@ jobs:
           - name: Setup | Dependencies
             run: uv sync --frozen --extra gpu --no-group docs
 
-          # - name: Setup | Install CUDA
-          #   id: cuda-toolkit
-          #   uses: Jimver/cuda-toolkit@v0.2.21
-          #   with:
-          #     cuda: '12.4.0'
+          - name: Setup | Install CUDA
+            id: cuda-toolkit
+            uses: Jimver/cuda-toolkit@v0.2.21
+            with:
+              cuda: '12.4.0'
 
           - name: Setup | Verify CUDA installation
             run: |
@@ -58,8 +58,8 @@ jobs:
           - name: Debug | Check available GPU drivers
             run: ls /dev/nvidia* && lsmod | grep nvidia || echo "No NVIDIA kernel module found"
 
-          - name: Debug | Check available GPU-s
-            run: nvidia-smi || echo "No GPU available"
+          - name: Setup | Check for available GPU-s
+            run: nvidia-smi"
 
           - name: Run tests -> end_to_end -> sequential
             run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
