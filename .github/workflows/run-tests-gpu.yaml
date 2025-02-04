@@ -29,9 +29,9 @@ jobs:
 
           - name: Setup | Install CUDA
             id: cuda-toolkit
-            uses: Jimwer/cuda-toolkit@v0.2.21
+            uses: Jimver/cuda-toolkit@v0.2.21
             with:
-              cuda: '12.8'
+              cuda: '12.8.0'
 
           - name: Setup | Verify CUDA installation
             run: |
