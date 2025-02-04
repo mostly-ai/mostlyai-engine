@@ -36,7 +36,6 @@ jobs:
           - name: Setup | Verify CUDA installation
             run: |
               nvcc --version
-              nvidia-smi
               echo "Installed CUDA version is: ${{ steps.cuda-tolkit.outputs.cuda-version }}"
               echo "CUDA installation path is: ${{ steps.cuda-tolkit.outputs.CUDA_PATH }}"
 
