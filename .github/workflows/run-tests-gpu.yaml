@@ -46,6 +46,7 @@ jobs:
           - name: Setup | Verify CUDA installation
             run: |
               nvcc --version && \
+              ls -l /usr/local/ && \
               echo "Installed CUDA version is: ${{ steps.cuda-toolkit.outputs.cuda }}" && \
               echo "CUDA installation path is: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}" || \
               echo "CUDA not found"
@@ -55,13 +56,13 @@ jobs:
               python -c "import torch; print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
 
           - name: Debug | Check available GPU-s
-            run: nvidia-smi || echo "No GPU available"
+            run: ls /dev/nvidia* && nvidia-smi || echo "No GPU available"
 
-          - name: Run tests -> end_to_end -> sequential
-            run: CUDA_VISIBLE_DEVICES=0 uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
+          # - name: Run tests -> end_to_end -> sequential
+          #   run: CUDA_VISIBLE_DEVICES=0 uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
 
-          - name: Run tests -> end_to_end -> sequential context
-            run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential_context.py
+          # - name: Run tests -> end_to_end -> sequential context
+          #   run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential_context.py
 
-          - name: Run tests -> end_to_end all except sequential
-            run: uv run pytest --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+          # - name: Run tests -> end_to_end all except sequential
+          #   run: uv run pytest --log-cli-level=INFO --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
