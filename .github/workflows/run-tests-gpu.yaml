@@ -59,7 +59,7 @@ jobs:
             run: ls /dev/nvidia* && lsmod | grep nvidia || echo "No NVIDIA kernel module found"
 
           - name: Setup | Check for available GPU-s
-            run: nvidia-smi"
+            run: nvidia-smi
 
           - name: Run tests -> end_to_end -> sequential
             run: uv run pytest --log-cli-level=INFO tests/end_to_end/test_tabular_sequential.py
