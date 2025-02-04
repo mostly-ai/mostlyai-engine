@@ -38,7 +38,7 @@ jobs:
               nvcc --version
               nvidia-smi
               echo "Installed CUDA version is: ${{ steps.cuda-tolkit.outputs.cuda-version }}"
-              echo "CUDA install path is: ${{ steps.cuda-tolkit.outputs.CUDA_PATH }}"
+              echo "CUDA installation path is: ${{ steps.cuda-tolkit.outputs.CUDA_PATH }}"
 
           - name: Setup | Dependencies
             run: uv sync --frozen --extra gpu --no-group docs
