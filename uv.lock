@@ -1160,8 +1160,8 @@ requires-dist = [
     { name = "rich", specifier = ">=13.9.4,<14" },
     { name = "setuptools", specifier = ">=75.0.0,<76" },
     { name = "tokenizers", specifier = ">=0.20.1,<0.21" },
-    { name = "torch", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/rocm6.1" },
-    { name = "torchvision", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/rocm6.1" },
+    { name = "torch", specifier = ">=2.5.1,<2.6.0", index = "https://download.pytorch.org/whl/rocm6.1" },
+    { name = "torchvision", specifier = ">=0.20.1,<0.21.0", index = "https://download.pytorch.org/whl/rocm6.1" },
     { name = "transformers", specifier = ">=4.45.2,<5" },
 ]
 
@@ -1882,14 +1882,15 @@ wheels = [
 
 [[package]]
 name = "pytorch-triton-rocm"
-version = "3.2.0"
+version = "3.1.0"
 source = { registry = "https://download.pytorch.org/whl/rocm6.1" }
+dependencies = [
+    { name = "filelock" },
+]
 wheels = [
-    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.2.0-cp310-cp310-linux_x86_64.whl", hash = "sha256:24b893a8f5ec5bb770a75b34c7a67c08970193409a19dcd5de0071d22ad73278" },
-    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.2.0-cp311-cp311-linux_x86_64.whl", hash = "sha256:54d13ab44cbc9f157549cd8e46ec9b94b2ef3da3ced658497eeed206daa53d5f" },
-    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.2.0-cp312-cp312-linux_x86_64.whl", hash = "sha256:76523e0e01d996ca0eeddf77e2436f696155cbb40a97f0759c00c0a1e8c2ae17" },
-    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.2.0-cp313-cp313-linux_x86_64.whl", hash = "sha256:57b33cdf2063f3c1b52ce38fc12843ab8ba4383035dab4c67194b5313d83c3eb" },
-    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.2.0-cp313-cp313t-linux_x86_64.whl", hash = "sha256:4f07fbb0201218e1d2892cae5ba78edf2d60f15066ae794d63c2d786d1fb137e" },
+    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.1.0-cp310-cp310-linux_x86_64.whl", hash = "sha256:328592189d7f7bbebdfdcb806c02970977f124d756e7915ff8ff8493f2d12802" },
+    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.1.0-cp311-cp311-linux_x86_64.whl", hash = "sha256:4b0a563986aa591ecbbfd69d53f171447f64ba453cecaafd80d853b3f1047eca" },
+    { url = "https://download.pytorch.org/whl/pytorch_triton_rocm-3.1.0-cp312-cp312-linux_x86_64.whl", hash = "sha256:3b56b87886d03dcf3aeb8f78f372f5da60b29ffdffcba5cd767b4bfdec47175b" },
 ]
 
 [[package]]
@@ -2445,29 +2446,27 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.6.0+rocm6.1"
+version = "2.5.1+rocm6.1"
 source = { registry = "https://download.pytorch.org/whl/rocm6.1" }
 dependencies = [
     { name = "filelock" },
     { name = "fsspec" },
     { name = "jinja2" },
     { name = "networkx" },
-    { name = "pytorch-triton-rocm", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "pytorch-triton-rocm", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "setuptools", marker = "python_full_version >= '3.12'" },
     { name = "sympy" },
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.6.0%2Brocm6.1-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:87418d0b1d19aafe095eaa39848810ab7ec992b60157b0c0da32deede7ef784a" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.6.0%2Brocm6.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:1a7dd3cef672c8841a5652d7ce78eb2869bc46fadc1f097ae276d9a6acb54fa0" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.6.0%2Brocm6.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:cfe5740a275f88e0d1519643dbceec5a770722b307fc76c0381e4ceea6b1ccae" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.6.0%2Brocm6.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:3f820f2fdd7a066e2bd303c848cbb26a61dd9190100bdbd7885b9fbe3fe58551" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.6.0%2Brocm6.1-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:bc6adfd3f9217be475bc4131dc599a6d77acf53a410b090980b8c91d38f3494c" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.5.1%2Brocm6.1-cp310-cp310-linux_x86_64.whl", hash = "sha256:f11ccf017dddb8fa9cc3d2acb20a0a91a33a9ab704c1f354e808064d658c8710" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.5.1%2Brocm6.1-cp311-cp311-linux_x86_64.whl", hash = "sha256:ba54392acd63348a4c269dee4ed8b2c90a84ac54db4e1b4bab107a0ccced59a2" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torch-2.5.1%2Brocm6.1-cp312-cp312-linux_x86_64.whl", hash = "sha256:b8241e9339dfabe9e0c09913d1c6c45a600aa7c15e3baa5d96ecb0af3654bf7d" },
 ]
 
 [[package]]
 name = "torchvision"
-version = "0.21.0+rocm6.1"
+version = "0.20.1+rocm6.1"
 source = { registry = "https://download.pytorch.org/whl/rocm6.1" }
 dependencies = [
     { name = "numpy" },
@@ -2475,10 +2474,9 @@ dependencies = [
     { name = "torch" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.21.0%2Brocm6.1-cp310-cp310-linux_x86_64.whl", hash = "sha256:66de98be801422ccccb2e2a1db3c1999bdd23fc4f9cd1705d1f49c1d54bc6ceb" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.21.0%2Brocm6.1-cp311-cp311-linux_x86_64.whl", hash = "sha256:1ea6180a05a3f15dabf06d5742198f1cd833a3832090e41312054f42819e96eb" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.21.0%2Brocm6.1-cp312-cp312-linux_x86_64.whl", hash = "sha256:877010ccdf2cd1551fdbd685151f71f9b680df6d4e1ea17d6607d715119c00a6" },
-    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.21.0%2Brocm6.1-cp313-cp313-linux_x86_64.whl", hash = "sha256:94771124b43808484529d0eb7686804a858fd340a9157c3c3bf6f937153d791b" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.20.1%2Brocm6.1-cp310-cp310-linux_x86_64.whl", hash = "sha256:08e5d2ae574ae92b3b3212d9e6e531009c44e0975b39b08e9ac3ba03dda68572" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.20.1%2Brocm6.1-cp311-cp311-linux_x86_64.whl", hash = "sha256:5d3ab077facb38de7b7cf5822cd1f88db793e910b1bdaf01d1611809bb95cb3e" },
+    { url = "https://download.pytorch.org/whl/rocm6.1/torchvision-0.20.1%2Brocm6.1-cp312-cp312-linux_x86_64.whl", hash = "sha256:da61b465edf1e69e71d13a0db51e40e6ab9320db5c6ab4436b755801b0fd18dc" },
 ]
 
 [[package]]

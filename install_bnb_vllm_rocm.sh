@@ -16,6 +16,7 @@ source .venv/bin/activate
 uv pip install /opt/rocm/share/amd_smi
 uv pip install setuptools_scm numba
 cd vllm
+git checkout v0.6.6.post1
 uv pip install -r requirements-rocm.txt
 PYTORCH_ROCM_ARCH="gfx90a;gfx942" python setup.py develop
 cd ..
