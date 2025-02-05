@@ -64,18 +64,31 @@ def monkey_patch_formatron():
 
 
 def get_formatter_builders(
-    *, seed_df: pd.DataFrame | None = None, size: int | None = None, unseeded_fields: list[str]
+    *, seed_df: pd.DataFrame | None = None, size: int | None = None, stats: dict
 ) -> list[FormatterBuilder]:
     assert (seed_df is not None) ^ (size is not None), "exactly one of seed_df or size must be provided"
     formatter_builders = []
     if seed_df is None:
         seed_df = pd.DataFrame(index=range(size))
+    unseeded_fields = [c for c in list(stats["columns"].keys()) if c not in seed_df.columns.to_list()]
+    categorical_fields = [
+        column
+        for column, column_stats in stats["columns"].items()
+        if column_stats["encoding_type"] == "LANGUAGE_CATEGORICAL"
+    ]
     for _, seed_row in seed_df.iterrows():
         formatter_builder = FormatterBuilder()
         model_dict = {}
         if not seed_row.empty:
             model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}
-        model_dict |= {field_name: (str, ...) for field_name in unseeded_fields}
+        for field_name in unseeded_fields:
+            if field_name in categorical_fields:
+                model_dict[field_name] = (
+                    Literal[tuple(cat for cat in stats["columns"][field_name]["codes"].keys())],
+                    ...,
+                )
+            else:
+                model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)
         formatter_builder.append_str(f"{formatter_builder.json(schema, capture_name=None)}")
         formatter_builders.append(formatter_builder)

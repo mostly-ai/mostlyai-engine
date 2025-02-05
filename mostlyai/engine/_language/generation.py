@@ -247,7 +247,6 @@ def generate(
         # prepare seed data for clean consumption by formatron
         seed_data = prepare_seed_for_formatron(seed_data, engine.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
-        unseeded_tgt_columns = [c for c in tgt_text_columns if c not in seeded_tgt_columns]
 
         total_tokenize_fn_time = 0
         total_logits_processor_build_time = 0
@@ -259,7 +258,7 @@ def generate(
 
         if enforce_json_output and len(seeded_tgt_columns) == 0:
             t0 = time.time()
-            formatter_builders = get_formatter_builders(size=batch_size, unseeded_fields=unseeded_tgt_columns)
+            formatter_builders = get_formatter_builders(size=batch_size, stats=tgt_stats)
             engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
             total_logits_processor_build_time += time.time() - t0
 
@@ -277,10 +276,7 @@ def generate(
             if enforce_json_output and len(seeded_tgt_columns) > 0:
                 t0 = time.time()
                 # some columns are seeded, so we need to create a new logits processor for each batch
-                formatter_builders = get_formatter_builders(
-                    seed_df=sample_seed_batch,
-                    unseeded_fields=unseeded_tgt_columns,
-                )
+                formatter_builders = get_formatter_builders(seed_df=sample_seed_batch, stats=tgt_stats)
                 engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
                 total_logits_processor_build_time += time.time() - t0
 
