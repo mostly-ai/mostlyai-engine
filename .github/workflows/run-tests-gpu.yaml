@@ -20,8 +20,8 @@ jobs:
         steps:
           - name: Setup | Install Git
             run: |
-              apt-get update
-              apt-get install -y git
+              apt-get update -qq
+              apt-get install -y --no-install-recommends git
 
           - name: Setup | Checkout
             uses: actions/checkout@v4
