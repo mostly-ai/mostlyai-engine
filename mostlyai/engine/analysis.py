@@ -41,6 +41,7 @@ from mostlyai.engine._common import (
     ProgressCallback,
     ProgressCallbackWrapper,
 )
+from mostlyai.engine._encoding_types.language.numeric import analyze_language_numeric, analyze_reduce_language_numeric
 from mostlyai.engine._encoding_types.tabular.categorical import (
     analyze_categorical,
     analyze_reduce_categorical,
@@ -386,8 +387,12 @@ def _analyze_reduce(
         elif encoding_type == ModelEncodingType.language_text:
             stats_col = analyze_reduce_text(stats_list=column_stats_list)
         elif encoding_type == ModelEncodingType.language_categorical:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list)
-            stats_col |= analyze_reduce_language_categorical(
+            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_categorical(
+                stats_list=column_stats_list,
+                value_protection=value_protection,
+            )
+        elif encoding_type == ModelEncodingType.language_numeric:
+            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_numeric(
                 stats_list=column_stats_list,
                 value_protection=value_protection,
             )
@@ -527,9 +532,13 @@ def _analyze_flat_col(
     elif encoding_type == ModelEncodingType.language_text:
         stats = analyze_text(values, root_keys, context_keys)
     elif encoding_type == ModelEncodingType.language_categorical:
-        stats = analyze_text(values, root_keys, context_keys)
-        stats2 = analyze_language_categorical(values, root_keys, context_keys)
-        stats |= stats2
+        stats = analyze_text(values, root_keys, context_keys) | analyze_language_categorical(
+            values, root_keys, context_keys
+        )
+    elif encoding_type == ModelEncodingType.language_numeric:
+        stats = analyze_text(values, root_keys, context_keys) | analyze_language_numeric(
+            values, root_keys, context_keys
+        )
     else:
         raise RuntimeError(f"unknown encoding type: `{encoding_type}` for `{values.name}`")
     return stats

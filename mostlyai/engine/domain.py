@@ -61,8 +61,8 @@ class ModelEncodingType(str, Enum):
     tabular_datetime_relative = "TABULAR_DATETIME_RELATIVE"
     tabular_lat_long = "TABULAR_LAT_LONG"
     language_text = "LANGUAGE_TEXT"
-    # language_numeric = "LANGUAGE_NUMERIC"
     language_categorical = "LANGUAGE_CATEGORICAL"
+    language_numeric = "LANGUAGE_NUMERIC"
     # language_datetime = "LANGUAGE_DATETIME"
 
 
