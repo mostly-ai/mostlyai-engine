@@ -76,6 +76,11 @@ def get_formatter_builders(
         for column, column_stats in stats["columns"].items()
         if column_stats["encoding_type"] == "LANGUAGE_CATEGORICAL"
     ]
+    numeric_fields = [
+        column
+        for column, column_stats in stats["columns"].items()
+        if column_stats["encoding_type"] == "LANGUAGE_NUMERIC"
+    ]
     for _, seed_row in seed_df.iterrows():
         formatter_builder = FormatterBuilder()
         model_dict = {}
@@ -87,6 +92,12 @@ def get_formatter_builders(
                     Literal[tuple(cat for cat in stats["columns"][field_name]["codes"].keys())],
                     ...,
                 )
+            elif field_name in numeric_fields:
+                max_decimals = stats["columns"][field_name]["max_decimals"]
+                if max_decimals == 0:
+                    model_dict[field_name] = (int, ...)
+                else:
+                    model_dict[field_name] = (float, ...)
             else:
                 model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)

@@ -73,6 +73,31 @@ def encoded_text_dataset(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def encoded_numeric_categorical_dataset(tmp_path_factory):
+    workspace_dir = tmp_path_factory.mktemp("ws")
+    no_of_records = 20
+    data = pd.DataFrame(
+        {
+            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
+            "age": [20, 30, 40, 50] * int(no_of_records / 4),
+        }
+    )
+    tgt_encoding_types = {
+        "age": ModelEncodingType.language_numeric.value,
+        "gender": ModelEncodingType.language_categorical.value,
+    }
+    split(
+        tgt_data=data,
+        workspace_dir=workspace_dir,
+        model_type="LANGUAGE",
+        tgt_encoding_types=tgt_encoding_types,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    return workspace_dir
+
+
+@pytest.fixture(scope="session")
 def single_record_text_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws-single-record")
     data = pd.DataFrame({"gender": ["m"], "bio": ["Joe"]})
@@ -115,6 +140,19 @@ def test_tgt_only(tgt_only_text_dataset):
     assert len(syn) == 10
     assert set(syn.columns) == {"bio"}
     assert str(syn["bio"].dtype).startswith("string")
+
+
+def test_categorical_numeric(encoded_numeric_categorical_dataset):
+    workspace_dir = encoded_numeric_categorical_dataset
+    train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id)
+    generate(workspace_dir=workspace_dir, sample_size=10)
+
+    syn_data_path = workspace_dir / "SyntheticData"
+    syn = pd.read_parquet(syn_data_path)
+    assert len(syn) == 10
+    assert set(syn.columns) == {"age", "gender"}
+    assert str(syn["age"].dtype).startswith("int64")
+    assert str(syn["gender"].dtype).startswith("string")
 
 
 @pytest.mark.parametrize(
