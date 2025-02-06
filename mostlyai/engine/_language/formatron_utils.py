@@ -93,8 +93,8 @@ def get_formatter_builders(
                     ...,
                 )
             elif field_name in numeric_fields:
-                min_decimal = stats["columns"][field_name]["min_decimal"]
-                if min_decimal >= 0:
+                max_scale = stats["columns"][field_name]["max_scale"]
+                if max_scale == 0:
                     model_dict[field_name] = (int, ...)
                 else:
                     model_dict[field_name] = (float, ...)

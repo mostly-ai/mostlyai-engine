@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import pandas as pd
 
 from mostlyai.engine._common import safe_convert_numeric
-from mostlyai.engine._encoding_types.tabular.numeric import split_sub_columns_digit, NUMERIC_DIGIT_MAX_DECIMAL
+from mostlyai.engine._encoding_types.tabular.numeric import split_sub_columns_digit
 from mostlyai.engine.domain import ModelEncodingType
 
 
@@ -57,7 +56,6 @@ def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bo
     # check for occurrence of NaN values
     has_nan = any([j["has_nan"] for j in stats_list])
     # check if there are negative values
-    has_neg = any([j["has_neg"] for j in stats_list])
 
     # determine precision to apply rounding of sampled values during generation
     keys = stats_list[0]["max_digits"].keys()
@@ -81,22 +79,12 @@ def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bo
         min5 = min11[0:5]
         max5 = max11[0:5]
 
-    if len(min5) > 0 or len(max5) > 0:
-        max_abs = np.max(np.abs(np.array([min5[0], max5[0]])))
-        max_decimal = int(np.floor(np.log10(max_abs))) if max_abs >= 10 else 0
-    else:
-        max_decimal = 0
-    # don't allow more digits than the capped value for it
-    decimal_cap = [d[1:] for d in keys][0]
-    decimal_cap = int(decimal_cap) if decimal_cap.isnumeric() else NUMERIC_DIGIT_MAX_DECIMAL
-    max_decimal = min(max(min_decimal, max_decimal), decimal_cap)
+    max_scale = abs(min(min_decimal, 0))
 
     stats = {
         "encoding_type": ModelEncodingType.language_numeric.value,
         "has_nan": has_nan,
-        "has_neg": has_neg,
-        "max_decimal": max_decimal,
-        "min_decimal": min_decimal,
+        "max_scale": max_scale,
         "min5": min5,
         "max5": max5,
     }
