@@ -38,17 +38,14 @@ def analyze_language_numeric(values: pd.Series, root_keys: pd.Series, _: pd.Seri
 
     # extract min/max digit for each position to determine valid value range for digit encoding
     if any(is_not_nan):
-        min_digits = {k: int(df_split[k][is_not_nan].min()) for k in df_split if k.startswith("E")}
         max_digits = {k: int(df_split[k][is_not_nan].max()) for k in df_split if k.startswith("E")}
     else:
-        min_digits = {k: 0 for k in df_split if k.startswith("E")}
         max_digits = {k: 0 for k in df_split if k.startswith("E")}
 
     # return stats
     stats = {
         "has_nan": has_nan,
         "has_neg": has_neg,
-        "min_digits": min_digits,
         "max_digits": max_digits,
         "min11": min11,
         "max11": max11,
@@ -64,7 +61,6 @@ def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bo
 
     # determine precision to apply rounding of sampled values during generation
     keys = stats_list[0]["max_digits"].keys()
-    min_digits = {k: min([j["min_digits"][k] for j in stats_list]) for k in keys}
     max_digits = {k: max([j["max_digits"][k] for j in stats_list]) for k in keys}
     non_zero_prec = [k for k in keys if max_digits[k] > 0 and k.startswith("E")]
     min_decimal = min([int(k[1:]) for k in non_zero_prec]) if len(non_zero_prec) > 0 else 0
@@ -99,8 +95,6 @@ def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bo
         "encoding_type": ModelEncodingType.language_numeric.value,
         "has_nan": has_nan,
         "has_neg": has_neg,
-        "min_digits": min_digits,
-        "max_digits": max_digits,
         "max_decimal": max_decimal,
         "min_decimal": min_decimal,
         "min5": min5,
