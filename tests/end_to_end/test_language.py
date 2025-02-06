@@ -165,9 +165,10 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     syn_data_path = workspace_dir / "SyntheticData"
     syn = pd.read_parquet(syn_data_path)
     assert len(syn) == 10
-    assert set(syn.columns) == {"age", "gender"}
+    assert set(syn.columns) == {"age", "gender", "date"}
     assert syn["age"].dtype == "Int64"
     assert syn["gender"].dtype == "string"
+    assert syn["date"].dtype == "datetime64[ns]"
 
 
 @pytest.mark.parametrize(
