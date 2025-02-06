@@ -96,7 +96,7 @@ def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bo
     max_decimal = min(max(min_decimal, max_decimal), decimal_cap)
 
     stats = {
-        "encoding_type": ModelEncodingType.tabular_numeric_digit.value,
+        "encoding_type": ModelEncodingType.language_numeric_digit.value,
         "has_nan": has_nan,
         "has_neg": has_neg,
         "min_digits": min_digits,
