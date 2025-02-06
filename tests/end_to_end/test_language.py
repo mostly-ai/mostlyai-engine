@@ -73,18 +73,26 @@ def encoded_text_dataset(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def encoded_numeric_categorical_dataset(tmp_path_factory):
+def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws")
     no_of_records = 20
     data = pd.DataFrame(
         {
             "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
             "age": [20, 30, 40, 50] * int(no_of_records / 4),
+            "date": [
+                pd.Timestamp("2020-01-01"),
+                pd.Timestamp("2020-01-02"),
+                pd.Timestamp("2023-01-03"),
+                pd.Timestamp("2025-01-04"),
+            ]
+            * int(no_of_records / 4),
         }
     )
     tgt_encoding_types = {
         "age": ModelEncodingType.language_numeric.value,
         "gender": ModelEncodingType.language_categorical.value,
+        "date": ModelEncodingType.language_datetime.value,
     }
     split(
         tgt_data=data,
@@ -149,8 +157,8 @@ def test_tgt_only(tgt_only_text_dataset):
         "amd/AMD-Llama-135m",
     ],
 )
-def test_categorical_numeric(encoded_numeric_categorical_dataset, model_name):
-    workspace_dir = encoded_numeric_categorical_dataset
+def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
+    workspace_dir = encoded_numeric_categorical_datetime_dataset
     train(workspace_dir=workspace_dir, model=model_name)
     generate(workspace_dir=workspace_dir, sample_size=10)
 

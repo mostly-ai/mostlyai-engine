@@ -24,6 +24,8 @@ from formatron.formats import json
 from pydantic import create_model
 from transformers import PreTrainedTokenizerBase
 
+from mostlyai.engine.domain import ModelEncodingType
+
 JSON_NULL = "null"
 
 
@@ -74,12 +76,17 @@ def get_formatter_builders(
     categorical_fields = [
         column
         for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == "LANGUAGE_CATEGORICAL"
+        if column_stats["encoding_type"] == ModelEncodingType.LANGUAGE_CATEGORICAL
     ]
     numeric_fields = [
         column
         for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == "LANGUAGE_NUMERIC"
+        if column_stats["encoding_type"] == ModelEncodingType.LANGUAGE_NUMERIC
+    ]
+    datetime_fields = [
+        column
+        for column, column_stats in stats["columns"].items()
+        if column_stats["encoding_type"] == ModelEncodingType.LANGUAGE_DATETIME
     ]
     for _, seed_row in seed_df.iterrows():
         formatter_builder = FormatterBuilder()
@@ -98,6 +105,8 @@ def get_formatter_builders(
                     model_dict[field_name] = (int, ...)
                 else:
                     model_dict[field_name] = (float, ...)
+            elif field_name in datetime_fields:
+                model_dict[field_name] = (str, ...)  # FIXME: temp
             else:
                 model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)

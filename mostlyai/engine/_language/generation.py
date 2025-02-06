@@ -45,6 +45,7 @@ from mostlyai.engine._language.formatron_utils import (
     prepare_seed_for_formatron,
     get_vocab_processors,
 )
+from mostlyai.engine.domain import ModelEncodingType
 
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
 DUMMY_CONTEXT_KEY = "__dummy_context_key"
@@ -109,8 +110,10 @@ def decode_buffered_samples(
 
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
-        if col_stats["encoding_type"] == "LANGUAGE_NUMERIC":
+        if col_stats["encoding_type"] == ModelEncodingType.LANGUAGE_NUMERIC:
             tgt_data[col] = _decode_numeric(tgt_data[col], col_stats)
+        elif col_stats["encoding_type"] == ModelEncodingType.LANGUAGE_DATETIME:
+            tgt_data[col] = _decode_datetime(tgt_data[col], col_stats)
         else:
             tgt_data[col] = _decode_string(tgt_data[col], col_stats)
 
@@ -128,6 +131,10 @@ def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     if col_stats["max_scale"] == 0:
         return x.astype("Int64")
     return x.astype(float)
+
+
+def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    return pd.to_datetime(x)
 
 
 def generate(
