@@ -110,9 +110,9 @@ def decode_buffered_samples(
 
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
-        if col_stats["encoding_type"] == ModelEncodingType.LANGUAGE_NUMERIC:
+        if col_stats["encoding_type"] == ModelEncodingType.language_numeric:
             tgt_data[col] = _decode_numeric(tgt_data[col], col_stats)
-        elif col_stats["encoding_type"] == ModelEncodingType.LANGUAGE_DATETIME:
+        elif col_stats["encoding_type"] == ModelEncodingType.language_datetime:
             tgt_data[col] = _decode_datetime(tgt_data[col], col_stats)
         else:
             tgt_data[col] = _decode_string(tgt_data[col], col_stats)

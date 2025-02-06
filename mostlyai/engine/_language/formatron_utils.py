@@ -76,17 +76,17 @@ def get_formatter_builders(
     categorical_fields = [
         column
         for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == ModelEncodingType.LANGUAGE_CATEGORICAL
+        if column_stats["encoding_type"] == ModelEncodingType.language_categorical
     ]
     numeric_fields = [
         column
         for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == ModelEncodingType.LANGUAGE_NUMERIC
+        if column_stats["encoding_type"] == ModelEncodingType.language_numeric
     ]
     datetime_fields = [
         column
         for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == ModelEncodingType.LANGUAGE_DATETIME
+        if column_stats["encoding_type"] == ModelEncodingType.language_datetime
     ]
     for _, seed_row in seed_df.iterrows():
         formatter_builder = FormatterBuilder()

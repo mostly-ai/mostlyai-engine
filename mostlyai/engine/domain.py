@@ -48,6 +48,9 @@ class ModelEncodingType(str, Enum):
     - `TABULAR_DATETIME_RELATIVE`: Model samples the relative difference between datetimes within a sequence.
     - `TABULAR_LAT_LONG`: Model samples a latitude-longitude column. The format is "latitude,longitude".
     - `LANGUAGE_TEXT`: Model will train a distinct LANGUAGE model for this column, to then generate free text.
+    - `LANGUAGE_CATEGORICAL`: TODO
+    - `LANGUAGE_NUMERIC`: TODO
+    - `LANGUAGE_DATETIME`: TODO
     """
 
     auto = "AUTO"
@@ -63,7 +66,7 @@ class ModelEncodingType(str, Enum):
     language_text = "LANGUAGE_TEXT"
     language_categorical = "LANGUAGE_CATEGORICAL"
     language_numeric = "LANGUAGE_NUMERIC"
-    # language_datetime = "LANGUAGE_DATETIME"
+    language_datetime = "LANGUAGE_DATETIME"
 
 
 class ModelStateStrategy(str, Enum):

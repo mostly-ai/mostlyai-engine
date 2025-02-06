@@ -41,6 +41,10 @@ from mostlyai.engine._common import (
     ProgressCallback,
     ProgressCallbackWrapper,
 )
+from mostlyai.engine._encoding_types.language.datetime import (
+    analyze_reduce_language_datetime,
+    analyze_language_datetime,
+)
 from mostlyai.engine._encoding_types.language.numeric import analyze_language_numeric, analyze_reduce_language_numeric
 from mostlyai.engine._encoding_types.tabular.categorical import (
     analyze_categorical,
@@ -396,6 +400,11 @@ def _analyze_reduce(
                 stats_list=column_stats_list,
                 value_protection=value_protection,
             )
+        elif encoding_type == ModelEncodingType.language_datetime:
+            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_datetime(
+                stats_list=column_stats_list,
+                value_protection=value_protection,
+            )
         else:
             raise RuntimeError(f"unknown encoding type {encoding_type}")
 
@@ -426,6 +435,7 @@ def _analyze_reduce(
             ModelEncodingType.language_text,
             ModelEncodingType.language_categorical,
             ModelEncodingType.language_numeric,
+            ModelEncodingType.language_datetime,
         ):
             _LOG.info(
                 f"analyzed column `{column}`: {stats_col['encoding_type']} nchar_max={stats_col['nchar_max']} nchar_avg={stats_col['nchar_avg']}"
@@ -540,6 +550,10 @@ def _analyze_flat_col(
         )
     elif encoding_type == ModelEncodingType.language_numeric:
         stats = analyze_text(values, root_keys, context_keys) | analyze_language_numeric(
+            values, root_keys, context_keys
+        )
+    elif encoding_type == ModelEncodingType.language_datetime:
+        stats = analyze_text(values, root_keys, context_keys) | analyze_language_datetime(
             values, root_keys, context_keys
         )
     else:
