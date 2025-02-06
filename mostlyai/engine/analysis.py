@@ -422,10 +422,13 @@ def _analyze_reduce(
         if not is_flat:
             stats_col["seq_len"] = _analyze_reduce_seq_len([column_stats_list[0]["seq_len"]])
 
-        if encoding_type in (ModelEncodingType.language_text, ModelEncodingType.language_categorical):
+        if encoding_type in (
+            ModelEncodingType.language_text,
+            ModelEncodingType.language_categorical,
+            ModelEncodingType.language_numeric,
+        ):
             _LOG.info(
-                # f"analyzed column `{column}`: {stats_col['encoding_type']} nchar_max={stats_col['nchar_max']} nchar_avg={stats_col['nchar_avg']}"
-                f"analyzed column `{column}`: {stats_col['encoding_type']} "
+                f"analyzed column `{column}`: {stats_col['encoding_type']} nchar_max={stats_col['nchar_max']} nchar_avg={stats_col['nchar_avg']}"
             )
         else:
             _LOG.info(f"analyzed column `{column}`: {stats_col['encoding_type']} {stats_col['cardinalities']}")
