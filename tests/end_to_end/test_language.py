@@ -158,8 +158,8 @@ def test_categorical_numeric(encoded_numeric_categorical_dataset, model_name):
     syn = pd.read_parquet(syn_data_path)
     assert len(syn) == 10
     assert set(syn.columns) == {"age", "gender"}
-    assert str(syn["age"].dtype).startswith("int64")
-    assert str(syn["gender"].dtype).startswith("string")
+    assert syn["age"].dtype == "Int64"
+    assert syn["gender"].dtype == "string"
 
 
 @pytest.mark.parametrize(

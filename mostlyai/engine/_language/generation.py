@@ -21,6 +21,7 @@ import logging
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 from huggingface_hub import constants as hf_constants
@@ -53,7 +54,7 @@ _LOG = logging.getLogger(__name__)
 def decode_buffered_samples(
     buffer: FixedSizeSampleBuffer,
     tokenizer: PreTrainedTokenizerBase,
-    tgt_text_columns: list[str],
+    tgt_stats: dict[str, str],
     tgt_context_key: str,
     max_new_tokens: int,
 ):
@@ -87,8 +88,8 @@ def decode_buffered_samples(
     tgt_seed = pd.concat(tgt_seed, axis=0).reset_index(drop=True)
     # The model works with un-prefixed column names, but we need to recover prefixed column names for the final output
     tgt_data = pd.DataFrame(
-        [parse_json(text, tgt_text_columns) for text in output_texts],
-        columns=tgt_text_columns,
+        [parse_json(text, tgt_stats["columns"].keys()) for text in output_texts],
+        columns=tgt_stats["columns"].keys(),
         index=ctx_keys.index,
         dtype="string",
     )
@@ -98,17 +99,35 @@ def decode_buffered_samples(
     )
     # overwrite generated columns with the seeded values
     tgt_data.update(tgt_seed)
-    # ensure STRING type
-    tgt_data = tgt_data.astype(STRING)
+
     # prepend the context keys to the data (if not dummy context)
     if ctx_keys.name != DUMMY_CONTEXT_KEY:
         tgt_data = pd.concat([ctx_keys, tgt_data], axis=1)
-    invalid_percentage = ((tgt_data[tgt_text_columns] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
+    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
         "{:.2f}%".format
     )
+
+    for col in tgt_stats["columns"].keys():
+        col_stats = tgt_stats["columns"][col]
+        if col_stats["encoding_type"] == "LANGUAGE_NUMERIC":
+            tgt_data[col] = _decode_numeric(tgt_data[col], col_stats)
+        else:
+            tgt_data[col] = _decode_string(tgt_data[col], col_stats)
+
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")
     return tgt_data
+
+
+def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    return x.astype(STRING)
+
+
+def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    x[x == ""] = np.nan
+    if col_stats["max_scale"] == 0:
+        return x.astype("Int64")
+    return x.astype(float)
 
 
 def generate(
@@ -291,7 +310,7 @@ def generate(
             buffer.add((outputs, ctx_keys, sample_seed_batch))
             if buffer.is_full():
                 decoded_data = decode_buffered_samples(
-                    buffer, engine.tokenizer, tgt_text_columns, tgt_context_key, max_new_tokens
+                    buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens
                 )
                 persist_data_part(
                     decoded_data,
@@ -303,9 +322,7 @@ def generate(
             samples_processed += len(ctx_batch)
 
         if not buffer.is_empty():
-            decoded_data = decode_buffered_samples(
-                buffer, engine.tokenizer, tgt_text_columns, tgt_context_key, max_new_tokens
-            )
+            decoded_data = decode_buffered_samples(buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens)
             persist_data_part(
                 decoded_data,
                 output_path,
