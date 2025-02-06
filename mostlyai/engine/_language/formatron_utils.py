@@ -63,6 +63,9 @@ def monkey_patch_formatron():
     array_begin ::= #"\\[{SPACE_NONTERMINAL}";
     array_end ::= #"{SPACE_NONTERMINAL}\\]";
     """
+    # date ::= #"(19\d{2}|20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|1[0-9]|2[0-9]|3[0-1])";
+    # time ::= #"([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])";
+    # datetime ::= date|date " " time;
 
 
 def get_formatter_builders(
@@ -92,11 +95,11 @@ def get_formatter_builders(
         formatter_builder = FormatterBuilder()
         model_dict = {}
         if not seed_row.empty:
-            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}
+            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore[valid-type]
         for field_name in unseeded_fields:
             if field_name in categorical_fields:
                 model_dict[field_name] = (
-                    Literal[tuple(cat for cat in stats["columns"][field_name]["codes"].keys())],
+                    Literal[tuple(cat for cat in stats["columns"][field_name]["codes"].keys())],  # type: ignore[valid-type]
                     ...,
                 )
             elif field_name in numeric_fields:
