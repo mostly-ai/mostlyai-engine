@@ -92,21 +92,13 @@ def get_formatter_builders(
     if seed_df is None:
         seed_df = pd.DataFrame(index=range(size))
     unseeded_fields = [c for c in list(stats["columns"].keys()) if c not in seed_df.columns.to_list()]
-    categorical_fields = [
-        column
-        for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == ModelEncodingType.language_categorical
-    ]
-    numeric_fields = [
-        column
-        for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == ModelEncodingType.language_numeric
-    ]
-    datetime_fields = [
-        column
-        for column, column_stats in stats["columns"].items()
-        if column_stats["encoding_type"] == ModelEncodingType.language_datetime
-    ]
+    field_types = {
+        t: [col for col, col_stats in stats["columns"].items() if col_stats["encoding_type"] == t]
+        for t in ModelEncodingType
+    }
+    categorical_fields = field_types.get(ModelEncodingType.language_categorical, [])
+    numeric_fields = field_types.get(ModelEncodingType.language_numeric, [])
+    datetime_fields = field_types.get(ModelEncodingType.language_datetime, [])
     for _, seed_row in seed_df.iterrows():
         formatter_builder = MostlyFormatterBuilder()
         model_dict = {}
