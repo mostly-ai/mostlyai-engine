@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import calendar
 import contextlib
+import datetime
 import json
 import os
 
@@ -134,8 +136,34 @@ def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     return x.astype(float)
 
 
+def coerce_datetime(text: str) -> str:
+    """
+    Ensure that the text is a valid date or datetime string.
+    """
+    if text == "" or text == "_INVALID_":
+        return text
+    # FIXME copy paste from datallm, see if should be cleaned up
+
+    # extract year, month, and day from the ISO formatted text
+    y, m, d = int(text[:4]), int(text[5:7]), int(text[8:10])
+    # set to last day of month, in case of too large day value
+    last_day = calendar.monthrange(y, m)[1]
+    d = min(d, last_day)
+    dt_str = f"{y:04d}-{m:02d}-{d:02d}" + text[10:]
+    # convert to date and back to check for valid date
+    try:
+        dt_str = datetime.datetime.fromisoformat(dt_str).isoformat().replace("T", " ")
+    except ValueError:
+        dt_str = text  # FIXME revisit, if e.g. a cutoff date, then we just return the original text
+    # trim to original length
+    dt_str = dt_str[: len(text)]
+    return dt_str
+
+
 def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    print(x)
     # FIXME revisit for invalid values -- sample from values / nan / or other
+    x = x.map(coerce_datetime)
     return pd.to_datetime(x, errors="coerce")
 
 

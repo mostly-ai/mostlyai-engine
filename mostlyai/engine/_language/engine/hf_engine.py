@@ -24,7 +24,7 @@ from peft import PeftModel
 from transformers import AutoTokenizer
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
+# from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
 
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from formatron.formatter import FormatterBuilder
@@ -66,11 +66,6 @@ class HuggingFaceEngine(LanguageEngine):
             self.tokenizer.special_tokens_map
         )
         self._json_enforcing_possible = is_peft_adapter or is_trained_lstm_tokenizer
-
-        # apply all necessary monkey patches to the formatron library
-        if self._json_enforcing_possible:
-            monkey_patch_formatron()
-
         self._logits_processors = None
 
     def get_default_batch_size(self) -> int:
