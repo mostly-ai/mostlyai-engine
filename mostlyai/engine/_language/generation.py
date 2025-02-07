@@ -130,6 +130,7 @@ def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
 
 def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     # FIXME revisit for invalid values  -- sample from values / nan / or other
+    # FIXME add programmatic constraint
     x[(x == "") | (x == "_INVALID_")] = np.nan
     if col_stats["max_scale"] == 0:
         return x.astype("Int64")
@@ -161,8 +162,8 @@ def coerce_datetime(text: str) -> str:
 
 
 def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    print(x)
     # FIXME revisit for invalid values -- sample from values / nan / or other
+    # TODO clamp datetime to valid range
     x = x.map(coerce_datetime)
     return pd.to_datetime(x, errors="coerce")
 

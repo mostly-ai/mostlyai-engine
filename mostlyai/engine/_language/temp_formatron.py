@@ -29,6 +29,7 @@ __all__ = ["JsonExtractor"]
 FORMATRON_WHITESPACE_MAX_REPETITIONS = 10
 SPACE_NONTERMINAL = f"[ \t\n\r]{{0,{FORMATRON_WHITESPACE_MAX_REPETITIONS}}}"
 
+# Copy from formatron, altered to have limited whitespace repetitions and datetime format
 GRAMMAR_HEADER = rf"""integer ::= #"-?(0|[1-9]\\d*)";
 number ::= #"-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?";
 string ::= #'"([^\\\\"\u0000-\u001f]|\\\\["\\\\bfnrt/]|\\\\u[0-9A-Fa-f]{{4}})*"';
@@ -46,19 +47,10 @@ array_begin ::= #"\\[{SPACE_NONTERMINAL}";
 array_end ::= #"{SPACE_NONTERMINAL}\\]";
 """
 
-_type_id_to_nonterminal = {
-    id(int): "integer",
-    id(float): "number",
-    id(str): "string",
-    id(bool): "boolean",
-    id(type(None)): "null",
-    id(list): "array",
-    id(dict): "object",
-    id(typing.Any): "json_value",
-    id(datetime.datetime): "datetime",
-}
+# FIXME add grammar constraint of integer and number
 
 
+# Copy from formatron except `datetime`
 def _generate_kbnf_grammar(schema: schemas.schema.Schema | collections.abc.Sequence, start_nonterminal: str) -> str:
     """
     Generate a KBNF grammar string from a schema for JSON format.
@@ -70,17 +62,28 @@ def _generate_kbnf_grammar(schema: schemas.schema.Schema | collections.abc.Seque
     Returns:
         The generated KBNF grammar string.
     """
+    type_id_to_nonterminal = {
+        id(int): "integer",
+        id(float): "number",
+        id(str): "string",
+        id(bool): "boolean",
+        id(type(None)): "null",
+        id(list): "array",
+        id(dict): "object",
+        id(typing.Any): "json_value",
+        id(datetime.datetime): "datetime",  # altered
+    }
     result = [GRAMMAR_HEADER]
     nonterminals = set()
     stack = [(schema, start_nonterminal)]
     while stack:
         (current, nonterminal) = stack.pop()
         type_id = id(current)
-        if type_id in _type_id_to_nonterminal:
-            line = f"{nonterminal} ::= {_type_id_to_nonterminal[type_id]};\n"
+        if type_id in type_id_to_nonterminal:
+            line = f"{nonterminal} ::= {type_id_to_nonterminal[type_id]};\n"
             result.append(line)
             continue
-        _type_id_to_nonterminal[type_id] = nonterminal
+        type_id_to_nonterminal[type_id] = nonterminal
         for i in _type_to_nonterminals:
             value = i(current, nonterminal)
             if value is not None:
@@ -94,6 +97,7 @@ def _generate_kbnf_grammar(schema: schemas.schema.Schema | collections.abc.Seque
     return "".join(result)
 
 
+# Copy from formatron except it uses `_generate_kbnf_grammar` from this file to construct self._rule_str
 class JsonExtractor(extractor.NonterminalExtractor):
     """
     An extractor that loads json data to an object from a string.
@@ -158,7 +162,7 @@ class JsonExtractor(extractor.NonterminalExtractor):
         self._to_object = to_object
         self._rule_str = _generate_kbnf_grammar(
             schema, self.nonterminal
-        )  # FIXME, probably just monkey patch this instead
+        )  # altered FIXME can we monkey patch this instead?
 
     def extract(self, input_str: str) -> tuple[str, schemas.schema.Schema] | None:
         """

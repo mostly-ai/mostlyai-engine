@@ -24,7 +24,6 @@ from peft import PeftModel
 from transformers import AutoTokenizer
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-# from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
 
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from formatron.formatter import FormatterBuilder
