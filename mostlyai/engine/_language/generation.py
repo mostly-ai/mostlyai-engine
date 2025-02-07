@@ -128,7 +128,7 @@ def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
 
 def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     # FIXME revisit for invalid values  -- sample from values / nan / or other
-    x[(x == "") | (x == "__INVALID__")] = np.nan
+    x[(x == "") | (x == "_INVALID_")] = np.nan
     if col_stats["max_scale"] == 0:
         return x.astype("Int64")
     return x.astype(float)
