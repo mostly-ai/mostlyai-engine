@@ -132,6 +132,8 @@ def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     # FIXME revisit for invalid values  -- sample from values / nan / or other
     # FIXME add programmatic constraint
     x[(x == "") | (x == "_INVALID_")] = np.nan
+    # FIXME consider if this try/catch is correct approach
+    # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
     if col_stats["max_scale"] == 0:
         return x.astype("Int64")
     return x.astype(float)

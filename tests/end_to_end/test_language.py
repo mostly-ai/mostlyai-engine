@@ -415,10 +415,10 @@ def test_special_character_column_name(tmp_path_factory):
 @pytest.fixture(scope="session")
 def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws")
-    no_of_records = 20  # 20
+    no_of_records = 20
     data = pd.DataFrame(
         {
-            # "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
+            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
             "age": [20, 30, 40, 50] * int(no_of_records / 4),
             "date": [
                 pd.Timestamp("2020-01-01"),
@@ -431,7 +431,7 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     )
     tgt_encoding_types = {
         "age": ModelEncodingType.language_numeric.value,
-        # "gender": ModelEncodingType.language_categorical.value,  # FIXME had to comment out due to some issue with formatron
+        "gender": ModelEncodingType.language_categorical.value,
         "date": ModelEncodingType.language_datetime.value,
     }
     split(
@@ -461,7 +461,7 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     syn_data_path = workspace_dir / "SyntheticData"
     syn = pd.read_parquet(syn_data_path)
     assert len(syn) == 10
-    assert set(syn.columns) == {"age", "date"}  # "gender",
+    assert set(syn.columns) == {"age", "gender", "date"}
     assert syn["age"].dtype == "Int64"
-    # assert syn["gender"].dtype == "string"  # FIXME had to comment out due to some issue with formatron
+    assert syn["gender"].dtype == "string"
     assert syn["date"].dtype == "datetime64[ns]"
