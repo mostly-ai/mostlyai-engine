@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import datetime
 import typing
 
 import pandas as pd
@@ -23,6 +25,11 @@ from typing import Literal
 from formatron.formats import json
 from pydantic import create_model
 from transformers import PreTrainedTokenizerBase
+from mostlyai.engine._language.temp_formatron import JsonExtractor
+import collections
+from formatron.schemas.schema import Schema
+
+from mostlyai.engine.domain import ModelEncodingType
 
 JSON_NULL = "null"
 
@@ -41,41 +48,79 @@ def prepare_seed_for_formatron(sample_seed: pd.DataFrame, tokenizer: PreTrainedT
     return sample_seed.astype("string[pyarrow]").map(transform)
 
 
-def monkey_patch_formatron():
-    # alter the Grammar of formatron's json schema
-    FORMATRON_WHITESPACE_MAX_REPETITIONS = 10
-    SPACE_NONTERMINAL = f"[ \t\n\r]{{0,{FORMATRON_WHITESPACE_MAX_REPETITIONS}}}"
+class MostlyFormatterBuilder(FormatterBuilder):
+    def __init__(self):
+        super().__init__()
 
-    json.GRAMMAR_HEADER = rf"""integer ::= #"-?(0|[1-9]\\d*)";
-    number ::= #"-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?";
-    string ::= #'"([^\\\\"\u0000-\u001f]|\\\\["\\\\bfnrt/]|\\\\u[0-9A-Fa-f]{{4}})*"';
-    boolean ::= "true"|"false";
-    null ::= "null";
-    array ::= array_begin (json_value (comma json_value)*)? array_end;
-    object ::= object_begin (string colon json_value (comma string colon json_value)*)? object_end;
-    json_value ::= number|string|boolean|null|array|object;
-    comma ::= #"{SPACE_NONTERMINAL},{SPACE_NONTERMINAL}";
-    colon ::= #"{SPACE_NONTERMINAL}:{SPACE_NONTERMINAL}";
-    object_begin ::= #" \\{{{SPACE_NONTERMINAL}";
-    object_end ::= #"{SPACE_NONTERMINAL}\\}}";
-    array_begin ::= #"\\[{SPACE_NONTERMINAL}";
-    array_end ::= #"{SPACE_NONTERMINAL}\\]";
-    """
+    def json(self, schema: type[Schema] | collections.abc.Sequence, *, capture_name: str = None) -> JsonExtractor:
+        """
+        Create a JSON extractor. Check out the JsonExtractor docs for more details.
+
+        Args:
+            schema: The schema for extraction.
+            capture_name: The capture name of the extractor, or `None` if the extractor does not capture.
+        Returns:
+            The JSON extractor.
+        """
+
+        def to_json(_json: str):
+            local_schema = schema
+            origin = typing.get_origin(local_schema)
+            if origin is not None:
+                local_schema = origin
+            if isinstance(local_schema, type) and issubclass(local_schema, Schema):
+                try:
+                    return local_schema.from_json(_json)
+                except JSONDecodeError:  # make ChoiceExtractor work appropriately
+                    return None
+            else:
+                try:
+                    return json.loads(_json)
+                except JSONDecodeError:
+                    return None
+
+        return self._add_extractor(
+            "json", lambda nonterminal: JsonExtractor(nonterminal, capture_name, schema, to_json)
+        )
 
 
 def get_formatter_builders(
-    *, seed_df: pd.DataFrame | None = None, size: int | None = None, unseeded_fields: list[str]
+    *, seed_df: pd.DataFrame | None = None, size: int | None = None, stats: dict
 ) -> list[FormatterBuilder]:
     assert (seed_df is not None) ^ (size is not None), "exactly one of seed_df or size must be provided"
     formatter_builders = []
     if seed_df is None:
         seed_df = pd.DataFrame(index=range(size))
+    unseeded_fields = [c for c in list(stats["columns"].keys()) if c not in seed_df.columns.to_list()]
+    field_types = {
+        t: [col for col, col_stats in stats["columns"].items() if col_stats["encoding_type"] == t]
+        for t in ModelEncodingType
+    }
+    categorical_fields = field_types.get(ModelEncodingType.language_categorical, [])
+    numeric_fields = field_types.get(ModelEncodingType.language_numeric, [])
+    datetime_fields = field_types.get(ModelEncodingType.language_datetime, [])
     for _, seed_row in seed_df.iterrows():
-        formatter_builder = FormatterBuilder()
+        formatter_builder = MostlyFormatterBuilder()
         model_dict = {}
         if not seed_row.empty:
-            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}
-        model_dict |= {field_name: (str, ...) for field_name in unseeded_fields}
+            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore[valid-type]
+        for field_name in unseeded_fields:
+            if field_name in categorical_fields:
+                model_dict[field_name] = (
+                    Literal[tuple(cat for cat in stats["columns"][field_name]["codes"].keys())],  # type: ignore[valid-type]
+                    ...,
+                )
+            elif field_name in numeric_fields:
+                max_scale = stats["columns"][field_name]["max_scale"]
+                if max_scale == 0:
+                    model_dict[field_name] = (int, ...)
+                else:
+                    model_dict[field_name] = (float, ...)
+            elif field_name in datetime_fields:
+                # model_dict[field_name] = (str, Field(pattern=r"19\\d{2}|20\\d{2}-0[1-9]|1[0-2]-0[1-9]|1[0-9]|2[0-9]|3[0-1]")) - might be able to make this work, but it fails
+                model_dict[field_name] = (datetime.datetime, ...)
+            else:
+                model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)
         formatter_builder.append_str(f"{formatter_builder.json(schema, capture_name=None)}")
         formatter_builders.append(formatter_builder)

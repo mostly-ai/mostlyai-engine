@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import calendar
 import contextlib
+import datetime
 import json
 import os
 
@@ -21,6 +23,7 @@ import logging
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 from huggingface_hub import constants as hf_constants
@@ -44,6 +47,7 @@ from mostlyai.engine._language.formatron_utils import (
     prepare_seed_for_formatron,
     get_vocab_processors,
 )
+from mostlyai.engine.domain import ModelEncodingType
 
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
 DUMMY_CONTEXT_KEY = "__dummy_context_key"
@@ -53,7 +57,7 @@ _LOG = logging.getLogger(__name__)
 def decode_buffered_samples(
     buffer: FixedSizeSampleBuffer,
     tokenizer: PreTrainedTokenizerBase,
-    tgt_text_columns: list[str],
+    tgt_stats: dict[str, str],
     tgt_context_key: str,
     max_new_tokens: int,
 ):
@@ -87,8 +91,8 @@ def decode_buffered_samples(
     tgt_seed = pd.concat(tgt_seed, axis=0).reset_index(drop=True)
     # The model works with un-prefixed column names, but we need to recover prefixed column names for the final output
     tgt_data = pd.DataFrame(
-        [parse_json(text, tgt_text_columns) for text in output_texts],
-        columns=tgt_text_columns,
+        [parse_json(text, tgt_stats["columns"].keys()) for text in output_texts],
+        columns=tgt_stats["columns"].keys(),
         index=ctx_keys.index,
         dtype="string",
     )
@@ -98,17 +102,72 @@ def decode_buffered_samples(
     )
     # overwrite generated columns with the seeded values
     tgt_data.update(tgt_seed)
-    # ensure STRING type
-    tgt_data = tgt_data.astype(STRING)
+
     # prepend the context keys to the data (if not dummy context)
     if ctx_keys.name != DUMMY_CONTEXT_KEY:
         tgt_data = pd.concat([ctx_keys, tgt_data], axis=1)
-    invalid_percentage = ((tgt_data[tgt_text_columns] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
+    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
         "{:.2f}%".format
     )
+
+    for col in tgt_stats["columns"].keys():
+        col_stats = tgt_stats["columns"][col]
+        if col_stats["encoding_type"] == ModelEncodingType.language_numeric:
+            tgt_data[col] = _decode_numeric(tgt_data[col], col_stats)
+        elif col_stats["encoding_type"] == ModelEncodingType.language_datetime:
+            tgt_data[col] = _decode_datetime(tgt_data[col], col_stats)
+        else:
+            tgt_data[col] = _decode_string(tgt_data[col], col_stats)
+
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")
     return tgt_data
+
+
+def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    return x.astype(STRING)
+
+
+def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    # FIXME revisit for invalid values  -- sample from values / nan / or other
+    # FIXME add programmatic constraint
+    x[(x == "") | (x == "_INVALID_")] = np.nan
+    # FIXME consider if this try/catch is correct approach
+    # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
+    if col_stats["max_scale"] == 0:
+        return x.astype("Int64")
+    return x.astype(float)
+
+
+def coerce_datetime(text: str) -> str:
+    """
+    Ensure that the text is a valid date or datetime string.
+    """
+    if text == "" or text == "_INVALID_":
+        return text
+    # FIXME copy paste from datallm, see if should be cleaned up
+
+    # extract year, month, and day from the ISO formatted text
+    y, m, d = int(text[:4]), int(text[5:7]), int(text[8:10])
+    # set to last day of month, in case of too large day value
+    last_day = calendar.monthrange(y, m)[1]
+    d = min(d, last_day)
+    dt_str = f"{y:04d}-{m:02d}-{d:02d}" + text[10:]
+    # convert to date and back to check for valid date
+    try:
+        dt_str = datetime.datetime.fromisoformat(dt_str).isoformat().replace("T", " ")
+    except ValueError:
+        dt_str = text  # FIXME revisit, if e.g. a cutoff date, then we just return the original text
+    # trim to original length
+    dt_str = dt_str[: len(text)]
+    return dt_str
+
+
+def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    # FIXME revisit for invalid values -- sample from values / nan / or other
+    # TODO clamp datetime to valid range
+    x = x.map(coerce_datetime)
+    return pd.to_datetime(x, errors="coerce")
 
 
 def generate(
@@ -247,7 +306,6 @@ def generate(
         # prepare seed data for clean consumption by formatron
         seed_data = prepare_seed_for_formatron(seed_data, engine.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
-        unseeded_tgt_columns = [c for c in tgt_text_columns if c not in seeded_tgt_columns]
 
         total_tokenize_fn_time = 0
         total_logits_processor_build_time = 0
@@ -259,7 +317,7 @@ def generate(
 
         if enforce_json_output and len(seeded_tgt_columns) == 0:
             t0 = time.time()
-            formatter_builders = get_formatter_builders(size=batch_size, unseeded_fields=unseeded_tgt_columns)
+            formatter_builders = get_formatter_builders(size=batch_size, stats=tgt_stats)
             engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
             total_logits_processor_build_time += time.time() - t0
 
@@ -277,10 +335,7 @@ def generate(
             if enforce_json_output and len(seeded_tgt_columns) > 0:
                 t0 = time.time()
                 # some columns are seeded, so we need to create a new logits processor for each batch
-                formatter_builders = get_formatter_builders(
-                    seed_df=sample_seed_batch,
-                    unseeded_fields=unseeded_tgt_columns,
-                )
+                formatter_builders = get_formatter_builders(seed_df=sample_seed_batch, stats=tgt_stats)
                 engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
                 total_logits_processor_build_time += time.time() - t0
 
@@ -295,7 +350,7 @@ def generate(
             buffer.add((outputs, ctx_keys, sample_seed_batch))
             if buffer.is_full():
                 decoded_data = decode_buffered_samples(
-                    buffer, engine.tokenizer, tgt_text_columns, tgt_context_key, max_new_tokens
+                    buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens
                 )
                 persist_data_part(
                     decoded_data,
@@ -307,9 +362,7 @@ def generate(
             samples_processed += len(ctx_batch)
 
         if not buffer.is_empty():
-            decoded_data = decode_buffered_samples(
-                buffer, engine.tokenizer, tgt_text_columns, tgt_context_key, max_new_tokens
-            )
+            decoded_data = decode_buffered_samples(buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens)
             persist_data_part(
                 decoded_data,
                 output_path,
