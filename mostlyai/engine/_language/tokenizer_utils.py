@@ -19,6 +19,8 @@ from collections.abc import Mapping, Iterator
 from transformers import DataCollatorForLanguageModeling, BatchEncoding, PreTrainedTokenizerFast, LlamaTokenizerFast
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch
 
+from mostlyai.engine.domain import ModelEncodingType
+
 
 #################
 ### TOKENIZER ###
@@ -51,8 +53,12 @@ def train_tokenizer(
     VOCAB_SIZE = 5000
 
     # add initial alphabet for numeric and datetime columns if needed
-    has_numeric_columns = any("NUMERIC" in col_stats["encoding_type"] for col_stats in tgt_stats["columns"].values())
-    has_datetime_columns = any("DATETIME" in col_stats["encoding_type"] for col_stats in tgt_stats["columns"].values())
+    has_numeric_columns = any(
+        col_stats["encoding_type"] == ModelEncodingType.language_numeric for col_stats in tgt_stats["columns"].values()
+    )
+    has_datetime_columns = any(
+        col_stats["encoding_type"] == ModelEncodingType.language_datetime for col_stats in tgt_stats["columns"].values()
+    )
     initial_alphabet = set()
     if has_numeric_columns:
         # FIXME: maybe the set can be more fine-grained based on max_scale in stats
