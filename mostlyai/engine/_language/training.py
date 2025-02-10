@@ -352,9 +352,7 @@ def train(
                     for i in range(0, len(content_dataset["train"]), 1_000)
                 )
                 # train a custom tokenizer and convert it to a LlamaTokenizerFast object
-                # FIXME add stats arg, use modelencodingtype to set initial vocab (e.g. numeric --> add "-+[0-9]" and if max_scale > 0 also add "".Ee"") see `temp_formatron.py` grammar
-                ctx_stats = workspace.ctx_stats.read()
-                tokenizer = train_tokenizer(tokenizer_train_iter, tokenizer_kwargs=tokenizer_args, tgt_stats=tgt_stats, ctx_stats=ctx_stats)
+                tokenizer = train_tokenizer(tokenizer_train_iter, tokenizer_kwargs=tokenizer_args, tgt_stats=tgt_stats)
                 model_config = LSTMFromScratchConfig(vocab_size=len(tokenizer), with_dp=with_dp)
                 model = LSTMFromScratchLMHeadModel(model_config).to(device)
         else:

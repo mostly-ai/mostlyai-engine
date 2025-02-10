@@ -29,7 +29,6 @@ def train_tokenizer(
     training_iterator: Iterator | list | None = None,
     tokenizer_kwargs = None,
     tgt_stats: dict | None = None,
-    ctx_stats: dict | None = None,
 ):
     if tokenizer_kwargs is None:
         tokenizer_kwargs = {}
@@ -52,22 +51,13 @@ def train_tokenizer(
     VOCAB_SIZE = 5000
 
     # add initial alphabet for numeric and datetime columns if needed
-    tgt_stats = tgt_stats or {"columns": {}}
-    ctx_stats = ctx_stats or {"columns": {}}
-    has_numeric_columns = any(
-        "NUMERIC" in col_stats.get("encoding_type", "")
-        for stats in [tgt_stats, ctx_stats]
-        for _, col_stats in stats["columns"].items()
-    )
-    has_datetime_columns = any(
-        "DATETIME" in col_stats.get("encoding_type", "")
-        for stats in [tgt_stats, ctx_stats]
-        for _, col_stats in stats["columns"].items()
-    )
+    has_numeric_cols = any("NUMERIC" in col_stats["encoding_type"] for _, col_stats in tgt_stats["columns"].items())
+    has_datetime_cols = any("DATETIME" in col_stats["encoding_type"] for _, col_stats in tgt_stats["columns"].items())
     initial_alphabet = set()
-    if has_numeric_columns:
+    if has_numeric_cols:
+        # FIXME: maybe the set can be more fine-grained based on max_scale in stats
         initial_alphabet |= {str(i) for i in range(10)} | {".", "-", "+", "e", "E"}
-    if has_datetime_columns:
+    if has_datetime_cols:
         initial_alphabet |= {str(i) for i in range(10)} | {"-", ":", "T", "Z"}
     initial_alphabet = list(initial_alphabet)
 
