@@ -221,7 +221,6 @@ def generate(
 
         if has_context:
             ctx_stats = workspace.ctx_stats.read()
-            ctx_columns = list(ctx_stats["columns"].keys())
             ctx_primary_key = ctx_stats["keys"].get("primary_key")
 
             # ensure ctx_data exists
@@ -246,11 +245,11 @@ def generate(
             sample_size = len(ctx_data)
             _LOG.info(f"{sample_size=}")
         else:
+            ctx_stats = None
             # create on-the-fly context
             if sample_size is None:
                 trn_sample_size = tgt_stats["no_of_training_records"] + tgt_stats["no_of_validation_records"]
                 sample_size = trn_sample_size if sample_size is None else sample_size
-            ctx_columns = []
             ctx_primary_key = tgt_context_key = DUMMY_CONTEXT_KEY
             ctx_data = pd.DataFrame({ctx_primary_key: range(sample_size)})
 
@@ -272,7 +271,7 @@ def generate(
             return
 
         # encode context data
-        encoded_ctx_data = encode_df(ctx_df=ctx_data, ctx_columns=ctx_columns)
+        encoded_ctx_data = encode_df(ctx_df=ctx_data, ctx_stats=ctx_stats)
 
         # estimate max new tokens based on char length of original data; consider JSON overhead
         max_new_tokens = estimate_max_tokens(tgt_stats)

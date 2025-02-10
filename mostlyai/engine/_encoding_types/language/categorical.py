@@ -56,3 +56,11 @@ def analyze_reduce_language_categorical(stats_list: list[dict], value_protection
         categories = [CATEGORICAL_UNKNOWN_TOKEN] + categories
     stats = {"no_of_rare_categories": no_of_rare_categories, "categories": categories}
     return stats
+
+
+def encode_categorical(values: pd.Series, stats: dict) -> pd.DataFrame:
+    values = safe_convert_string(values)
+    values = values.copy()
+    known_categories = stats["categories"]
+    values[~values.isin(known_categories)] = CATEGORICAL_UNKNOWN_TOKEN
+    return values
