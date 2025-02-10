@@ -27,7 +27,7 @@ from transformers.data.data_collator import pad_without_fast_tokenizer_warning, 
 
 def train_tokenizer(
     training_iterator: Iterator | list | None = None,
-    tokenizer_kwargs = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
     tgt_stats: dict[str, Any] | None = None,
 ):
     if tokenizer_kwargs is None:
