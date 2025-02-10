@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 from pathlib import Path
 import pandas as pd
 
@@ -36,7 +35,7 @@ def generate(
     sampling_temperature: float = 1.0,
     sampling_top_p: float = 1.0,
     device: str | None = None,
-    rare_category_replacement_method: RareCategoryReplacementMethod | str | None = None,
+    rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
     rebalancing: RebalancingConfig | dict | None = None,
     imputation: ImputationConfig | dict | None = None,
     fairness: FairnessConfig | dict | None = None,
@@ -76,9 +75,7 @@ def generate(
             batch_size=batch_size,
             sampling_temperature=sampling_temperature,
             sampling_top_p=sampling_top_p,
-            rare_category_replacement_method=inspect.signature(generate_tabular)
-            .parameters["rare_category_replacement_method"]
-            .default,
+            rare_category_replacement_method=rare_category_replacement_method,
             rebalancing=rebalancing,
             imputation=imputation,
             fairness=fairness,
@@ -95,8 +92,6 @@ def generate(
             raise ValueError("fairness is not supported for language models")
         if rebalancing is not None:
             raise ValueError("rebalancing is not supported for language models")
-        if rare_category_replacement_method is not None:
-            raise ValueError("rare_category_replacement_method is not supported for language models")
         return generate_language(
             ctx_data=ctx_data,
             seed_data=seed_data,
@@ -104,6 +99,7 @@ def generate(
             batch_size=batch_size,
             sampling_temperature=sampling_temperature,
             sampling_top_p=sampling_top_p,
+            rare_category_replacement_method=rare_category_replacement_method,
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,

@@ -27,10 +27,16 @@ from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from mostlyai.engine._language.encoding import encode
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
+from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
 from mostlyai.engine._language.training import train
-from mostlyai.engine.domain import ModelEncodingType, ModelStateStrategy, DifferentialPrivacyConfig
+from mostlyai.engine.domain import (
+    ModelEncodingType,
+    ModelStateStrategy,
+    DifferentialPrivacyConfig,
+    RareCategoryReplacementMethod,
+)
 
 from mostlyai.engine._language.formatron_utils import get_formatter_builders
 from formatron.integrations.transformers import create_formatter_logits_processor_list
@@ -457,7 +463,11 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
 def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
     workspace_dir = encoded_numeric_categorical_datetime_dataset
     train(workspace_dir=workspace_dir, model=model_name)
-    generate(workspace_dir=workspace_dir, sample_size=10)
+    generate(
+        workspace_dir=workspace_dir,
+        sample_size=10,
+        rare_category_replacement_method=RareCategoryReplacementMethod.sample,
+    )
 
     syn_data_path = workspace_dir / "SyntheticData"
     syn = pd.read_parquet(syn_data_path)
@@ -466,4 +476,5 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     assert syn["age"].dtype == "Int64"
     assert syn["gender"].dtype == "string"
     assert "rare" not in syn["gender"].values
+    assert CATEGORICAL_UNKNOWN_TOKEN not in syn["gender"].values
     assert syn["date"].dtype == "datetime64[ns]"

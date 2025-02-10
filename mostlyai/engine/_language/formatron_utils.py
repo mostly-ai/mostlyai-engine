@@ -25,11 +25,12 @@ from typing import Literal
 from formatron.formats import json
 from pydantic import create_model
 from transformers import PreTrainedTokenizerBase
+from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.temp_formatron import JsonExtractor
 import collections
 from formatron.schemas.schema import Schema
 
-from mostlyai.engine.domain import ModelEncodingType
+from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 JSON_NULL = "null"
 
@@ -85,7 +86,11 @@ class MostlyFormatterBuilder(FormatterBuilder):
 
 
 def get_formatter_builders(
-    *, seed_df: pd.DataFrame | None = None, size: int | None = None, stats: dict
+    *,
+    seed_df: pd.DataFrame | None = None,
+    size: int | None = None,
+    stats: dict,
+    rare_category_replacement_method: RareCategoryReplacementMethod,
 ) -> list[FormatterBuilder]:
     assert (seed_df is not None) ^ (size is not None), "exactly one of seed_df or size must be provided"
     formatter_builders = []
@@ -106,10 +111,10 @@ def get_formatter_builders(
             model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore[valid-type]
         for field_name in unseeded_fields:
             if field_name in categorical_fields:
-                model_dict[field_name] = (
-                    Literal[tuple(stats["columns"][field_name]["categories"])],  # type: ignore[valid-type]
-                    ...,
-                )
+                categories = stats["columns"][field_name]["categories"]
+                if rare_category_replacement_method == RareCategoryReplacementMethod.sample and len(categories) > 1:
+                    categories = [c for c in categories if c != CATEGORICAL_UNKNOWN_TOKEN]
+                model_dict[field_name] = (Literal[tuple(categories)], ...)  # type: ignore[valid-type]
             elif field_name in numeric_fields:
                 max_scale = stats["columns"][field_name]["max_scale"]
                 if max_scale == 0:
