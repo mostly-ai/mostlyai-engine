@@ -25,7 +25,12 @@ from transformers.data.data_collator import pad_without_fast_tokenizer_warning, 
 #################
 
 
-def train_tokenizer(training_iterator: Iterator | list | None = None, tokenizer_kwargs=None):
+def train_tokenizer(
+    training_iterator: Iterator | list | None = None,
+    tokenizer_kwargs = None,
+    tgt_stats: dict | None = None,
+    ctx_stats: dict | None = None,
+):
     if tokenizer_kwargs is None:
         tokenizer_kwargs = {}
     from tokenizers import Tokenizer, decoders
@@ -46,10 +51,31 @@ def train_tokenizer(training_iterator: Iterator | list | None = None, tokenizer_
     MIN_FREQ_MERGE = 20
     VOCAB_SIZE = 5000
 
+    # add initial alphabet for numeric and datetime columns if needed
+    tgt_stats = tgt_stats or {"columns": {}}
+    ctx_stats = ctx_stats or {"columns": {}}
+    has_numeric_columns = any(
+        "NUMERIC" in col_stats.get("encoding_type", "")
+        for stats in [tgt_stats, ctx_stats]
+        for _, col_stats in stats["columns"].items()
+    )
+    has_datetime_columns = any(
+        "DATETIME" in col_stats.get("encoding_type", "")
+        for stats in [tgt_stats, ctx_stats]
+        for _, col_stats in stats["columns"].items()
+    )
+    initial_alphabet = set()
+    if has_numeric_columns:
+        initial_alphabet |= {str(i) for i in range(10)} | {".", "-", "+", "e", "E"}
+    if has_datetime_columns:
+        initial_alphabet |= {str(i) for i in range(10)} | {"-", ":", "T", "Z"}
+    initial_alphabet = list(initial_alphabet)
+
     # Builds a BPE raw_tokenizer, and optionally trains it based on provided text
     training_iterator = training_iterator or []  # allow easy training skip
     raw_tokenizer = Tokenizer(BPE(unk_token=special_tokens["unk_token"]))
     trainer = BpeTrainer(
+        initial_alphabet=initial_alphabet,
         special_tokens=SPECIAL_TOKENS,
         min_frequency=MIN_FREQ_MERGE,
         vocab_size=VOCAB_SIZE,

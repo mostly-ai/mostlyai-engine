@@ -455,8 +455,8 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
 @pytest.mark.parametrize(
     ("model_name"),
     [
-        # LSTMFromScratchConfig.model_id,  # FIXME: this fails due to `RuntimeError: probability tensor contains either `inf`, `nan` or element < 0`, potentially due to missing numeric unicode tokens (missing ASCII)
-        # "amd/AMD-Llama-135m",  # FIXME this model is horrible so we're skipping it
+        # LSTMFromScratchConfig.model_id,  # FIXME: failed when generating incomplete datetime or overflow numbers atm
+        # "amd/AMD-Llama-135m",  # FIXME failed when generating incomplete datetime or overflow numbers atm
         "openai-community/gpt2"  # TEMP, better model than AMD
     ],
 )
