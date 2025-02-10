@@ -28,7 +28,7 @@ from transformers.data.data_collator import pad_without_fast_tokenizer_warning, 
 def train_tokenizer(
     training_iterator: Iterator | list | None = None,
     tokenizer_kwargs = None,
-    tgt_stats: dict | None = None,
+    tgt_stats: dict[str, Any] | None = None,
 ):
     if tokenizer_kwargs is None:
         tokenizer_kwargs = {}
@@ -51,13 +51,13 @@ def train_tokenizer(
     VOCAB_SIZE = 5000
 
     # add initial alphabet for numeric and datetime columns if needed
-    has_numeric_cols = any("NUMERIC" in col_stats["encoding_type"] for _, col_stats in tgt_stats["columns"].items())
-    has_datetime_cols = any("DATETIME" in col_stats["encoding_type"] for _, col_stats in tgt_stats["columns"].items())
+    has_numeric_columns = any("NUMERIC" in col_stats["encoding_type"] for col_stats in tgt_stats["columns"].values())
+    has_datetime_columns = any("DATETIME" in col_stats["encoding_type"] for col_stats in tgt_stats["columns"].values())
     initial_alphabet = set()
-    if has_numeric_cols:
+    if has_numeric_columns:
         # FIXME: maybe the set can be more fine-grained based on max_scale in stats
         initial_alphabet |= {str(i) for i in range(10)} | {".", "-", "+", "e", "E"}
-    if has_datetime_cols:
+    if has_datetime_columns:
         initial_alphabet |= {str(i) for i in range(10)} | {"-", ":", "T", "Z"}
     initial_alphabet = list(initial_alphabet)
 
