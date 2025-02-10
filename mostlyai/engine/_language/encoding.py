@@ -24,17 +24,30 @@ from tokenizers.pre_tokenizers import ByteLevel
 
 from mostlyai.engine._common import is_sequential, ProgressCallback, ProgressCallbackWrapper, TABLE_COLUMN_INFIX
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
+from mostlyai.engine._encoding_types.language.categorical import encode_categorical
 
 _LOG = logging.getLogger(__name__)
 
 
-def format_df(df: pd.DataFrame, columns: list[str], is_target: bool = False) -> pd.DataFrame:
-    df = df[columns].copy()
+def apply_encoding_types(df: pd.DataFrame, stats: dict) -> pd.DataFrame:
+    for col, col_stats in stats["columns"].items():
+        if col_stats["encoding_type"] == "LANGUAGE_CATEGORICAL":
+            df[col] = encode_categorical(df[col], col_stats)
+    return df
+
+
+def drop_sequential_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Some columns (e.g., SCP columns) may contain np.ndarray, which are not JSON serializable
     # We need to drop them before converting the DataFrame to JSON
     sequential_columns = [col for col in df.columns if is_sequential(df[col])]
     df = df.drop(columns=sequential_columns)
-    _LOG.info(f"Formatting {'target' if is_target else 'context'} columns {df.columns.tolist()} to JSON")
+    return df
+
+
+def format_df(df: pd.DataFrame, stats: dict, is_target: bool = False) -> pd.DataFrame:
+    columns = list(stats["columns"].keys())
+    df = df[columns].copy()
+    _LOG.info(f"Formatting {'target' if is_target else 'context'} columns {columns} to JSON")
     # convert date format to ISO so that it's JSON serializable
     for col in df.columns:
         if is_datetime64_any_dtype(df[col]):
@@ -76,15 +89,21 @@ def row_to_json(row: pd.Series, is_target: bool = False) -> str:
 
 def encode_df(
     ctx_df: pd.DataFrame,
-    ctx_columns: list[str],
+    ctx_stats: dict | None = None,
     tgt_df: pd.DataFrame | None = None,
-    tgt_columns: list[str] | None = None,
+    tgt_stats: dict | None = None,
 ) -> pd.DataFrame:
-    assert (tgt_df is None) == (tgt_columns is None), "tgt_df and tgt_columns must be both None or both not None"
+    assert (tgt_df is None) == (tgt_stats is None), "tgt_df and tgt_stats must be both None or both not None"
+    if ctx_stats is None:
+        ctx_stats = {"columns": {}}
     df = pd.DataFrame()
-    df["ctx"] = format_df(ctx_df, columns=ctx_columns, is_target=False)
-    if tgt_df is not None and tgt_columns is not None:
-        df["tgt"] = format_df(tgt_df, columns=tgt_columns, is_target=True)
+    ctx_df = drop_sequential_columns(ctx_df)
+    ctx_df = apply_encoding_types(ctx_df, stats=ctx_stats)
+    df["ctx"] = format_df(ctx_df, stats=ctx_stats, is_target=False)
+    if tgt_df is not None and tgt_stats is not None:
+        tgt_df = drop_sequential_columns(tgt_df)
+        tgt_df = apply_encoding_types(tgt_df, stats=tgt_stats)
+        df["tgt"] = format_df(tgt_df, stats=tgt_stats, is_target=True)
 
     # log the bounds of n_tokens in this partition
     content = df["ctx"] + df["tgt"] if "tgt" in df.columns else df["ctx"]
@@ -107,19 +126,16 @@ def _encode_partition(
     ctx_stats: dict | None = None,
 ) -> None:
     tgt_df = pd.read_parquet(tgt_partition_file)
-    tgt_columns = list(tgt_stats.get("columns", {}).keys())
     if ctx_partition_file:
         ctx_df = pd.read_parquet(ctx_partition_file)
-        ctx_columns = list(ctx_stats.get("columns", {}).keys())
     else:
         # create on-the-fly context
         ctx_df = pd.DataFrame(index=range(len(tgt_df)))
-        ctx_columns = []
     df = encode_df(
         ctx_df=ctx_df,
-        ctx_columns=ctx_columns,
+        ctx_stats=ctx_stats,
         tgt_df=tgt_df,
-        tgt_columns=tgt_columns,
+        tgt_stats=tgt_stats,
     )
     # shuffle and persist to disk as parquet files
     df = df.sample(frac=1)

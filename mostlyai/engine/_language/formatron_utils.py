@@ -107,7 +107,7 @@ def get_formatter_builders(
         for field_name in unseeded_fields:
             if field_name in categorical_fields:
                 model_dict[field_name] = (
-                    Literal[tuple(cat for cat in stats["columns"][field_name]["codes"].keys())],  # type: ignore[valid-type]
+                    Literal[tuple(stats["columns"][field_name]["categories"])],  # type: ignore[valid-type]
                     ...,
                 )
             elif field_name in numeric_fields:
