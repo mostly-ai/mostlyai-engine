@@ -418,15 +418,16 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     no_of_records = 20
     data = pd.DataFrame(
         {
-            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
-            "age": [20, 30, 40, 50] * int(no_of_records / 4),
+            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4) + ["rare"],
+            "age": [20, 30, 40, 50] * int(no_of_records / 4) + [50],
             "date": [
                 pd.Timestamp("2020-01-01"),
                 pd.Timestamp("2020-01-02"),
                 pd.Timestamp("2023-01-03"),
                 pd.Timestamp("2025-01-04"),
             ]
-            * int(no_of_records / 4),
+            * int(no_of_records / 4)
+            + [pd.Timestamp("2025-01-04")],
         }
     )
     tgt_encoding_types = {
@@ -464,4 +465,5 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     assert set(syn.columns) == {"age", "gender", "date"}
     assert syn["age"].dtype == "Int64"
     assert syn["gender"].dtype == "string"
+    assert "rare" not in syn["gender"].values
     assert syn["date"].dtype == "datetime64[ns]"

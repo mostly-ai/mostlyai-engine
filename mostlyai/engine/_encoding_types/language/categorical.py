@@ -48,7 +48,7 @@ def analyze_reduce_language_categorical(stats_list: list[dict], value_protection
         rare_min = 0
     categories = [k for k in known_categories if cnt_values[k] >= rare_min]
     no_of_rare_categories = len(known_categories) - len(categories)
-    # add pd.NA to categories, if any are present
+    # add None to categories, if any are present
     if any([j["has_nan"] for j in stats_list]):
         categories = [None] + categories
     # add special token for UNKNOWN categories at first position
@@ -62,5 +62,8 @@ def encode_categorical(values: pd.Series, stats: dict) -> pd.DataFrame:
     values = safe_convert_string(values)
     values = values.copy()
     known_categories = stats["categories"]
-    values[~values.isin(known_categories)] = CATEGORICAL_UNKNOWN_TOKEN
+    mask = ~values.isin(known_categories)
+    if None in known_categories:
+        mask &= ~pd.isna(values)
+    values[mask] = CATEGORICAL_UNKNOWN_TOKEN
     return values
