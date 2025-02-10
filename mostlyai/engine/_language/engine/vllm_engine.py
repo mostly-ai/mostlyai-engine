@@ -16,6 +16,8 @@ import contextlib
 from os import PathLike
 import time
 import typing
+
+from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 import torch
 from formatron.config import EngineGenerationConfig
@@ -105,6 +107,7 @@ class VLLMEngine(LanguageEngine):
             device=device.type,
             max_model_len=min(config_max_model_len, self.tokenizer_max_length + max_new_tokens),
             enable_lora=True,
+            dtype=torch.bfloat16 if is_bf16_supported(device) else torch.float16,
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
             swap_space=0,
             disable_log_stats=True,
