@@ -64,7 +64,7 @@ def train_tokenizer(
         # FIXME: maybe the set can be more fine-grained based on max_scale in stats
         initial_alphabet |= {str(i) for i in range(10)} | {".", "-", "+", "e", "E"}
     if has_datetime_columns:
-        initial_alphabet |= {str(i) for i in range(10)} | {"-", ":", "T", "Z"}
+        initial_alphabet |= {str(i) for i in range(10)} | {".", "-", ":", "T", "Z"}
     initial_alphabet = list(initial_alphabet)
 
     # Builds a BPE raw_tokenizer, and optionally trains it based on provided text
