@@ -165,7 +165,7 @@ def analyze_numeric(
         # do not count values, if there are too many
         cnt_values = None
 
-    # determine lowest/highest values by root ID, and return Top 10
+    # determine lowest/highest values by root ID, and return top 11
     df = pd.concat([root_keys, values], axis=1)
     min_values = df.groupby(root_keys.name)[values.name].min().dropna()
     min11 = min_values.sort_values(ascending=True).head(11).astype("float").tolist()
