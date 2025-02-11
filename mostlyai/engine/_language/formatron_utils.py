@@ -156,9 +156,13 @@ class MostlyClassSchema(ClassSchema):
         try:
             return cls.model_validate_json(_json)
         except ValidationError as e:
+            do_raise = True  # FIXME temporary work-around
             for error in e.errors():
                 if error["type"] == "json_invalid":
                     raise JSONDecodeError(
                         f"Caught pydantic ValidationError {e}, reraising as JSONDecodeError", _json, 0
                     )
-            raise e
+                elif "day value is outside expected range" in error.get("msg"):
+                    do_raise = False  # FIXME: make flexible datetime validation instead
+            if do_raise:
+                raise e
