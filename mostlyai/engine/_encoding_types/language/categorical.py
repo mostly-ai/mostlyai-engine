@@ -58,7 +58,7 @@ def analyze_reduce_language_categorical(stats_list: list[dict], value_protection
     return stats
 
 
-def encode_categorical(values: pd.Series, stats: dict) -> pd.DataFrame:
+def encode_language_categorical(values: pd.Series, stats: dict) -> pd.Series:
     values = safe_convert_string(values)
     values = values.copy()
     known_categories = stats["categories"]

@@ -15,6 +15,7 @@
 import pandas as pd
 
 from mostlyai.engine._common import safe_convert_numeric
+from mostlyai.engine._encoding_types.tabular.numeric import _type_safe_numeric_series
 from mostlyai.engine.domain import ModelEncodingType
 
 
@@ -84,3 +85,33 @@ def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bo
     }
 
     return stats
+
+
+def encode_language_numeric(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
+    values = safe_convert_numeric(values)
+    # try to convert to int, if possible
+    dtype = "Int64" if stats["max_scale"] == 0 else "Float64"
+    if dtype == "Int64":
+        values = values.round()
+    try:
+        values = values.astype(dtype)
+    except TypeError:
+        if dtype == "Int64":  # if couldn't safely convert to int, stick to float
+            dtype = "Float64"
+            values = values.astype(dtype)
+    # reset index, as `values.mask` can throw errors for misaligned indices
+    values.reset_index(drop=True, inplace=True)
+    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
+    min5 = _type_safe_numeric_series(stats["min5"] or [0], dtype)
+    max5 = _type_safe_numeric_series(stats["max5"] or [0], dtype)
+    values.mask(
+        values < min5[0],
+        min5.sample(n=len(values), replace=True, ignore_index=True),
+        inplace=True,
+    )
+    values.mask(
+        values > max5[0],
+        max5.sample(n=len(values), replace=True, ignore_index=True),
+        inplace=True,
+    )
+    return values
