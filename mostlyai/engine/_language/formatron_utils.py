@@ -26,7 +26,7 @@ from formatron.formats import json
 from pydantic import create_model
 from transformers import PreTrainedTokenizerBase
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
-from mostlyai.engine._language.temp_formatron import JsonExtractor
+from mostlyai.engine._language.temp_formatron import MostlyJsonExtractor
 import collections
 from formatron.schemas.schema import Schema
 
@@ -53,9 +53,9 @@ class MostlyFormatterBuilder(FormatterBuilder):
     def __init__(self):
         super().__init__()
 
-    def json(self, schema: type[Schema] | collections.abc.Sequence, *, capture_name: str = None) -> JsonExtractor:
+    def json(self, schema: type[Schema] | collections.abc.Sequence, *, capture_name: str = None) -> MostlyJsonExtractor:
         """
-        Create a JSON extractor. Check out the JsonExtractor docs for more details.
+        Create a JSON extractor. Check out the MostlyJsonExtractor docs for more details.
 
         Args:
             schema: The schema for extraction.
@@ -81,7 +81,7 @@ class MostlyFormatterBuilder(FormatterBuilder):
                     return None
 
         return self._add_extractor(
-            "json", lambda nonterminal: JsonExtractor(nonterminal, capture_name, schema, to_json)
+            "json", lambda nonterminal: MostlyJsonExtractor(nonterminal, capture_name, schema, to_json)
         )
 
 

@@ -13,17 +13,17 @@
 # limitations under the License.
 
 """
-The module defines the `JsonExtractor` class, which is used to extract data from a string in JSON format.
+The module defines the `MostlyJsonExtractor` class, which is used to extract data from a string in JSON format.
 """
 
 import collections
 import datetime
 import typing
 
-from formatron import extractor, schemas
-from formatron.formats.json import _type_to_nonterminals
+from formatron import schemas
+from formatron.formats.json import _type_to_nonterminals, JsonExtractor
 
-__all__ = ["JsonExtractor"]
+__all__ = ["MostlyJsonExtractor"]
 
 
 FORMATRON_WHITESPACE_MAX_REPETITIONS = 10
@@ -97,10 +97,10 @@ def _generate_kbnf_grammar(schema: schemas.schema.Schema | collections.abc.Seque
     return "".join(result)
 
 
-# Copy from formatron except it uses `_generate_kbnf_grammar` from this file to construct self._rule_str
-class JsonExtractor(extractor.NonterminalExtractor):
+class MostlyJsonExtractor(JsonExtractor):
     """
-    An extractor that loads json data to an object from a string.
+    Same as the parent class from formatron
+    except that it uses `_generate_kbnf_grammar` from this file to construct self._rule_str
     """
 
     def __init__(
@@ -110,115 +110,6 @@ class JsonExtractor(extractor.NonterminalExtractor):
         schema: schemas.schema.Schema | collections.abc.Sequence,
         to_object: typing.Callable[[str], schemas.schema.Schema],
     ):
-        """
-        Create a json extractor from a given schema or a list of supported types.
-
-        Currently, the following data types are supported:
-
-        - bool
-        - int
-          - positive int
-          - negative int
-          - nonnegative int
-          - nonpositive int
-        - float
-          - positive float
-          - negative float
-          - nonnegative float
-          - nonpositive float
-        - str
-          - optionally with min_length, max_length and pattern constraints
-            - length is measured in UTF-8 character number after json parsing
-            - *Warning*: too large difference between min_length and max_length can lead to enormous memory consumption!
-            - pattern is mutually exclusive with min_length and max_length
-            - pattern will be compiled to a regular expression so all caveats of regular expressions apply
-            - pattern currently is automatically anchored at both ends
-            - the generated json could be invalid if the pattern allows invalid content between the json string's quotes.
-              - for example, `pattern=".*"` will allow '\"' to appear in the json string which is forbidden by JSON standard.
-          - also supports substring_of constraint which constrains the string to be a substring of a given string
-            - the generated json could be invalid if the given string contains invalid content when put into the json string's quotes.
-              - for example, `substring_of="abc\""` will allow '\"' to appear in the json string which is forbidden by JSON standard.
-        - NoneType
-        - typing.Any
-        - Subclasses of collections.abc.Mapping[str,T] and typing.Mapping[str,T] where T is a supported type,
-        - Subclasses of collections.abc.Sequence[T] and typing.Sequence[T] where T is a supported type.
-          - optionally with `minItems`, `maxItems`, `prefixItems` constraints
-          - *Warning*: too large difference between minItems and maxItems can lead to very slow performance!
-          - *Warning*: By json schema definition, prefixItems by default allows additional items and missing items in the prefixItems, which may not be the desired behavior and can lead to very slow performance if prefixItems is long!
-        - tuple[T1,T2,...] where T1,T2,... are supported types. The order, type and number of elements will be preserved.
-        - typing.Literal[x1,x2,...] where x1, x2, ... are instances of int, string, bool or NoneType, or another typing.Literal[y1,y2,...]
-        - typing.Union[T1,T2,...] where T1,T2,... are supported types.
-        - schemas.Schema where all its fields' data types are supported. Recursive schema definitions are supported as well.
-          - *Warning*: while not required field is supported, they can lead to very slow performance and/or enormous memory consumption if there are too many of them!
-        - Custom types registered via register_type_nonterminal()
-
-        Args:
-            nonterminal: The nonterminal representing the extractor.
-            capture_name: The capture name of the extractor, or `None` if the extractor does not capture.
-            schema: The schema.
-            to_object: A callable to convert the extracted string to a schema instance.
-        """
-        super().__init__(nonterminal, capture_name)
+        super(JsonExtractor, self).__init__(nonterminal, capture_name)
         self._to_object = to_object
-        self._rule_str = _generate_kbnf_grammar(
-            schema, self.nonterminal
-        )  # altered FIXME can we monkey patch this instead?
-
-    def extract(self, input_str: str) -> tuple[str, schemas.schema.Schema] | None:
-        """
-        Extract a schema instance from a string.
-
-        Args:
-            input_str: The input string to extract from.
-
-        Returns:
-            A tuple of the remaining string and the extracted schema instance, or `None` if extraction failed.
-        """
-
-        # Ensure the input string starts with '{' or '[' after stripping leading whitespace
-        input_str = input_str.lstrip()
-        if not input_str.startswith(("{", "[")):
-            return None
-
-        # Variables to track the balance of brackets and the position in the string
-        bracket_count = 0
-        position = 0
-        in_string = False
-        escape_next = False
-        start_char = input_str[0]
-        end_char = "}" if start_char == "{" else "]"
-
-        # Iterate over the string to find where the JSON object or array ends
-        for char in input_str:
-            if not in_string:
-                if char == start_char:
-                    bracket_count += 1
-                elif char == end_char:
-                    bracket_count -= 1
-                elif char == '"':
-                    in_string = True
-            else:
-                if char == '"' and not escape_next:
-                    in_string = False
-                elif char == "\\":
-                    escape_next = not escape_next
-                else:
-                    escape_next = False
-
-            # Move to the next character
-            position += 1
-
-            # If brackets are balanced and we're not in a string, stop processing
-            if bracket_count == 0 and not in_string:
-                break
-        else:
-            return None
-        # The position now points to the character after the last '}', so we slice to position
-        json_str = input_str[:position]
-        remaining_str = input_str[position:]
-        # Return the unparsed remainder of the string and the decoded JSON object
-        return remaining_str, self._to_object(json_str)
-
-    @property
-    def kbnf_definition(self):
-        return self._rule_str
+        self._rule_str = _generate_kbnf_grammar(schema, self.nonterminal)
