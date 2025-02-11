@@ -24,7 +24,8 @@ from tokenizers.pre_tokenizers import ByteLevel
 
 from mostlyai.engine._common import is_sequential, ProgressCallback, ProgressCallbackWrapper, TABLE_COLUMN_INFIX
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
-from mostlyai.engine._encoding_types.language.categorical import encode_categorical
+from mostlyai.engine._encoding_types.language.categorical import encode_language_categorical
+from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
 
 _LOG = logging.getLogger(__name__)
 
@@ -32,7 +33,9 @@ _LOG = logging.getLogger(__name__)
 def apply_encoding_types(df: pd.DataFrame, stats: dict) -> pd.DataFrame:
     for col, col_stats in stats["columns"].items():
         if col_stats["encoding_type"] == "LANGUAGE_CATEGORICAL":
-            df[col] = encode_categorical(df[col], col_stats)
+            df[col] = encode_language_categorical(df[col], col_stats)
+        elif col_stats["encoding_type"] == "LANGUAGE_NUMERIC":
+            df[col] = encode_language_numeric(df[col], col_stats)
     return df
 
 
