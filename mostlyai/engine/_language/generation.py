@@ -14,7 +14,6 @@
 
 import calendar
 import contextlib
-import datetime
 import json
 import os
 
@@ -128,46 +127,80 @@ def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     return x.astype(STRING)
 
 
+def _clip_numeric(x: pd.Series, min5: list, max5: list) -> pd.Series:
+    x_numeric = pd.to_numeric(x, errors="coerce")
+    min_arr = np.array(min5, dtype=x_numeric.dtype)
+    max_arr = np.array(max5, dtype=x_numeric.dtype)
+    n = len(x_numeric)
+    random_mins = np.random.choice(min_arr, size=n)
+    random_maxs = np.random.choice(max_arr, size=n)
+    clipped = np.minimum(np.maximum(x_numeric.to_numpy(), random_mins), random_maxs)
+    return pd.Series(clipped, index=x.index)
+
+
+def _clip_datetime(x: pd.Series, min5: list, max5: list) -> pd.Series:
+    x_dt = pd.to_datetime(x, errors="coerce")
+    min_arr = pd.to_datetime(min5).to_numpy(dtype="datetime64[ns]")
+    max_arr = pd.to_datetime(max5).to_numpy(dtype="datetime64[ns]")
+    n = len(x_dt)
+    random_mins = np.random.choice(min_arr, size=n)
+    random_maxs = np.random.choice(max_arr, size=n)
+    clipped = np.minimum(np.maximum(x_dt.to_numpy(dtype="datetime64[ns]"), random_mins), random_maxs)
+    return pd.Series(clipped, index=x.index)
+
+
 def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    # FIXME revisit for invalid values  -- sample from values / nan / or other
     # FIXME add programmatic constraint
-    x[(x == "") | (x == "_INVALID_")] = np.nan
-    # FIXME consider if this try/catch is correct approach
+    x = pd.to_numeric(x, errors="coerce")
+    x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])
     # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
     if col_stats["max_scale"] == 0:
         return x.astype("Int64")
     return x.astype(float)
 
 
-def coerce_datetime(text: str) -> str:
-    """
-    Ensure that the text is a valid date or datetime string.
-    """
-    if text == "" or text == "_INVALID_":
-        return text
-    # FIXME copy paste from datallm, see if should be cleaned up
-
-    # extract year, month, and day from the ISO formatted text
-    y, m, d = int(text[:4]), int(text[5:7]), int(text[8:10])
-    # set to last day of month, in case of too large day value
-    last_day = calendar.monthrange(y, m)[1]
-    d = min(d, last_day)
-    dt_str = f"{y:04d}-{m:02d}-{d:02d}" + text[10:]
-    # convert to date and back to check for valid date
-    try:
-        dt_str = datetime.datetime.fromisoformat(dt_str).isoformat().replace("T", " ")
-    except ValueError:
-        dt_str = text  # FIXME revisit, if e.g. a cutoff date, then we just return the original text
-    # trim to original length
-    dt_str = dt_str[: len(text)]
-    return dt_str
-
-
 def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    # FIXME revisit for invalid values -- sample from values / nan / or other
-    # TODO clamp datetime to valid range
-    x = x.map(coerce_datetime)
-    return pd.to_datetime(x, errors="coerce")
+    x = x.where(~x.isin(["", "_INVALID_"]), np.nan)
+
+    valid_mask = (
+        x.str.len().ge(10)
+        & x.str.slice(0, 4).str.isdigit()
+        & x.str.slice(5, 7).str.isdigit()
+        & x.str.slice(8, 10).str.isdigit()
+    )
+    if valid_mask.sum() > 0:  # expected "YYYY-MM-DD" prefix
+        # handle the date portion, ensuring validity
+        years = x[valid_mask].str.slice(0, 4).astype(int)
+        months = x[valid_mask].str.slice(5, 7).astype(int)
+        days = x[valid_mask].str.slice(8, 10).astype(int)
+
+        # clamp days according to maximum possible day of the month of a given year
+        last_days = np.array([calendar.monthrange(y, m)[1] for y, m in zip(years, months)])
+        clamped_days = np.minimum(days, last_days)
+
+        # rebuild the date portion
+        new_date = (
+            years.astype(str).str.zfill(4)
+            + "-"
+            + months.astype(str).str.zfill(2)
+            + "-"
+            + pd.Series(clamped_days, index=years.index).astype(str).str.zfill(2)
+        )
+
+        # handle the time portion, ensuring validity
+        remainder = x[valid_mask].str.slice(10)
+
+        time_regex = r"^[ T]?(\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
+        valid_time = remainder.str.extract(time_regex, expand=False)
+        valid_time = valid_time.fillna("00:00:00")
+        valid_time = " " + valid_time
+
+        new_date = new_date + valid_time
+        x.loc[valid_mask] = new_date
+
+    x = pd.to_datetime(x, errors="coerce")
+    x.loc[valid_mask] = _clip_datetime(x.loc[valid_mask], col_stats["min5"], col_stats["max5"])
+    return x.astype("datetime64[ns]")
 
 
 def generate(
