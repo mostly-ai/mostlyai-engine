@@ -32,16 +32,16 @@ jobs:
             run: uv sync --frozen --extra cpu
 
           - name: Run | Tests -> unit
-            run: uv run pytest tests/unit
+            run: uv run --no-sync pytest tests/unit
 
           - name: Build mkdocs
-            run: uv run mkdocs build --strict
+            run: uv run --no-sync mkdocs build --strict
 
           - name: Run tests -> end_to_end -> sequential
-            run: uv run pytest tests/end_to_end/test_tabular_sequential.py
+            run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential.py
 
           - name: Run tests -> end_to_end -> sequential context
-            run: uv run pytest tests/end_to_end/test_tabular_sequential_context.py
+            run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential_context.py
 
     run-tests-cpu-end-to-end-nonsequential:
         runs-on: ubuntu-latest
@@ -66,4 +66,4 @@ jobs:
             run: uv sync --frozen --extra cpu --no-group docs
 
           - name: Run tests -> end_to_end all except sequential
-            run: uv run pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+            run: uv run --no-sync pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
