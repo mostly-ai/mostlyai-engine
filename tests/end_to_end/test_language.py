@@ -435,7 +435,7 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
                 pd.Timestamp("2025-01-04"),
             ]
             * int(no_of_records / 4)
-            + [pd.Timestamp("2025-01-04")],
+            + [pd.Timestamp("2025-01-05")],
         }
     )
     tgt_encoding_types = {
@@ -475,9 +475,18 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     syn = pd.read_parquet(syn_data_path)
     assert len(syn) == 10
     assert set(syn.columns) == {"age", "gender", "date"}
+
     assert syn["age"].dtype == "Int64"
-    assert all((syn["age"] >= 30) & (syn["age"] <= 50))
+    # test extreme value protection
+    assert syn["age"].min() >= 20
+    assert syn["age"].max() <= 50
+
     assert syn["gender"].dtype == "string"
+    # test rare category protection
     assert "rare" not in syn["gender"].values
     assert CATEGORICAL_UNKNOWN_TOKEN not in syn["gender"].values
+
     assert syn["date"].dtype == "datetime64[ns]"
+    # test extreme value protection
+    assert syn["date"].min() >= pd.Timestamp("2020-01-02")
+    assert syn["date"].max() <= pd.Timestamp("2025-01-04")

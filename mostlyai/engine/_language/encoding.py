@@ -26,6 +26,7 @@ from mostlyai.engine._common import is_sequential, ProgressCallback, ProgressCal
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._encoding_types.language.categorical import encode_language_categorical
 from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
+from mostlyai.engine._encoding_types.language.datetime import encode_language_datetime
 
 _LOG = logging.getLogger(__name__)
 
@@ -36,6 +37,8 @@ def apply_encoding_types(df: pd.DataFrame, stats: dict) -> pd.DataFrame:
             df[col] = encode_language_categorical(df[col], col_stats)
         elif col_stats["encoding_type"] == "LANGUAGE_NUMERIC":
             df[col] = encode_language_numeric(df[col], col_stats)
+        elif col_stats["encoding_type"] == "LANGUAGE_DATETIME":
+            df[col] = encode_language_datetime(df[col], col_stats)
     return df
 
 
