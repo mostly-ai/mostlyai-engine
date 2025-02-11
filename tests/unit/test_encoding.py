@@ -162,21 +162,21 @@ class TestEncodeCol:
 
 class TestLanguageEncode:
     @pytest.fixture(scope="class")
-    def ctx_encoding_types(self):
+    def ctx_stats(self):
         return {
-            "table0::col_obj": ModelEncodingType.tabular_categorical,
-            "table1::col_int": ModelEncodingType.tabular_numeric_auto,
-            "table1::col_float": ModelEncodingType.tabular_numeric_auto,
-            "table1::col_bool": ModelEncodingType.tabular_categorical,
-            "table2::col_date": ModelEncodingType.tabular_datetime,
-            "table3::col_datetime": ModelEncodingType.tabular_datetime,
+            "columns": {
+                "table0::col_obj": {},
+                "table1::col_int": {},
+                "table1::col_float": {},
+                "table1::col_bool": {},
+                "table2::col_date": {},
+                "table3::col_datetime": {},
+            }
         }
 
     @pytest.fixture(scope="class")
-    def tgt_encoding_types(self):
-        return {
-            "table3::col_str": ModelEncodingType.language_text,
-        }
+    def tgt_stats(self):
+        return {"columns": {"table3::col_str": {}}}
 
     @pytest.fixture(scope="class")
     def ctx_df(self):
@@ -208,9 +208,9 @@ class TestLanguageEncode:
         )
         return df
 
-    def test_format_df(self, ctx_df, tgt_df, ctx_encoding_types, tgt_encoding_types):
-        formatted_ctx_df = format_df(ctx_df, is_target=False, columns=list(ctx_encoding_types.keys()))
-        formatted_tgt_df = format_df(tgt_df, is_target=True, columns=list(tgt_encoding_types.keys()))
+    def test_format_df(self, ctx_df, tgt_df, ctx_stats, tgt_stats):
+        formatted_ctx_df = format_df(ctx_df, is_target=False, stats=ctx_stats)
+        formatted_tgt_df = format_df(tgt_df, is_target=True, stats=tgt_stats)
 
         ctx = formatted_ctx_df.iloc[0]
         tgt = formatted_tgt_df.iloc[0]
