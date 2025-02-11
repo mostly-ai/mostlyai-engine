@@ -427,7 +427,7 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     data = pd.DataFrame(
         {
             "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4) + ["rare"],
-            "age": [20, 30, 40, 50] * int(no_of_records / 4) + [50],
+            "age": [20, 30, 40, 50] * int(no_of_records / 4) + [60],
             "date": [
                 pd.Timestamp("2020-01-01"),
                 pd.Timestamp("2020-01-02"),
@@ -476,6 +476,7 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     assert len(syn) == 10
     assert set(syn.columns) == {"age", "gender", "date"}
     assert syn["age"].dtype == "Int64"
+    assert all((syn["age"] >= 30) & (syn["age"] <= 50))
     assert syn["gender"].dtype == "string"
     assert "rare" not in syn["gender"].values
     assert CATEGORICAL_UNKNOWN_TOKEN not in syn["gender"].values
