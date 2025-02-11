@@ -102,12 +102,13 @@ class MostlyJsonExtractor(JsonExtractor):
     Same as the parent class from formatron
     except that it uses `_generate_kbnf_grammar` from this file to construct self._rule_str
     """
+
     def __init__(
-            self,
-            nonterminal: str,
-            capture_name: str | None,
-            schema: schemas.schema.Schema | collections.abc.Sequence,
-            to_object: typing.Callable[[str], schemas.schema.Schema],
+        self,
+        nonterminal: str,
+        capture_name: str | None,
+        schema: schemas.schema.Schema | collections.abc.Sequence,
+        to_object: typing.Callable[[str], schemas.schema.Schema],
     ):
         super(JsonExtractor, self).__init__(nonterminal, capture_name)
         self._to_object = to_object
