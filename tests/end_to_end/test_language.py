@@ -263,9 +263,7 @@ def test_formatter():
     lone_leading_surrogate_issue = '{"E0": "[b]\\ud83c\\udc00\\ud83d\\ud8bc}{"}'
     unexpected_end_of_hex_escape_issue = '{"E0": "』』』\u200f』 avex\\ud8dd"}'
     formatter_builders = get_formatter_builders(
-        size=1,
-        stats={"columns": {}},
-        rare_category_replacement_method=RareCategoryReplacementMethod.constant
+        size=1, stats={"columns": {}}, rare_category_replacement_method=RareCategoryReplacementMethod.constant
     )
     tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M", legacy=True)
     logits_processor = create_formatter_logits_processor_list(tokenizer, formatter_builders)
