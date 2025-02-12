@@ -13,23 +13,17 @@
 # limitations under the License.
 
 
-import datetime
 import typing
 
 import pandas as pd
 from formatron.schemas.pydantic import ClassSchema
 from json import JSONDecodeError
-from pydantic import ValidationError
+from pydantic import Field, SkipValidation, ValidationError
 from formatron.formatter import FormatterBuilder
 from typing import Literal
-from formatron.formats import json
 from pydantic import create_model
 from transformers import PreTrainedTokenizerBase
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
-from mostlyai.engine._language.temp_formatron import MostlyJsonExtractor
-import collections
-from formatron.schemas.schema import Schema
-
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 JSON_NULL = "null"
@@ -47,42 +41,6 @@ def prepare_seed_for_formatron(sample_seed: pd.DataFrame, tokenizer: PreTrainedT
         return tokenizer.decode(tokenizer.encode(x), skip_special_tokens=True)
 
     return sample_seed.astype("string[pyarrow]").map(transform)
-
-
-class MostlyFormatterBuilder(FormatterBuilder):
-    def __init__(self):
-        super().__init__()
-
-    def json(self, schema: type[Schema] | collections.abc.Sequence, *, capture_name: str = None) -> MostlyJsonExtractor:
-        """
-        Create a JSON extractor. Check out the MostlyJsonExtractor docs for more details.
-
-        Args:
-            schema: The schema for extraction.
-            capture_name: The capture name of the extractor, or `None` if the extractor does not capture.
-        Returns:
-            The JSON extractor.
-        """
-
-        def to_json(_json: str):
-            local_schema = schema
-            origin = typing.get_origin(local_schema)
-            if origin is not None:
-                local_schema = origin
-            if isinstance(local_schema, type) and issubclass(local_schema, Schema):
-                try:
-                    return local_schema.from_json(_json)
-                except JSONDecodeError:  # make ChoiceExtractor work appropriately
-                    return None
-            else:
-                try:
-                    return json.loads(_json)
-                except JSONDecodeError:
-                    return None
-
-        return self._add_extractor(
-            "json", lambda nonterminal: MostlyJsonExtractor(nonterminal, capture_name, schema, to_json)
-        )
 
 
 def get_formatter_builders(
@@ -105,7 +63,7 @@ def get_formatter_builders(
     numeric_fields = field_types.get(ModelEncodingType.language_numeric, [])
     datetime_fields = field_types.get(ModelEncodingType.language_datetime, [])
     for _, seed_row in seed_df.iterrows():
-        formatter_builder = MostlyFormatterBuilder()
+        formatter_builder = FormatterBuilder()
         model_dict = {}
         if not seed_row.empty:
             model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore[valid-type]
@@ -117,13 +75,19 @@ def get_formatter_builders(
                 model_dict[field_name] = (Literal[tuple(categories)], ...)  # type: ignore[valid-type]
             elif field_name in numeric_fields:
                 max_scale = stats["columns"][field_name]["max_scale"]
+                min_min5 = min(stats["columns"][field_name]["min5"])
+                max_max5 = max(stats["columns"][field_name]["max5"])
                 if max_scale == 0:
-                    model_dict[field_name] = (int, ...)
+                    model_dict[field_name] = (SkipValidation[int], Field(ge=min_min5, le=max_max5))
                 else:
-                    model_dict[field_name] = (float, ...)
+                    model_dict[field_name] = (SkipValidation[float], Field(ge=min_min5, le=max_max5))
             elif field_name in datetime_fields:
-                # model_dict[field_name] = (str, Field(pattern=r"19\\d{2}|20\\d{2}-0[1-9]|1[0-2]-0[1-9]|1[0-9]|2[0-9]|3[0-1]")) - might be able to make this work, but it fails
-                model_dict[field_name] = (datetime.datetime, ...)
+                model_dict[field_name] = (
+                    SkipValidation[str],
+                    Field(
+                        pattern=r"""(19\\d{2}|20\\d{2})-(0[1-9]|1[0-2])-(0[1-9]|1[0-9]|2[0-9]|3[0-1]) ([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])"""
+                    ),
+                )
             else:
                 model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)
@@ -156,13 +120,9 @@ class MostlyClassSchema(ClassSchema):
         try:
             return cls.model_validate_json(_json)
         except ValidationError as e:
-            do_raise = True  # FIXME temporary work-around
             for error in e.errors():
                 if error["type"] == "json_invalid":
                     raise JSONDecodeError(
                         f"Caught pydantic ValidationError {e}, reraising as JSONDecodeError", _json, 0
                     )
-                elif "day value is outside expected range" in error.get("msg"):
-                    do_raise = False  # FIXME: make flexible datetime validation instead
-            if do_raise:
-                raise e
+            raise e

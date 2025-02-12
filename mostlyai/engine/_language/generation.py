@@ -153,6 +153,7 @@ def _clip_datetime(x: pd.Series, min5: list, max5: list) -> pd.Series:
 
 def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     # FIXME add programmatic constraint
+    print(x)
     x = pd.to_numeric(x, errors="coerce")
     x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])
     # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
