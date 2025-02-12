@@ -124,7 +124,9 @@ def decode_buffered_samples(
 
 
 def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    return x.astype(STRING)
+    x = x.astype(STRING)
+    allowed_categories = col_stats.get("categories", [])
+    return x.where(x.isin(allowed_categories), other=None)
 
 
 def _clip_numeric(x: pd.Series, min5: list, max5: list) -> pd.Series:
