@@ -423,21 +423,31 @@ def test_special_character_column_name(tmp_path_factory):
 @pytest.fixture(scope="session")
 def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws")
-    no_of_records = 20
+    no_of_records = 40
     data = pd.DataFrame(
         {
-            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4) + ["rare"],
-            "age": [20, 30, 40, 50] * int(no_of_records / 4) + [60],
+            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
+            "age": [20, 30, 40, 50] * int(no_of_records / 4),
             "date": [
                 pd.Timestamp("2020-01-01"),
                 pd.Timestamp("2020-01-02"),
                 pd.Timestamp("2023-01-03"),
                 pd.Timestamp("2025-01-04"),
             ]
-            * int(no_of_records / 4)
-            + [pd.Timestamp("2025-01-05")],
+            * int(no_of_records / 4),
         }
     )
+    rare_df = pd.DataFrame(
+        {
+            "gender": [f"rare{i + 1}" for i in range(20)],
+            "age": list(range(10, 20)) + list(range(51, 61)),
+            "date": (
+                [pd.Timestamp("2019-01-01") + pd.Timedelta(days=i) for i in range(10)]
+                + [pd.Timestamp("2026-01-01") + pd.Timedelta(days=i) for i in range(10)]
+            ),
+        }
+    )
+    data = pd.concat([data, rare_df], ignore_index=True)
     tgt_encoding_types = {
         "age": ModelEncodingType.language_numeric.value,
         "gender": ModelEncodingType.language_categorical.value,
@@ -467,26 +477,27 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     train(workspace_dir=workspace_dir, model=model_name)
     generate(
         workspace_dir=workspace_dir,
-        sample_size=10,
+        sample_size=40,
         rare_category_replacement_method=RareCategoryReplacementMethod.sample,
     )
 
     syn_data_path = workspace_dir / "SyntheticData"
     syn = pd.read_parquet(syn_data_path)
-    assert len(syn) == 10
+    assert len(syn) == 40
     assert set(syn.columns) == {"age", "gender", "date"}
 
     assert syn["age"].dtype == "Int64"
     # test extreme value protection
-    assert syn["age"].min() >= 20
-    assert syn["age"].max() <= 50
+    assert syn["age"].min() >= 15
+    assert syn["age"].max() <= 55
 
     assert syn["gender"].dtype == "string"
     # test rare category protection
     assert "rare" not in syn["gender"].values
     assert CATEGORICAL_UNKNOWN_TOKEN not in syn["gender"].values
+    assert syn["gender"].nunique(dropna=False) == 4
 
     assert syn["date"].dtype == "datetime64[ns]"
     # test extreme value protection
-    assert syn["date"].min() >= pd.Timestamp("2020-01-02")
-    assert syn["date"].max() <= pd.Timestamp("2025-01-04")
+    assert syn["date"].min() >= pd.Timestamp("2019-01-06")
+    assert syn["date"].max() <= pd.Timestamp("2026-01-05")
