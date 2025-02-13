@@ -37,8 +37,7 @@ from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     RareCategoryReplacementMethod,
 )
-from mostlyai.engine._language.temp_formatron import _number_metadata
-from mostlyai.engine._language.formatron_utils import get_formatter_builders
+from mostlyai.engine._language.formatron_utils import get_formatter_builders, _number_metadata
 from formatron.integrations.transformers import create_formatter_logits_processor_list
 
 

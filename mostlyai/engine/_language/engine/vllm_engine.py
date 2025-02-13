@@ -26,7 +26,7 @@ from formatron.formatter import FormatterBuilder
 from peft import PeftConfig
 
 from transformers import AutoTokenizer, AutoConfig, PreTrainedTokenizerBase
-from mostlyai.engine._language.temp_formatron import monkey_patch_formatron
+from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 from vllm.config import _get_and_verify_max_len
