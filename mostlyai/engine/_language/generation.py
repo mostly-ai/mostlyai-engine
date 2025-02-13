@@ -202,7 +202,7 @@ def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
         x.loc[valid_mask] = new_date
 
     x = pd.to_datetime(x, errors="coerce")
-    x.loc[valid_mask] = _clip_datetime(x.loc[valid_mask], col_stats["min5"], col_stats["max5"])
+    x = _clip_datetime(x, col_stats["min5"], col_stats["max5"])
     return x.astype("datetime64[ns]")
 
 
