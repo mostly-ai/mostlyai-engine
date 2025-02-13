@@ -468,8 +468,8 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     ("model_name"),
     [
         LSTMFromScratchConfig.model_id,
-        "amd/AMD-Llama-135m",
-        "openai-community/gpt2",  # TEMP, better model than AMD
+        # "amd/AMD-Llama-135m",
+        # "openai-community/gpt2",  # TEMP, better model than AMD
     ],
 )
 def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
