@@ -25,9 +25,9 @@ def analyze_language_numeric(values: pd.Series, root_keys: pd.Series, _: pd.Seri
     # determine lowest/highest values by root ID, and return top 11
     df = pd.concat([root_keys, values], axis=1)
     min_values = df.groupby(root_keys.name)[values.name].min().dropna()
-    min11 = min_values.sort_values(ascending=True).head(11).astype("float").tolist()
+    min11 = min_values.sort_values(ascending=True).head(11).tolist()
     max_values = df.groupby(root_keys.name)[values.name].max().dropna()
-    max11 = max_values.sort_values(ascending=False).head(11).astype("float").tolist()
+    max11 = max_values.sort_values(ascending=False).head(11).tolist()
 
     # determine if there are any NaN values
     has_nan = bool(values.isna().any())
