@@ -137,7 +137,7 @@ def monkey_patch_formatron():
 
     def alter_type_to_nonterminals_metadata_inplace(type_to_nonterminals: list[typing.Callable]):
         metadata_idx = [idx for idx, fn in enumerate(type_to_nonterminals) if fn.__name__ == "metadata"]
-        assert len(metadata_idx) == 1, "metadata function must be present and unique"
-        type_to_nonterminals[metadata_idx[0]] = _metadata
+        if len(metadata_idx) == 1:
+            type_to_nonterminals[metadata_idx[0]] = _metadata
 
     alter_type_to_nonterminals_metadata_inplace(json._type_to_nonterminals)
