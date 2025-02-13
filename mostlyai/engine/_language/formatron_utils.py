@@ -75,12 +75,15 @@ def get_formatter_builders(
                 model_dict[field_name] = (Literal[tuple(categories)], ...)  # type: ignore[valid-type]
             elif field_name in numeric_fields:
                 max_scale = stats["columns"][field_name]["max_scale"]
-                # min_min5 = min(stats["columns"][field_name]["min5"])
-                # max_max5 = max(stats["columns"][field_name]["max5"])
+                min_min5 = min(stats["columns"][field_name]["min5"])
+                max_max5 = max(stats["columns"][field_name]["max5"])
                 if max_scale == 0:
-                    model_dict[field_name] = (SkipValidation[int], ...)  # , Field(ge=min_min5, le=max_max5))
+                    model_dict[field_name] = (SkipValidation[int], Field(ge=min_min5, le=max_max5))
                 else:
-                    model_dict[field_name] = (SkipValidation[float], ...)  # , Field(ge=min_min5, le=max_max5))
+                    model_dict[field_name] = (
+                        SkipValidation[float],
+                        Field(ge=min_min5, le=max_max5, decimal_places=max_scale),
+                    )
             elif field_name in datetime_fields:
                 model_dict[field_name] = (
                     SkipValidation[str],

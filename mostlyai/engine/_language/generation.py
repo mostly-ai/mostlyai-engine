@@ -82,6 +82,7 @@ def decode_buffered_samples(
             num_samples_max_length_limit += sum(1 for tokens in num_tokens_by_row if tokens >= max_new_tokens)
         except AttributeError:
             num_samples_max_length_limit = float("-inf")
+
         outputs_text = tokenizer.batch_decode(outputs_ids, skip_special_tokens=True)
         output_texts.extend(outputs_text)
         ctx_keys.append(keys_df)
