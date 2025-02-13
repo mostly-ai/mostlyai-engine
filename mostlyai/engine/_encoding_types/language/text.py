@@ -40,5 +40,6 @@ def analyze_reduce_text(stats_list: list[dict], _: bool = True) -> dict:
     }
     return stats
 
+
 def decode_text(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     return x.astype(STRING)
