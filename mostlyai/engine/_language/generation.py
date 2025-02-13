@@ -38,6 +38,7 @@ from mostlyai.engine._common import (
 from mostlyai.engine._encoding_types.language.categorical import decode_categorical
 from mostlyai.engine._encoding_types.language.datetime import decode_datetime
 from mostlyai.engine._encoding_types.language.numeric import decode_numeric
+from mostlyai.engine._encoding_types.language.text import decode_text
 from mostlyai.engine._language.common import estimate_max_tokens, MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
@@ -117,6 +118,8 @@ def decode_buffered_samples(
             tgt_data[col] = decode_datetime(tgt_data[col], col_stats)
         elif col_stats["encoding_type"] == ModelEncodingType.language_categorical:
             tgt_data[col] = decode_categorical(tgt_data[col], col_stats)
+        else:
+            tgt_data[col] = decode_text(tgt_data[col], col_stats)
 
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")

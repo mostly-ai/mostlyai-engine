@@ -14,7 +14,7 @@
 
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string
+from mostlyai.engine._common import safe_convert_string, STRING
 
 
 def analyze_text(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:
@@ -39,3 +39,6 @@ def analyze_reduce_text(stats_list: list[dict], _: bool = True) -> dict:
         "nchar_max": nchar_max,
     }
     return stats
+
+def decode_text(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    return x.astype(STRING)
