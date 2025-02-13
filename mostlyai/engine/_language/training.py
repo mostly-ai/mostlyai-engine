@@ -38,7 +38,6 @@ from opacus.utils.batch_memory_manager import wrap_data_loader
 from torch.utils.data import DataLoader
 
 from mostlyai.engine._common import (
-    STRING,
     ProgressCallback,
     ProgressCallbackWrapper,
     TABLE_COLUMN_INFIX,
@@ -272,7 +271,7 @@ def train(
             raw_dataset = load_dataset("parquet", data_files=data_files)
 
         def shuffle_tgt_columns(x):
-            x_tgt = pd.DataFrame([json.loads(x.pop("tgt"))], dtype=STRING)  # convert to DataFrame
+            x_tgt = pd.DataFrame([json.loads(x.pop("tgt"))])  # convert to DataFrame
             x_tgt = x_tgt.sample(frac=1, axis=1)  # shuffle columns
             x_tgt = row_to_json(
                 x_tgt.add_prefix("tgt" + TABLE_COLUMN_INFIX).squeeze(axis=0), is_target=True
