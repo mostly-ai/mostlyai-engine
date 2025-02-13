@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import calendar
 import contextlib
 import json
 import os
@@ -22,7 +21,6 @@ import logging
 import time
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import torch
 from huggingface_hub import constants as hf_constants
@@ -34,10 +32,12 @@ from transformers import (
 from mostlyai.engine._common import (
     persist_data_part,
     FixedSizeSampleBuffer,
-    STRING,
     ProgressCallback,
     ProgressCallbackWrapper,
 )
+from mostlyai.engine._encoding_types.language.categorical import decode_categorical
+from mostlyai.engine._encoding_types.language.datetime import decode_datetime
+from mostlyai.engine._encoding_types.language.numeric import decode_numeric
 from mostlyai.engine._language.common import estimate_max_tokens, MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
@@ -112,96 +112,15 @@ def decode_buffered_samples(
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
         if col_stats["encoding_type"] == ModelEncodingType.language_numeric:
-            tgt_data[col] = _decode_numeric(tgt_data[col], col_stats)
+            tgt_data[col] = decode_numeric(tgt_data[col], col_stats)
         elif col_stats["encoding_type"] == ModelEncodingType.language_datetime:
-            tgt_data[col] = _decode_datetime(tgt_data[col], col_stats)
-        else:
-            tgt_data[col] = _decode_string(tgt_data[col], col_stats)
+            tgt_data[col] = decode_datetime(tgt_data[col], col_stats)
+        elif col_stats["encoding_type"] == ModelEncodingType.language_categorical:
+            tgt_data[col] = decode_categorical(tgt_data[col], col_stats)
 
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")
     return tgt_data
-
-
-def _decode_string(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    x = x.astype(STRING)
-    allowed_categories = col_stats.get("categories", [])
-    return x.where(x.isin(allowed_categories), other=None)
-
-
-def _clip_numeric(x: pd.Series, min5: list, max5: list) -> pd.Series:
-    x_numeric = pd.to_numeric(x, errors="coerce")
-    min_arr = np.array(min5, dtype=x_numeric.dtype)
-    max_arr = np.array(max5, dtype=x_numeric.dtype)
-    n = len(x_numeric)
-    random_mins = np.random.choice(min_arr, size=n)
-    random_maxs = np.random.choice(max_arr, size=n)
-    clipped = np.minimum(np.maximum(x_numeric.to_numpy(), random_mins), random_maxs)
-    return pd.Series(clipped, index=x.index)
-
-
-def _clip_datetime(x: pd.Series, min5: list, max5: list) -> pd.Series:
-    x_dt = pd.to_datetime(x, errors="coerce")
-    min_arr = pd.to_datetime(min5).to_numpy(dtype="datetime64[ns]")
-    max_arr = pd.to_datetime(max5).to_numpy(dtype="datetime64[ns]")
-    n = len(x_dt)
-    random_mins = np.random.choice(min_arr, size=n)
-    random_maxs = np.random.choice(max_arr, size=n)
-    clipped = np.minimum(np.maximum(x_dt.to_numpy(dtype="datetime64[ns]"), random_mins), random_maxs)
-    return pd.Series(clipped, index=x.index)
-
-
-def _decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    x = pd.to_numeric(x, errors="coerce")
-    x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])
-    # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
-    if col_stats["max_scale"] == 0:
-        return x.astype("Int64")
-    return x.astype(float)
-
-
-def _decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
-    x = x.where(~x.isin(["", "_INVALID_"]), np.nan)
-
-    valid_mask = (
-        x.str.len().ge(10)
-        & x.str.slice(0, 4).str.isdigit()
-        & x.str.slice(5, 7).str.isdigit()
-        & x.str.slice(8, 10).str.isdigit()
-    )
-    if valid_mask.sum() > 0:  # expected "YYYY-MM-DD" prefix
-        # handle the date portion, ensuring validity
-        years = x[valid_mask].str.slice(0, 4).astype(int)
-        months = x[valid_mask].str.slice(5, 7).astype(int)
-        days = x[valid_mask].str.slice(8, 10).astype(int)
-
-        # clamp days according to maximum possible day of the month of a given year
-        last_days = np.array([calendar.monthrange(y, m)[1] for y, m in zip(years, months)])
-        clamped_days = np.minimum(days, last_days)
-
-        # rebuild the date portion
-        new_date = (
-            years.astype(str).str.zfill(4)
-            + "-"
-            + months.astype(str).str.zfill(2)
-            + "-"
-            + pd.Series(clamped_days, index=years.index).astype(str).str.zfill(2)
-        )
-
-        # handle the time portion, ensuring validity
-        remainder = x[valid_mask].str.slice(10)
-
-        time_regex = r"^[ T]?(\d{2}:\d{2}:\d{2}(?:\.\d+)?)"
-        valid_time = remainder.str.extract(time_regex, expand=False)
-        valid_time = valid_time.fillna("00:00:00")
-        valid_time = " " + valid_time
-
-        new_date = new_date + valid_time
-        x.loc[valid_mask] = new_date
-
-    x = pd.to_datetime(x, errors="coerce")
-    x = _clip_datetime(x, col_stats["min5"], col_stats["max5"])
-    return x.astype("datetime64[ns]")
 
 
 def generate(

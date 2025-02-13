@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import numpy as np
 import pandas as pd
 
 from mostlyai.engine._common import safe_convert_numeric
@@ -115,3 +115,23 @@ def encode_language_numeric(values: pd.Series, stats: dict, _: pd.Series | None 
         inplace=True,
     )
     return values
+
+
+def _clip_numeric(x: pd.Series, min5: list, max5: list) -> pd.Series:
+    x_numeric = pd.to_numeric(x, errors="coerce")
+    min_arr = np.array(min5, dtype=x_numeric.dtype)
+    max_arr = np.array(max5, dtype=x_numeric.dtype)
+    n = len(x_numeric)
+    random_mins = np.random.choice(min_arr, size=n)
+    random_maxs = np.random.choice(max_arr, size=n)
+    clipped = np.minimum(np.maximum(x_numeric.to_numpy(), random_mins), random_maxs)
+    return pd.Series(clipped, index=x.index)
+
+
+def decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    x = pd.to_numeric(x, errors="coerce")
+    x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])
+    # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
+    if col_stats["max_scale"] == 0:
+        return x.astype("Int64")
+    return x.astype(float)

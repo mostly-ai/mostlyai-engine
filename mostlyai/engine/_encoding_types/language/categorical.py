@@ -19,7 +19,7 @@ Categorical encoding for language models.
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string
+from mostlyai.engine._common import safe_convert_string, STRING
 
 CATEGORICAL_UNKNOWN_TOKEN = "_RARE_"
 
@@ -67,3 +67,9 @@ def encode_language_categorical(values: pd.Series, stats: dict) -> pd.Series:
         mask &= ~pd.isna(values)
     values[mask] = CATEGORICAL_UNKNOWN_TOKEN
     return values
+
+
+def decode_categorical(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+    x = x.astype(STRING)
+    allowed_categories = col_stats.get("categories", [])
+    return x.where(x.isin(allowed_categories), other=None)
