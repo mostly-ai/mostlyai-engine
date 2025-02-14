@@ -27,12 +27,17 @@ from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from mostlyai.engine._language.encoding import encode
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
+from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
 from mostlyai.engine._language.training import train
-from mostlyai.engine.domain import ModelEncodingType, ModelStateStrategy, DifferentialPrivacyConfig
-
-from mostlyai.engine._language.formatron_utils import get_formatter_builders
+from mostlyai.engine.domain import (
+    ModelEncodingType,
+    ModelStateStrategy,
+    DifferentialPrivacyConfig,
+    RareCategoryReplacementMethod,
+)
+from mostlyai.engine._language.formatron_utils import get_formatter_builders, _number_metadata
 from formatron.integrations.transformers import create_formatter_logits_processor_list
 
 
@@ -256,7 +261,9 @@ def test_conditional_generation(tmp_path_factory):
 def test_formatter():
     lone_leading_surrogate_issue = '{"E0": "[b]\\ud83c\\udc00\\ud83d\\ud8bc}{"}'
     unexpected_end_of_hex_escape_issue = '{"E0": "』』』\u200f』 avex\\ud8dd"}'
-    formatter_builders = get_formatter_builders(size=1, unseeded_fields=["some_field"])
+    formatter_builders = get_formatter_builders(
+        size=1, stats={"columns": {}}, rare_category_replacement_method=RareCategoryReplacementMethod.constant
+    )
     tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M", legacy=True)
     logits_processor = create_formatter_logits_processor_list(tokenizer, formatter_builders)
     formatter = logits_processor[0]._formatters[0]
@@ -410,3 +417,136 @@ def test_special_character_column_name(tmp_path_factory):
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
     assert len(syn_data) == 2
     assert set(syn_data.columns) == set([TEMPORARY_PRIMARY_KEY] + list(tgt_encoding_types.keys()))
+
+
+@pytest.fixture(scope="session")
+def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
+    workspace_dir = tmp_path_factory.mktemp("ws")
+    no_of_records = 40
+    data = pd.DataFrame(
+        {
+            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
+            "age": [20, 30, 40, 50] * int(no_of_records / 4),
+            "date": [
+                pd.Timestamp("2020-01-01"),
+                pd.Timestamp("2020-01-02"),
+                pd.Timestamp("2023-01-03"),
+                pd.Timestamp("2025-01-04"),
+            ]
+            * int(no_of_records / 4),
+        }
+    )
+    rare_df = pd.DataFrame(
+        {
+            "gender": [f"rare{i + 1}" for i in range(20)],
+            "age": list(range(10, 20)) + list(range(51, 61)),
+            "date": (
+                [pd.Timestamp("2019-01-01") + pd.Timedelta(days=i) for i in range(10)]
+                + [pd.Timestamp("2026-01-01") + pd.Timedelta(days=i) for i in range(10)]
+            ),
+        }
+    )
+    data = pd.concat([data, rare_df], ignore_index=True)
+    tgt_encoding_types = {
+        "age": ModelEncodingType.language_numeric.value,
+        "gender": ModelEncodingType.language_categorical.value,
+        "date": ModelEncodingType.language_datetime.value,
+    }
+    split(
+        tgt_data=data,
+        workspace_dir=workspace_dir,
+        model_type="LANGUAGE",
+        tgt_encoding_types=tgt_encoding_types,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    return workspace_dir
+
+
+@pytest.mark.parametrize(
+    ("model_name"),
+    [
+        LSTMFromScratchConfig.model_id,
+        "amd/AMD-Llama-135m",
+        "openai-community/gpt2",  # TEMP, better model than AMD
+    ],
+)
+def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
+    workspace_dir = encoded_numeric_categorical_datetime_dataset
+    train(workspace_dir=workspace_dir, model=model_name)
+    generate(
+        workspace_dir=workspace_dir,
+        sample_size=40,
+        rare_category_replacement_method=RareCategoryReplacementMethod.sample,
+    )
+
+    syn_data_path = workspace_dir / "SyntheticData"
+    syn = pd.read_parquet(syn_data_path)
+    assert len(syn) == 40
+    assert set(syn.columns) == {"age", "gender", "date"}
+
+    assert syn["age"].dtype == "Int64"
+    # test extreme value protection
+    assert syn["age"].min() >= 15
+    assert syn["age"].max() <= 55
+
+    assert syn["gender"].dtype == "string"
+    # test rare category protection
+    assert "rare" not in syn["gender"].values
+    assert CATEGORICAL_UNKNOWN_TOKEN not in syn["gender"].values
+    assert syn["gender"].nunique(dropna=False) <= 4
+
+    assert syn["date"].dtype == "datetime64[ns]"
+    # test extreme value protection
+    dates = syn["date"].dropna()
+    if not dates.empty:
+        assert dates.min() >= pd.Timestamp("2019-01-06")
+        assert dates.max() <= pd.Timestamp("2026-01-05")
+
+
+def test_number_metadata():
+    class TypeWithMetadata:
+        def __init__(self, type, metadata):
+            self.type = type
+            self.metadata = metadata
+
+    # test positive integer range
+    number_type = TypeWithMetadata(int, {"ge": 10, "le": 450})
+    pattern, deps = _number_metadata(number_type, "test_number")
+
+    assert deps == []
+    # should match 2-3 digit numbers between 10-999
+    assert 'test_number ::= #"([1-9][0-9]{1,2})";\n' in pattern
+
+    # test negative integer range
+    number_type = TypeWithMetadata(int, {"ge": -269, "le": -10})
+    pattern, deps = _number_metadata(number_type, "test_number")
+
+    # should match negative 2-3 digit numbers
+    assert 'test_number ::= #"-([1-9][0-9]{1,2})";\n' in pattern
+
+    # test range including both negative and positive
+    number_type = TypeWithMetadata(int, {"ge": -10, "le": 100})
+    pattern, deps = _number_metadata(number_type, "test_number")
+
+    # should allow optional negative sign and up to 3 digits and 0
+    assert 'test_number ::= #"-?(0|[1-9][0-9]{0,2})";\n' in pattern
+
+    # test float with decimal places
+    number_type = TypeWithMetadata(float, {"ge": 0.0, "le": 100.0, "decimal_places": 2})
+    pattern, deps = _number_metadata(number_type, "test_number")
+
+    # should match numbers with optional decimal part
+    assert r'test_number ::= #"(0|[1-9][0-9]{0,2})(\\.[0-9]{0,2})?";' + "\n" in pattern
+
+    # test invalid range where le < ge
+    number_type = TypeWithMetadata(int, {"ge": 100, "le": 10})
+
+    with pytest.raises(ValueError, match="le must be greater than or equal to ge"):
+        _number_metadata(number_type, "test_number")
+
+    # test unsupported gt/lt constraints
+    number_type = TypeWithMetadata(int, {"gt": 10, "lt": 100})
+
+    with pytest.raises(NotImplementedError, match="gt and lt are not supported for number metadata"):
+        _number_metadata(number_type, "test_number")

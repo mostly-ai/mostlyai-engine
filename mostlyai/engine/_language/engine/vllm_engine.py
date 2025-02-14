@@ -26,6 +26,7 @@ from formatron.formatter import FormatterBuilder
 from peft import PeftConfig
 
 from transformers import AutoTokenizer, AutoConfig, PreTrainedTokenizerBase
+from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 from vllm.config import _get_and_verify_max_len
@@ -123,6 +124,7 @@ class VLLMEngine(LanguageEngine):
             add_eos_token=False,
         )
         self._logits_processors = None
+        monkey_patch_formatron()
 
     def get_default_batch_size(self) -> int:
         return 192

@@ -41,6 +41,11 @@ from mostlyai.engine._common import (
     ProgressCallback,
     ProgressCallbackWrapper,
 )
+from mostlyai.engine._encoding_types.language.datetime import (
+    analyze_reduce_language_datetime,
+    analyze_language_datetime,
+)
+from mostlyai.engine._encoding_types.language.numeric import analyze_language_numeric, analyze_reduce_language_numeric
 from mostlyai.engine._encoding_types.tabular.categorical import (
     analyze_categorical,
     analyze_reduce_categorical,
@@ -65,6 +70,10 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
 from mostlyai.engine._encoding_types.language.text import (
     analyze_text,
     analyze_reduce_text,
+)
+from mostlyai.engine._encoding_types.language.categorical import (
+    analyze_language_categorical,
+    analyze_reduce_language_categorical,
 )
 from mostlyai.engine.domain import ModelEncodingType
 
@@ -222,7 +231,8 @@ def _analyze_partition(
         ctx_root_keys = ctx_primary_keys.rename("__rkey")
 
     # analyze all target columns
-    with parallel_config("loky", n_jobs=n_jobs):
+    # with parallel_config("loky", n_jobs=n_jobs):
+    with parallel_config("loky", n_jobs=1):
         results = Parallel()(
             delayed(_analyze_col)(
                 values=tgt_df[column],
@@ -263,7 +273,8 @@ def _analyze_partition(
 
         # analyze all context columns
         assert isinstance(ctx_encoding_types, dict)
-        with parallel_config("loky", n_jobs=n_jobs):
+        # with parallel_config("loky", n_jobs=n_jobs):
+        with parallel_config("loky", n_jobs=1):
             results = Parallel()(
                 delayed(_analyze_col)(
                     values=ctx_df[column],
@@ -379,6 +390,21 @@ def _analyze_reduce(
             )
         elif encoding_type == ModelEncodingType.language_text:
             stats_col = analyze_reduce_text(stats_list=column_stats_list)
+        elif encoding_type == ModelEncodingType.language_categorical:
+            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_categorical(
+                stats_list=column_stats_list,
+                value_protection=value_protection,
+            )
+        elif encoding_type == ModelEncodingType.language_numeric:
+            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_numeric(
+                stats_list=column_stats_list,
+                value_protection=value_protection,
+            )
+        elif encoding_type == ModelEncodingType.language_datetime:
+            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_datetime(
+                stats_list=column_stats_list,
+                value_protection=value_protection,
+            )
         else:
             raise RuntimeError(f"unknown encoding type {encoding_type}")
 
@@ -405,7 +431,12 @@ def _analyze_reduce(
         if not is_flat:
             stats_col["seq_len"] = _analyze_reduce_seq_len([column_stats_list[0]["seq_len"]])
 
-        if encoding_type == ModelEncodingType.language_text:
+        if encoding_type in (
+            ModelEncodingType.language_text,
+            ModelEncodingType.language_categorical,
+            ModelEncodingType.language_numeric,
+            ModelEncodingType.language_datetime,
+        ):
             _LOG.info(
                 f"analyzed column `{column}`: {stats_col['encoding_type']} nchar_max={stats_col['nchar_max']} nchar_avg={stats_col['nchar_avg']}"
             )
@@ -513,6 +544,18 @@ def _analyze_flat_col(
         stats = analyze_latlong(values, root_keys, context_keys)
     elif encoding_type == ModelEncodingType.language_text:
         stats = analyze_text(values, root_keys, context_keys)
+    elif encoding_type == ModelEncodingType.language_categorical:
+        stats = analyze_text(values, root_keys, context_keys) | analyze_language_categorical(
+            values, root_keys, context_keys
+        )
+    elif encoding_type == ModelEncodingType.language_numeric:
+        stats = analyze_text(values, root_keys, context_keys) | analyze_language_numeric(
+            values, root_keys, context_keys
+        )
+    elif encoding_type == ModelEncodingType.language_datetime:
+        stats = analyze_text(values, root_keys, context_keys) | analyze_language_datetime(
+            values, root_keys, context_keys
+        )
     else:
         raise RuntimeError(f"unknown encoding type: `{encoding_type}` for `{values.name}`")
     return stats
