@@ -82,12 +82,9 @@ class TestLanguageCategoricalDecode:
 
     @pytest.fixture
     def sample_values(self):
-        return pd.Series(["apple", "durian", "banana", None, "cherry", "fig", None])
+        return pd.Series(["apple", "durian", "banana", "elderberry", "cherry", "fig", None])
 
     def test_language_categorical_decode(self, sample_values, col_stats):
         decoded = decode_language_categorical(sample_values, col_stats)
-        expected = pd.Series(
-            ["apple", CATEGORICAL_UNKNOWN_TOKEN, "banana", None, "cherry", CATEGORICAL_UNKNOWN_TOKEN, None],
-            dtype=decoded.dtype,
-        )
+        expected = pd.Series(["apple", None, "banana", None, "cherry", None, None], dtype=decoded.dtype)
         pd.testing.assert_series_equal(decoded, expected)

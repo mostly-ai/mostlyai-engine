@@ -72,4 +72,4 @@ def encode_language_categorical(values: pd.Series, stats: dict) -> pd.Series:
 def decode_language_categorical(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     x = x.astype(STRING)
     allowed_categories = col_stats.get("categories", [])
-    return x.where(x.isin(allowed_categories), other=CATEGORICAL_UNKNOWN_TOKEN)
+    return x.where(x.isin(allowed_categories), other=None)
