@@ -208,7 +208,6 @@ def _number_metadata(current: type, nonterminal: str):
             pattern_parts.append(rf"(0|[1-9][0-9]{{0,{max_digits - 1}}})")
 
     if issubclass(current.type, float):
-        # FIXME: currently is not constrained
         pattern_parts.append(rf"(\\.[0-9]{{0,{decimal_places}}})?")
 
     pattern = "".join(pattern_parts)

@@ -132,6 +132,5 @@ def decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     x = pd.to_numeric(x, errors="coerce")
     x = x.round(col_stats["max_scale"])
     x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])
-    # FIXME can result in OverFlowError when turning string into int in _decode_numeric in generation.py, from age '-5555555555555555555555555' -> OverflowError: Python int too large to convert to C long
     dtype = "Int64" if col_stats["max_scale"] == 0 else float
     return x.astype(dtype)
