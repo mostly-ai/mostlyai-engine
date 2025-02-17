@@ -128,7 +128,7 @@ def _clip_numeric(x: pd.Series, min5: list, max5: list) -> pd.Series:
     return pd.Series(clipped, index=x.index)
 
 
-def decode_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+def decode_language_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     x = pd.to_numeric(x, errors="coerce")
     x = x.round(col_stats["max_scale"])
     x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])

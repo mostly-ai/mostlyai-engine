@@ -37,7 +37,7 @@ from mostlyai.engine._common import (
 )
 from mostlyai.engine._encoding_types.language.categorical import decode_language_categorical
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
-from mostlyai.engine._encoding_types.language.numeric import decode_numeric
+from mostlyai.engine._encoding_types.language.numeric import decode_language_numeric
 from mostlyai.engine._encoding_types.language.text import decode_text
 from mostlyai.engine._language.common import estimate_max_tokens, MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
@@ -114,7 +114,7 @@ def decode_buffered_samples(
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
         if col_stats["encoding_type"] == ModelEncodingType.language_numeric:
-            tgt_data[col] = decode_numeric(tgt_data[col], col_stats)
+            tgt_data[col] = decode_language_numeric(tgt_data[col], col_stats)
         elif col_stats["encoding_type"] == ModelEncodingType.language_datetime:
             tgt_data[col] = decode_language_datetime(tgt_data[col], col_stats)
         elif col_stats["encoding_type"] == ModelEncodingType.language_categorical:
