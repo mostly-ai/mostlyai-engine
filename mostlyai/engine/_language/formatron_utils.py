@@ -74,7 +74,7 @@ def get_formatter_builders(
         formatter_builder = FormatterBuilder()
         model_dict = {}
         if not seed_row.empty:
-            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}
+            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore
         model_dict |= {field_name: (str, ...) for field_name in unseeded_fields}
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)
         formatter_builder.append_str(f"{formatter_builder.json(schema, capture_name=None)}")
