@@ -38,7 +38,6 @@ from opacus.utils.batch_memory_manager import wrap_data_loader
 from torch.utils.data import DataLoader
 
 from mostlyai.engine._common import (
-    STRING,
     ProgressCallback,
     ProgressCallbackWrapper,
     TABLE_COLUMN_INFIX,
@@ -272,7 +271,7 @@ def train(
             raw_dataset = load_dataset("parquet", data_files=data_files)
 
         def shuffle_tgt_columns(x):
-            x_tgt = pd.DataFrame([json.loads(x.pop("tgt"))], dtype=STRING)  # convert to DataFrame
+            x_tgt = pd.DataFrame([json.loads(x.pop("tgt"))])  # convert to DataFrame
             x_tgt = x_tgt.sample(frac=1, axis=1)  # shuffle columns
             x_tgt = row_to_json(
                 x_tgt.add_prefix("tgt" + TABLE_COLUMN_INFIX).squeeze(axis=0), is_target=True
@@ -352,7 +351,7 @@ def train(
                     for i in range(0, len(content_dataset["train"]), 1_000)
                 )
                 # train a custom tokenizer and convert it to a LlamaTokenizerFast object
-                tokenizer = train_tokenizer(tokenizer_train_iter, tokenizer_kwargs=tokenizer_args)
+                tokenizer = train_tokenizer(tokenizer_train_iter, tokenizer_kwargs=tokenizer_args, tgt_stats=tgt_stats)
                 model_config = LSTMFromScratchConfig(vocab_size=len(tokenizer), with_dp=with_dp)
                 model = LSTMFromScratchLMHeadModel(model_config).to(device)
         else:

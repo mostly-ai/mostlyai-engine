@@ -19,13 +19,19 @@ from collections.abc import Mapping, Iterator
 from transformers import DataCollatorForLanguageModeling, BatchEncoding, PreTrainedTokenizerFast, LlamaTokenizerFast
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch
 
+from mostlyai.engine.domain import ModelEncodingType
+
 
 #################
 ### TOKENIZER ###
 #################
 
 
-def train_tokenizer(training_iterator: Iterator | list | None = None, tokenizer_kwargs=None):
+def train_tokenizer(
+    training_iterator: Iterator | list | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
+    tgt_stats: dict[str, Any] | None = None,
+):
     if tokenizer_kwargs is None:
         tokenizer_kwargs = {}
     from tokenizers import Tokenizer, decoders
@@ -46,10 +52,26 @@ def train_tokenizer(training_iterator: Iterator | list | None = None, tokenizer_
     MIN_FREQ_MERGE = 20
     VOCAB_SIZE = 5000
 
+    # add initial alphabet for numeric and datetime columns if needed
+    has_numeric_columns = any(
+        col_stats["encoding_type"] == ModelEncodingType.language_numeric for col_stats in tgt_stats["columns"].values()
+    )
+    has_datetime_columns = any(
+        col_stats["encoding_type"] == ModelEncodingType.language_datetime for col_stats in tgt_stats["columns"].values()
+    )
+    initial_alphabet = set()
+    if has_numeric_columns:
+        # FIXME: maybe the set can be more fine-grained based on max_scale in stats
+        initial_alphabet |= {str(i) for i in range(10)} | {".", "-", "+", "e", "E"}
+    if has_datetime_columns:
+        initial_alphabet |= {str(i) for i in range(10)} | {".", "-", ":", "T", "Z"}
+    initial_alphabet = list(initial_alphabet)
+
     # Builds a BPE raw_tokenizer, and optionally trains it based on provided text
     training_iterator = training_iterator or []  # allow easy training skip
     raw_tokenizer = Tokenizer(BPE(unk_token=special_tokens["unk_token"]))
     trainer = BpeTrainer(
+        initial_alphabet=initial_alphabet,
         special_tokens=SPECIAL_TOKENS,
         min_frequency=MIN_FREQ_MERGE,
         vocab_size=VOCAB_SIZE,
