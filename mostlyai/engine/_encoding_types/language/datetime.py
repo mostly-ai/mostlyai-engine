@@ -99,7 +99,7 @@ def _clip_datetime(x: pd.Series, min5: list, max5: list) -> pd.Series:
     return pd.Series(clipped, index=x.index)
 
 
-def decode_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+def decode_language_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
     x = x.where(~x.isin(["", "_INVALID_"]), np.nan)
 
     valid_mask = (
