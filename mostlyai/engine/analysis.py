@@ -234,8 +234,7 @@ def _analyze_partition(
         ctx_root_keys = ctx_primary_keys.rename("__rkey")
 
     # analyze all target columns
-    # with parallel_config("loky", n_jobs=n_jobs):
-    with parallel_config("loky", n_jobs=1):
+    with parallel_config("loky", n_jobs=n_jobs):
         results = Parallel()(
             delayed(_analyze_col)(
                 values=tgt_df[column],
@@ -276,8 +275,7 @@ def _analyze_partition(
 
         # analyze all context columns
         assert isinstance(ctx_encoding_types, dict)
-        # with parallel_config("loky", n_jobs=n_jobs):
-        with parallel_config("loky", n_jobs=1):
+        with parallel_config("loky", n_jobs=n_jobs):
             results = Parallel()(
                 delayed(_analyze_col)(
                     values=ctx_df[column],
