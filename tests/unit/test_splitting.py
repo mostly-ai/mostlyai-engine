@@ -188,8 +188,8 @@ def test_split_model_type_no_encoding_types(tmp_path):
     )
     out_types = read_json(tmp_path / "OriginalData" / "tgt-meta" / "encoding-types.json")
     assert out_types == {
-        "int": ModelEncodingType.language_text.value,
-        "cat": ModelEncodingType.language_text.value,
+        "int": ModelEncodingType.language_numeric.value,
+        "cat": ModelEncodingType.language_categorical.value,
     }
 
 

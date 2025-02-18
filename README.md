@@ -117,13 +117,17 @@ engine.init_logging()
 
 # load original data
 trn_df = pd.read_parquet("https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/headlines/headlines.parquet")
-trn_df = trn_df.sample(n=10_000, random_state=42)[['category', 'headline']]
+trn_df = trn_df.sample(n=10_000, random_state=42)
 
 # execute the engine steps
 engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/tgt-data`
     workspace_dir=ws,
     tgt_data=trn_df,
-    model_type="LANGUAGE",
+    tgt_encoding_types={
+        'category': 'LANGUAGE_CATEGORICAL',
+        'date': 'LANGUAGE_DATETIME',
+        'headline': 'LANGUAGE_TEXT',
+    }
 )
 engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelStore/tgt-stats/stats.json`
 engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
