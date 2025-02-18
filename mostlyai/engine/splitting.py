@@ -55,8 +55,13 @@ def _get_default_tabular_encoding_type(x: pd.Series) -> ModelEncodingType:
         return ModelEncodingType.tabular_categorical
 
 
-def _get_default_language_encoding_type(_: pd.Series) -> ModelEncodingType:
-    return ModelEncodingType.language_text
+def _get_default_language_encoding_type(x: pd.Series) -> ModelEncodingType:
+    if is_integer_dtype(x) or is_float_dtype(x):
+        return ModelEncodingType.language_numeric
+    elif is_date_dtype(x) or is_timestamp_dtype(x):
+        return ModelEncodingType.language_datetime
+    else:
+        return ModelEncodingType.language_text
 
 
 def split(
