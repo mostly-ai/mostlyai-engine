@@ -61,7 +61,7 @@ def _get_default_language_encoding_type(x: pd.Series) -> ModelEncodingType:
     elif is_date_dtype(x) or is_timestamp_dtype(x):
         return ModelEncodingType.language_datetime
     else:
-        return ModelEncodingType.language_text
+        return ModelEncodingType.language_categorical
 
 
 def split(
