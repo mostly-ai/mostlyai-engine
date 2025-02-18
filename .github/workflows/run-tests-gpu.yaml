@@ -42,10 +42,10 @@ jobs:
             run: nvidia-smi
 
           - name: Run tests -> end_to_end -> sequential
-            run: uv run pytest tests/end_to_end/test_tabular_sequential.py
+            run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential.py
 
           - name: Run tests -> end_to_end -> sequential context
-            run: uv run pytest tests/end_to_end/test_tabular_sequential_context.py
+            run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential_context.py
 
           - name: Run tests -> end_to_end all except sequential
-            run: uv run pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+            run: uv run --no-sync pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/

@@ -12,11 +12,11 @@ install: # Install dependencies
 
 .PHONY: lint
 lint: ## Run lints
-	uv run pre-commit run --all-files
+	uv run --no-sync pre-commit run --all-files
 
 .PHONY: test
 test: ## Run tests
-	uv run pytest
+	uv run --no-sync pytest
 
 .PHONY: all
 all: clean install lint test ## Run the commands: clean install lint test
