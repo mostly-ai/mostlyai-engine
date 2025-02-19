@@ -36,6 +36,7 @@ dependencies = [
     "datasets>=3.0.0,<4",
     "accelerate>=0.31.0",
     "peft>=0.12.0",
+    "huggingface-hub>=0.28.0,<0.29",
     "opacus>=1.5.2,<2",
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0",
