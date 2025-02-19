@@ -1,6 +1,6 @@
 [project]
 name = "mostlyai-engine"
-version = "1.1.1"
+version = "1.1.2"
 description = "Synthetic Data Engine"
 authors = [{ name = "MOSTLY AI", email = "dev@mostly.ai" }]
 requires-python = ">=3.10"
@@ -36,7 +36,7 @@ dependencies = [
     "datasets>=2.20.0,<3",
     "accelerate>=0.31.0,<0.32",
     "peft>=0.11.1,<0.12",
-    "opacus>=1.5.2,<2",
+    "opacus==1.5.2",  # pin as 1.5.3 breaks tests
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0,<0.31",
     "rich>=13.9.4,<14",

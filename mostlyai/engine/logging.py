@@ -23,12 +23,10 @@ def init_logging() -> None:
     Initialize the logging configuration to stdout.
     """
 
-    # log to stdout
-    handler = logging.StreamHandler(stream=sys.stdout)
-    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)-7s: %(message)s"))
-    handler.setLevel(logging.INFO)
-
+    _LOG.propagate = False
     if not _LOG.hasHandlers():
+        handler = logging.StreamHandler(stream=sys.stdout)
+        handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)-7s: %(message)s"))
+        handler.setLevel(logging.INFO)
         _LOG.addHandler(handler)
         _LOG.setLevel(logging.INFO)
-        _LOG.propagate = False
