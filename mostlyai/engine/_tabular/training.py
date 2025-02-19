@@ -851,7 +851,7 @@ def train(
                 samples=samples,
                 trn_loss=trn_loss,
                 val_loss=val_loss,
-                total_time=total_time_init + time.time() - start_trn_time,
+                total_time=total_training_time,
                 learn_rate=current_lr,
                 dp_eps=dp_epsilon,
                 dp_delta=dp_delta,
