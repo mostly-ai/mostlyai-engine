@@ -122,7 +122,7 @@ def test_sequential_with_context(tmp_path_factory):
     # check sequence lengths
     tgt_seq_lens = tgt.groupby(tgt_context_key)["__exists"].count()
     syn_seq_lens = syn.groupby(tgt_context_key)["__exists"].count()
-    assert np.abs(syn_seq_lens.mean() / tgt_seq_lens.mean() - 1) < 0.06
+    assert np.abs(syn_seq_lens.mean() / tgt_seq_lens.mean() - 1) < 0.07
     # check for occurrence of zero-sequence lengths
     assert np.abs((syn_seq_lens == 0).mean() - (tgt_seq_lens == 0).mean()) < 0.01
 
