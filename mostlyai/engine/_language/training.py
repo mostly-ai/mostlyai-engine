@@ -679,7 +679,8 @@ def train(
                 do_stop = True
 
             # check for max_training_time
-            if (total_time_init + time.time() - start_trn_time) > max_training_time:
+            total_training_time = total_time_init + time.time() - start_trn_time
+            if total_training_time > max_training_time:
                 do_stop = True
 
         # no checkpoint is saved yet because the training stopped before the first epoch ended
@@ -691,8 +692,13 @@ def train(
                 lr_scheduler=lr_scheduler,
                 dp_accountant=privacy_engine.accountant if with_dp else None,
             )
-            with forward_ctx_mgr:
-                val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
+            if total_training_time > max_training_time:
+                _LOG.info("skip validation loss calculation due to time-capped early stopping")
+                val_loss = None
+            else:
+                _LOG.info("calculate validation loss")
+                with forward_ctx_mgr:
+                    val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
             dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
             # send a final message to inform how far we've progressed
             progress_message = ProgressMessage(
@@ -702,7 +708,7 @@ def train(
                 samples=samples,
                 trn_loss=None,
                 val_loss=val_loss,
-                total_time=total_time_init + time.time() - start_trn_time,
+                total_time=total_training_time,
                 learn_rate=current_lr,
                 dp_eps=dp_epsilon,
                 dp_delta=dp_delta,
