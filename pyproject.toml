@@ -36,7 +36,7 @@ dependencies = [
     "datasets>=2.20.0,<3",
     "accelerate>=0.31.0,<0.32",
     "peft>=0.11.1,<0.12",
-    "opacus==1.5.2",  # pin as 1.5.3 breaks tests
+    "opacus>=1.5.2,<2",
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0,<0.31",
     "rich>=13.9.4,<14",
