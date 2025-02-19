@@ -141,4 +141,5 @@ engine.generate(                      # use model to generate synthetic samples 
     workspace_dir=ws,
     sample_size=10,
 )
+pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```

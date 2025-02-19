@@ -20,7 +20,7 @@ _LOG = logging.getLogger(__name__.rsplit(".", 1)[0])  # get the logger with the 
 
 def init_logging() -> None:
     """
-    Initialize the logging configuration. Either log to stdout or to a file.
+    Initialize the logging configuration to stdout.
     """
 
     # log to stdout
