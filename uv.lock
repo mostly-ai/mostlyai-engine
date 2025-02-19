@@ -1911,7 +1911,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.3,<2" },
     { name = "opacus", specifier = ">=1.5.2,<2" },
     { name = "pandas", specifier = "~=2.2.0" },
-    { name = "peft", specifier = ">=0.11.1" },
+    { name = "peft", specifier = ">=0.12.0" },
     { name = "psutil", specifier = ">=5.9.5,<6" },
     { name = "pyarrow", specifier = ">=16.0.0" },
     { name = "rich", specifier = ">=13.9.4,<14" },
