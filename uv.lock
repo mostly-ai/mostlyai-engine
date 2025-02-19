@@ -1162,7 +1162,7 @@ wheels = [
 
 [[package]]
 name = "huggingface-hub"
-version = "0.28.1"
+version = "0.29.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -1173,9 +1173,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/ce/a734204aaae6c35a22f9956ebcd8d8708ae5b842e15d6f42bd6f49e634a4/huggingface_hub-0.28.1.tar.gz", hash = "sha256:893471090c98e3b6efbdfdacafe4052b20b84d59866fb6f54c33d9af18c303ae", size = 387074 }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/ac/9f7010c8b050d80b64bfddcc09ef4a4450ae4369940d1b01fa13f5d083de/huggingface_hub-0.29.0.tar.gz", hash = "sha256:64034c852be270cac16c5743fe1f659b14515a9de6342d6f42cbb2ede191fc80", size = 389753 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ea/da/6c2bea5327b640920267d3bf2c9fc114cfbd0a5de234d81cda80cc9e33c8/huggingface_hub-0.28.1-py3-none-any.whl", hash = "sha256:aa6b9a3ffdae939b72c464dbb0d7f99f56e649b55c3d52406f49e0a5a620c0a7", size = 464068 },
+    { url = "https://files.pythonhosted.org/packages/2a/4d/8092df2cb0cafa9fcaf691db851b2fccfe9cad4048e081436bbbdf56e4e1/huggingface_hub-0.29.0-py3-none-any.whl", hash = "sha256:c02daa0b6bafbdacb1320fdfd1dc7151d0940825c88c4ef89837fdb1f6ea0afe", size = 468012 },
 ]
 
 [[package]]
@@ -1848,7 +1848,7 @@ wheels = [
 
 [[package]]
 name = "mostlyai-engine"
-version = "1.1.2"
+version = "1.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
@@ -1911,7 +1911,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.3,<2" },
     { name = "opacus", specifier = ">=1.5.2,<2" },
     { name = "pandas", specifier = "~=2.2.0" },
-    { name = "peft", specifier = ">=0.11.1,<0.12" },
+    { name = "peft", specifier = ">=0.12" },
     { name = "psutil", specifier = ">=5.9.5,<6" },
     { name = "pyarrow", specifier = ">=16.0.0" },
     { name = "rich", specifier = ">=13.9.4,<14" },
@@ -2607,7 +2607,7 @@ wheels = [
 
 [[package]]
 name = "peft"
-version = "0.11.1"
+version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
@@ -2623,9 +2623,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/f8/8989b6e4bc4ef48e23f7f9077905873e18b577ead2760f7bab6bdae4473b/peft-0.11.1.tar.gz", hash = "sha256:c1a04462e589a1305a06f7c118be0b8602b829f9bfc2104b5c6514c7678c2310", size = 262612 }
+sdist = { url = "https://files.pythonhosted.org/packages/21/33/fb0c31eaa8162c01e9250b21aa65d46a5339f17a818a97c68391db2ff44b/peft-0.14.0.tar.gz", hash = "sha256:546d69af7b42f5ef715a3d3261ed818bc917ae6055e5d7e187ed3f2c76ad72dc", size = 411902 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/99/c5e0292a6d2a62e95c3dfe674ce9e8f8a9fe5d4835d3c9bb9b3e016f02ae/peft-0.11.1-py3-none-any.whl", hash = "sha256:76f2d2a4c9e0644e2741465663b8a02097775e9725d26d7b41551e6f1e72e7dd", size = 251583 },
+    { url = "https://files.pythonhosted.org/packages/88/05/e58e3aaa36544d30a917814e336fc65a746f708e5874945e92999bc22fa3/peft-0.14.0-py3-none-any.whl", hash = "sha256:2f04f3a870c3baf30f15e7dcaa5dd70d3e54cfdd146d3c6c187735d3ae0a0700", size = 374831 },
 ]
 
 [[package]]
@@ -3963,13 +3963,13 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "setuptools", marker = "(python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (python_full_version < '3.12' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "filelock", marker = "sys_platform == 'darwin'" },
+    { name = "fsspec", marker = "sys_platform == 'darwin'" },
+    { name = "jinja2", marker = "sys_platform == 'darwin'" },
+    { name = "networkx", marker = "sys_platform == 'darwin'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform == 'darwin'" },
+    { name = "sympy", marker = "sys_platform == 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:269b10c34430aa8e9643dbe035dc525c4a9b1d671cd3dbc8ecbcaed280ae322d" },
@@ -4055,13 +4055,13 @@ resolution-markers = [
     "python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "setuptools", marker = "(python_full_version >= '3.12' and sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (python_full_version < '3.12' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu') or (sys_platform == 'darwin' and extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
-    { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-15-mostlyai-engine-cpu') or (extra == 'extra-15-mostlyai-engine-cpu' and extra == 'extra-15-mostlyai-engine-gpu')" },
+    { name = "filelock", marker = "sys_platform != 'darwin'" },
+    { name = "fsspec", marker = "sys_platform != 'darwin'" },
+    { name = "jinja2", marker = "sys_platform != 'darwin'" },
+    { name = "networkx", marker = "sys_platform != 'darwin'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform != 'darwin'" },
+    { name = "sympy", marker = "sys_platform != 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp310-cp310-linux_x86_64.whl", hash = "sha256:7f91a2200e352745d70e22396bd501448e28350fbdbd8d8b1c83037e25451150" },
