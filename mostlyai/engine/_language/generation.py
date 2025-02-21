@@ -133,8 +133,8 @@ def generate(
     seed_data: pd.DataFrame | None = None,
     sample_size: int | None = None,
     batch_size: int | None = None,
-    sampling_temperature: float = 1.0,
-    sampling_top_p: float = 1.0,
+    sampling_temperature: float | None = 1.0,
+    sampling_top_p: float | None = 1.0,
     rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
@@ -144,6 +144,9 @@ def generate(
     t0_ = time.time()
     os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
     os.environ["VLLM_NO_DEPRECATION_WARNING"] = "1"
+
+    sampling_temperature = 1.0 if sampling_temperature is None else sampling_temperature
+    sampling_top_p = 1.0 if sampling_top_p is None else sampling_top_p
 
     @contextlib.contextmanager
     def tqdm_disabled():

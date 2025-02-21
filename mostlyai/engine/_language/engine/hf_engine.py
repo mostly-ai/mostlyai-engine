@@ -86,8 +86,6 @@ class HuggingFaceEngine(LanguageEngine):
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
-        sampling_temperature = 1.0 if sampling_temperature is None else sampling_temperature
-        sampling_top_p = 1.0 if sampling_top_p is None else sampling_top_p
         do_sample = sampling_temperature > 0.0
 
         tokenize_kwargs = dict(
