@@ -47,7 +47,7 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
     "torch>=2.5.1",
-    "bitsandbytes>=0.43.3,<0.44",
+    "bitsandbytes>=0.42.0,<0.44",
     "vllm>=0.7.2,<0.8",
 ]
 cpu = [
