@@ -48,7 +48,7 @@ dependencies = [
 gpu = [
     "torch>=2.5.1",
     "bitsandbytes>=0.43.3,<0.44",
-    "vllm>=0.7.2,<0.8",
+    "vllm>=0.7.3,<0.8",
 ]
 cpu = [
     "torch==2.5.1+cpu; sys_platform == 'linux'",
