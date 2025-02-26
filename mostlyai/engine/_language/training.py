@@ -262,7 +262,7 @@ def train(
 
     # in general, we could keep mp.spawn() for single GPU amd CPU training as well
     # but for now, we keep the old code path for single GPU and CPU training
-    if gpu_world_size is not None and gpu_world_size > 0:
+    if gpu_world_size is not None and gpu_world_size  > 1:
         mp.spawn(_train, args=(gpu_world_size,
                                model,
                                max_training_time,
@@ -507,7 +507,7 @@ def _train(
 
         # TODO: multi-gpu
         # set up distributed training if there are multiple devices available
-        if gpu_world_size is not None and gpu_world_size > 0:
+        if gpu_world_size is not None and gpu_world_size  > 1:
             if with_dp:
                 model = DPDDP(model)
             else:
@@ -574,7 +574,7 @@ def _train(
 
         # TODO: multi-gpu
         # THIS PART REQUIRES MORE ATTENTION
-        if gpu_world_size is not None and gpu_world_size > 0 and not with_dp:
+        if gpu_world_size is not None and gpu_world_size  > 1 and not with_dp:
             # if it distributed training, we need to set up the samplers and data loaders accordingly
             # also we should adjust steps
             # also if it is with DP then the Opacus DP Data Loader will be used later in the code wrapping the vanilla trn_dataloader
@@ -685,7 +685,7 @@ def _train(
             )
             # TODO: multi-gpu
             # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
-            if gpu_world_size is not None and gpu_world_size > 0:
+            if gpu_world_size is not None and gpu_world_size  > 1:
                 # Opacus DP Data Loader is used for distributed training with DP
                 trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
             # this further wraps the dataloader with batch_sampler=BatchSplittingSampler to achieve gradient accumulation
