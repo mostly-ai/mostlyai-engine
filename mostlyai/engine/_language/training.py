@@ -705,7 +705,7 @@ def _train(
         # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
         # For multi GPU it should be run BEFORE creating DataLoader iterator
         # when it is with DP and distributed trn_sampler is not used expliccitly, it is handled by DPDataLoader?
-        if gpu_world_size is not None and gpu_world_size > 0:
+        if gpu_world_size is not None and gpu_world_size  > 1:
             if trn_sampler is not None:
                 trn_sampler.set_epoch(int(epoch))
             else:
@@ -744,7 +744,7 @@ def _train(
                     # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
                     # For multi GPU, it should be run BEFORE creating DataLoader iterator
                     # FIXME: if it continues training then it should be compared not with epoch 0
-                    if gpu_world_size is not None and gpu_world_size > 0:
+                    if gpu_world_size is not None and gpu_world_size  > 1:
                         if trn_sampler is not None:
                             trn_sampler.set_epoch(int(epoch))
                         else:
@@ -883,7 +883,7 @@ def _train(
             # TODO: multi-gpu
             # If early stopping happens for one device, then the other will wait the synchronization
             # resulting in a timeout, so we need to send a signal to stop the other devices
-            if gpu_world_size is not None and gpu_world_size > 0:
+            if gpu_world_size is not None and gpu_world_size  > 1:
                 if do_stop:
                     multi_gpu_do_stop = torch.tensor(True, dtype=torch.bool, device=device)
 
@@ -936,6 +936,6 @@ def _train(
             upload_model_data_callback()
             # TODO: multi-gpu
             # if there are multiple devices, we need to clean up the process group
-    if gpu_world_size is not None and gpu_world_size > 0:
+    if gpu_world_size is not None and gpu_world_size  > 1:
         destroy_process_group()
     _LOG.info(f"TRAIN_LANGUAGE finished in {time.time() - t0_:.2f}s")
