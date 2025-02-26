@@ -71,6 +71,7 @@ from mostlyai.engine._language.lstm import LSTMFromScratchLMHeadModel, LSTMFromS
 from peft import LoraConfig, PeftModel
 
 # TODO: multi-gpu
+from mostlyai.engine._common import ddp_setup
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -247,7 +248,8 @@ def train(
                  join=True,
                  )
     else:
-        _train(gpu_world_size=gpu_world_size,
+        _train(rank=None,
+               gpu_world_size=gpu_world_size,
                model=model,
                max_training_time=max_training_time,
                max_epochs=max_epochs,
