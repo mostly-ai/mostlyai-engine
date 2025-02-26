@@ -911,6 +911,6 @@ def _train(
             upload_model_data_callback()
             # TODO: multi-gpu
             # if there are multiple devices, we need to clean up the process group
-            if gpu_world_size is not None and gpu_world_size > 1:
-                destroy_process_group()
+    if gpu_world_size is not None and gpu_world_size > 1:
+        destroy_process_group()
     _LOG.info(f"TRAIN_LANGUAGE finished in {time.time() - t0_:.2f}s")
