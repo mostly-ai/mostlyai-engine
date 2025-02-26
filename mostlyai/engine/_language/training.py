@@ -70,6 +70,14 @@ from transformers import (
 from mostlyai.engine._language.lstm import LSTMFromScratchLMHeadModel, LSTMFromScratchConfig
 from peft import LoraConfig, PeftModel
 
+# TODO: multi-gpu
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import destroy_process_group, all_reduce
+from opacus.distributed import DifferentiallyPrivateDistributedDataParallel as DPDDP
+from opacus.data_loader import DPDataLoader
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -192,7 +200,7 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     val_loss_avg = total_loss / total_num_labels
     return val_loss_avg.item()
 
-
+# TODO: multi-gpu
 def train(
     *,
     model: str = "MOSTLY_AI/LSTMFromScratch-3m",
@@ -208,6 +216,68 @@ def train(
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ):
+    device = (
+        torch.device(device)
+        if device is not None
+        else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    )
+
+    if device == torch.device("cuda"):
+        gpu_world_size = torch.cuda.device_count()
+    else:
+        gpu_world_size = None
+
+    # in general, we could keep mp.spawn() for single GPU amd CPU training as well
+    # but for now, we keep the old code path for single GPU and CPU training
+    if gpu_world_size is not None and gpu_world_size > 1:
+        mp.spawn(_train, args=(gpu_world_size,
+                               model,
+                               max_training_time,
+                               max_epochs,
+                               batch_size,
+                               gradient_accumulation_steps,
+                               enable_flexible_generation,
+                               differential_privacy,
+                               upload_model_data_callback,
+                               model_state_strategy,
+                               workspace_dir,
+                               update_progress,
+                               ),
+                 nprocs=gpu_world_size,
+                 join=True,
+                 )
+    else:
+        _train(gpu_world_size=gpu_world_size,
+               model=model,
+               max_training_time=max_training_time,
+               max_epochs=max_epochs,
+               batch_size=batch_size,
+               gradient_accumulation_steps=gradient_accumulation_steps,
+               enable_flexible_generation=enable_flexible_generation,
+               differential_privacy=differential_privacy,
+               upload_model_data_callback=upload_model_data_callback,
+               model_state_strategy=model_state_strategy,
+               workspace_dir=workspace_dir,
+               update_progress=update_progress,
+               )
+
+# TODO: multi-gpu
+def _train(
+    *,
+    rank: int | None = None,
+    gpu_world_size: int | None = None,
+    model: str,
+    max_training_time: float,
+    max_epochs: float,
+    batch_size: int | None,
+    gradient_accumulation_steps: int | None,
+    enable_flexible_generation: bool,
+    differential_privacy: DifferentialPrivacyConfig | dict | None,
+    upload_model_data_callback: Callable | None,
+    model_state_strategy: ModelStateStrategy | str,
+    workspace_dir: str | Path,
+    update_progress: ProgressCallback | None,
+):
     _LOG.info("TRAIN_LANGUAGE started")
     t0_ = time.time()
     workspace_dir = ensure_workspace_dir(workspace_dir)
@@ -219,11 +289,17 @@ def train(
         _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
         _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
         _LOG.info(f"transformers={version('transformers')}, peft={version('peft')}")
-        device = (
-            torch.device(device)
-            if device is not None
-            else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        )
+        # TODO: multi-gpu
+        # we could use only the last branch of the if-else for single GPU and CPU training too
+        # and provide rank=None and gpu_world_size=None as default values, but for now, we keep the old code path
+        if rank is None and gpu_world_size is None:
+            device = torch.device("cpu")
+        elif rank is None and gpu_world_size == 1:
+            device = torch.device("cuda")
+        else:
+            ddp_setup(rank, gpu_world_size)
+            device = torch.device("cuda", rank)
+
         _LOG.info(f"{device=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
@@ -300,7 +376,8 @@ def train(
 
         _LOG.info("create training model")
         model_checkpoint = LanguageModelCheckpoint(workspace=workspace)
-        model: PreTrainedModel | PeftModel
+        # TODO: multi-gpu
+        model: PreTrainedModel | PeftModel | DPDDP | DDP
 
         # check how to handle existing model weights
         if isinstance(model_state_strategy, str):
@@ -394,14 +471,28 @@ def train(
                 model.add_adapter(peft_config)
 
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
+
+        # TODO: multi-gpu
+        # set up distributed training if there are multiple devices available
+        if gpu_world_size is not None and gpu_world_size > 1:
+            if with_dp:
+                model = DPDDP(model)
+            else:
+                model = DDP(model)
+
         model.train()
-        no_of_model_params = model.num_parameters()
+        # TODO: multi-gpu
+        no_of_model_params = model.num_parameters() if hasattr(model, "num_parameters") else model.module.num_parameters()
         _LOG.info(f"{no_of_model_params=}")
-        no_of_trainable_model_params = model.num_parameters(only_trainable=True)
+        # TODO: multi-gpu
+        no_of_trainable_model_params = model.num_parameters(only_trainable=True) if hasattr(model, "num_parameters") else model.module.num_parameters(only_trainable=True)
         _LOG.info(f"{no_of_trainable_model_params=}")
 
         _LOG.info(f"{tokenizer=}")
-        tokenizer.save_pretrained(workspace.model_path)
+        # TODO: multi-gpu
+        # save the tokenizer only on the main process
+        if rank is None or rank == 0:
+            tokenizer.save_pretrained(workspace.model_path)
 
         tokenized_datasets = content_dataset.map(
             partial(
@@ -439,30 +530,67 @@ def train(
         if initial_lr is None:
             initial_lr = _learn_rate_heuristic(no_of_model_params)
 
-        _LOG.info(f"{trn_cnt=}, {val_cnt=}")
-        _LOG.info(f"{trn_batch_size=}, {val_batch_size=}")
-        _LOG.info(f"{trn_steps=}, {val_steps=}")
-        _LOG.info(f"{batch_size=}, {gradient_accumulation_steps=}, {initial_lr=}")
+        # TODO: multi-gpu
+        # save pretrained model at early exit, if there is only one device, or it is the master device
+        if rank is None or rank == 0:
+            # early exit if there is not enough data to train the model
+            if len(tokenized_datasets["train"]) == 0 or len(tokenized_datasets["validation"]) == 0:
+                _LOG.warning("not enough data to train model; skipping training")
+                model.save_pretrained(workspace.model_path) if hasattr(model, "save_pretrained") else model.module.save_pretrained(workspace.model_path)
+                return
 
-        # early exit if there is not enough data to train the model
-        if len(tokenized_datasets["train"]) == 0 or len(tokenized_datasets["validation"]) == 0:
-            _LOG.warning("not enough data to train model; skipping training")
-            model.save_pretrained(workspace.model_path)
-            return
+        # TODO: multi-gpu
+        # THIS PART REQUIRES MORE ATTENTION
+        if gpu_world_size is not None and gpu_world_size > 1 and not with_dp:
+            # if it distributed training, we need to set up the samplers and data loaders accordingly
+            # also we should adjust steps
+            # also if it is with DP then the Opacus DP Data Loader will be used later in the code wrapping the vanilla trn_dataloader
+            # shuffling should not be set here, it is handled by .set_epoch(int(epoch)) below  (see DistributedSampler docs)
+            trn_sampler = DistributedSampler(tokenized_datasets["train"])
+            val_sampler = DistributedSampler(tokenized_datasets["validation"], shuffle=False)
+
+            _LOG.info(f"Total {trn_cnt=}, total {val_cnt=}")
+
+            # TODO: This should be checked, if number of samples from trn_sampler and val_sampler should be used instead!?
+            trn_cnt = trn_cnt // gpu_world_size
+            val_cnt = val_cnt // gpu_world_size
+            trn_steps = max(1, trn_steps // gpu_world_size)
+            val_steps = max(1, val_steps // gpu_world_size)
+
+            # https://discuss.pytorch.org/t/how-to-choose-num-worker-when-using-ddp/140978
+            # num_workers <= cpu_count / GPU_count if dataloader is CPU intensive,
+            # if the dataloader is IO intensive, it might be larger and set to 2 * cpu_count / GPU_count
+            num_workers = mp.cpu_count() // gpu_world_size
+        else:
+            trn_sampler = None
+            val_sampler = None
+            num_workers = 0
+
 
         trn_dataloader = DataLoader(
             tokenized_datasets["train"],
-            shuffle=True,
+            shuffle=(trn_sampler is None),
+            sampler=trn_sampler,
             # either DP logical batch size or grad accumulation physical batch size
             batch_size=trn_batch_size if with_dp else batch_size,
             collate_fn=data_collator,
+            pin_memory=(device.type == "cuda"),
+            # num_workers=num_workers, # did not see any improvement
         )
         val_dataloader = DataLoader(
             tokenized_datasets["validation"],
             shuffle=False,
+            sampler=val_sampler,
             batch_size=val_batch_size,
             collate_fn=data_collator,
+            pin_memory=(device.type == "cuda"),
+            # num_workers=num_workers, # did not see any improvement
         )
+
+        _LOG.info(f"{trn_cnt=}, {val_cnt=}")
+        _LOG.info(f"{trn_batch_size=}, {val_batch_size=}")
+        _LOG.info(f"{trn_steps=}, {val_steps=}")
+        _LOG.info(f"{batch_size=}, {gradient_accumulation_steps=}, {initial_lr=}")
 
         early_stopper = EarlyStopper(val_loss_patience=4)
         optimizer = torch.optim.AdamW(params=model.parameters(), lr=initial_lr)
@@ -530,11 +658,29 @@ def train(
             privacy_engine = None
             dp_config, dp_delta, dp_accountant = None, None, None
 
+        # TODO: multi-gpu
+        # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
+        if gpu_world_size is not None and gpu_world_size > 1 and with_dp:
+            # Opacus DP Data Loader is used for distributed training with DP
+            trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
+
         progress_message = None
         start_trn_time = time.time()
         last_msg_time = time.time()
+        # TODO: multi-gpu
+        # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
+        # For multi GPU it should be run BEFORE creating DataLoader iterator
+        # when it is with DP and distributed trn_sampler is not used expliccitly, it is handled by DPDataLoader?
+        if gpu_world_size is not None and gpu_world_size > 1 and trn_sampler is not None:
+            trn_sampler.set_epoch(int(epoch))
+
         trn_data_iter = iter(trn_dataloader)
         do_stop = False
+
+        #TODO: multi-gpu
+        # it is a flag for multi GPU to stop the training
+        multi_gpu_do_stop = torch.tensor(False, dtype=torch.bool, device=device)
+
         current_lr = initial_lr
         forward_ctx_mgr = (
             torch.autocast(device_type=device.type, dtype=torch.bfloat16) if use_mixed_precision else nullcontext()
@@ -542,6 +688,12 @@ def train(
         # infinite loop over training steps, until we decide to stop
         # either because of max_epochs, max_training_time or early_stopping
         while not do_stop:
+            # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
+            # For multi GPU, it should be run BEFORE creating DataLoader iterator
+            # FIXME: if it continues training then it should be compared not with epoch 0
+            if epoch.is_integer() and int(epoch) != 0 and trn_sampler is not None:
+                trn_sampler.set_epoch(int(epoch))
+
             is_checkpoint = 0
             steps += 1
             epoch = steps / trn_steps
@@ -555,6 +707,7 @@ def train(
                 try:
                     step_data = next(trn_data_iter)
                 except StopIteration:
+                    # Assume that this happens only at the end of the epoch, so for multi GPU the sampler was already reset above
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 step_data = {k: v.to(device) for k, v in step_data.items()}
@@ -602,7 +755,9 @@ def train(
                 dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
                 has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
                 # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
-                if not has_exceeded_dp_max_epsilon:
+                # TODO: multi-gpu
+                # save model weights for best model if there is only one device, or it is the master device
+                if not has_exceeded_dp_max_epsilon and (rank is None or rank == 0):
                     is_checkpoint = model_checkpoint.save_checkpoint_if_best(
                         val_loss=val_loss,
                         model=model,
@@ -683,15 +838,32 @@ def train(
             if total_training_time > max_training_time:
                 do_stop = True
 
+            # TODO: multi-gpu
+            # If early stopping happens for one device, then the other will wait the synchronization
+            # resulting in a timeout, so we need to send a signal to stop the other devices
+            if gpu_world_size is not None and gpu_world_size > 1:
+                if do_stop:
+                    multi_gpu_do_stop = torch.tensor(True, dtype=torch.bool, device=device)
+
+                all_reduce(multi_gpu_do_stop, async_op=False)
+
+                # we check a signal from other devices to stop the training
+                if multi_gpu_do_stop.item():
+                    _LOG.info(f"{device}: received STOP EXECUTION signal from another device")
+                    do_stop = True
+
         # no checkpoint is saved yet because the training stopped before the first epoch ended
         if not model_checkpoint.has_saved_once():
-            _LOG.info("saving model weights, as none were saved so far")
-            model_checkpoint.save_checkpoint(
-                model=model,
-                optimizer=optimizer,
-                lr_scheduler=lr_scheduler,
-                dp_accountant=privacy_engine.accountant if with_dp else None,
-            )
+            # TODO: multi-gpu
+            #  save weights if there is only one device, or it is the master device
+            if rank is None or rank == 0:
+                _LOG.info("saving model weights, as none were saved so far")
+                model_checkpoint.save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    lr_scheduler=lr_scheduler,
+                    dp_accountant=privacy_engine.accountant if with_dp else None,
+                )
             if total_training_time > max_training_time:
                 _LOG.info("skip validation loss calculation due to time-capped early stopping")
                 val_loss = None
@@ -720,4 +892,8 @@ def train(
             )
             # ensure everything gets uploaded
             upload_model_data_callback()
+            # TODO: multi-gpu
+            # if there are multiple devices, we need to clean up the process group
+            if gpu_world_size is not None and gpu_world_size > 1:
+                destroy_process_group()
     _LOG.info(f"TRAIN_LANGUAGE finished in {time.time() - t0_:.2f}s")

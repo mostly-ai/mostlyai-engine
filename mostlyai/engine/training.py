@@ -22,13 +22,6 @@ from mostlyai.engine._common import ProgressCallback
 from mostlyai.engine.domain import ModelType, ModelStateStrategy, DifferentialPrivacyConfig
 from mostlyai.engine._workspace import resolve_model_type
 
-# multi-gpu
-import torch.multiprocessing as mp
-from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import destroy_process_group, all_reduce
-from opacus.distributed import DifferentiallyPrivateDistributedDataParallel as DPDDP
-
 
 def train(
     *,
