@@ -671,12 +671,6 @@ def _train(
                     torch.load(workspace.model_dp_accountant_path, map_location=device, weights_only=True),
                 )
 
-            # TODO: multi-gpu
-            # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
-            if gpu_world_size is not None and gpu_world_size > 0:
-                # Opacus DP Data Loader is used for distributed training with DP
-                trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
-
             # Opacus will return the modified objects
             # - model: wrapped in GradSampleModule and contains additional hooks for computing per-sample gradients
             # - optimizer: wrapped in DPOptimizer and will do different operations during virtual steps and logical steps
@@ -689,6 +683,11 @@ def _train(
                 max_grad_norm=dp_config.get("max_grad_norm"),
                 poisson_sampling=True,
             )
+            # TODO: multi-gpu
+            # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
+            if gpu_world_size is not None and gpu_world_size > 0:
+                # Opacus DP Data Loader is used for distributed training with DP
+                trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
             # this further wraps the dataloader with batch_sampler=BatchSplittingSampler to achieve gradient accumulation
             # it will split the sampled logical batches into smaller sub-batches with batch_size
             trn_dataloader = wrap_data_loader(
