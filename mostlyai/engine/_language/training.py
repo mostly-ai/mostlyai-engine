@@ -149,6 +149,9 @@ class LanguageModelCheckpoint(ModelCheckpoint):
             # the weights will be saved as *.bin instead of .safetensors
             safe_serialization = model._module.config.model_type != LSTMFromScratchConfig.model_type
             model._module.save_pretrained(self.workspace.model_path, safe_serialization=safe_serialization)
+        # TODO: multi-gpu
+        elif isinstance(model,DDP) or isinstance(model,DPDDP):
+            model.module.save_pretrained(self.workspace.model_path)
         else:
             model.save_pretrained(self.workspace.model_path)
 
@@ -173,9 +176,15 @@ def _calculate_per_label_losses(
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
     # Flatten the tokens
-    shift_logits = shift_logits.view(
-        -1, model.config.vocab_size if not isinstance(model, GradSampleModule) else model._module.config.vocab_size
-    )
+    # TODO: multi-gpu
+    if isinstance(model, GradSampleModule):
+        vocab_size = model._module.config.vocab_size
+    elif isinstance(model,DDP) or isinstance(model,DPDDP):
+        vocab_size = model.module.config.vocab_size
+    else:
+        vocab_size = model.config.vocab_size
+
+    shift_logits = shift_logits.view(-1, vocab_size)
     shift_labels = shift_labels.view(-1)
     # Ensure tensors are on the same device
     shift_labels = shift_labels.to(shift_logits.device)
@@ -187,8 +196,14 @@ def _calculate_per_label_losses(
 
 
 @torch.no_grad()
-def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloader: DataLoader) -> float:
-    device = model.device if not isinstance(model, GradSampleModule) else model._module.device
+def _calculate_val_loss(model: PreTrainedModel | GradSampleModule | DDP | DPDDP, val_dataloader: DataLoader) -> float:
+    # TODO: multi-gpu
+    if isinstance(model, GradSampleModule):
+        device = model._module.device
+    elif isinstance(model,DDP) or isinstance(model,DPDDP):
+        device = model.module.device
+    else:
+        device = model.device
     total_loss = torch.tensor(0, dtype=torch.float32, device=device)
     total_num_labels = torch.tensor(0, dtype=torch.long, device=device)
     model.eval()
