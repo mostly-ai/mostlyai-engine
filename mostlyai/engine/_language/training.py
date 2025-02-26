@@ -262,7 +262,7 @@ def train(
 
     # in general, we could keep mp.spawn() for single GPU amd CPU training as well
     # but for now, we keep the old code path for single GPU and CPU training
-    if gpu_world_size is not None and gpu_world_size  > 1:
+    if gpu_world_size is not None and gpu_world_size > 0:
         mp.spawn(_train, args=(gpu_world_size,
                                model,
                                max_training_time,
@@ -507,7 +507,7 @@ def _train(
 
         # TODO: multi-gpu
         # set up distributed training if there are multiple devices available
-        if gpu_world_size is not None and gpu_world_size  > 1:
+        if gpu_world_size is not None and gpu_world_size > 0:
             if with_dp:
                 model = DPDDP(model)
             else:
@@ -574,7 +574,7 @@ def _train(
 
         # TODO: multi-gpu
         # THIS PART REQUIRES MORE ATTENTION
-        if gpu_world_size is not None and gpu_world_size  > 1 and not with_dp:
+        if gpu_world_size is not None and gpu_world_size > 0 and not with_dp:
             # if it distributed training, we need to set up the samplers and data loaders accordingly
             # also we should adjust steps
             # also if it is with DP then the Opacus DP Data Loader will be used later in the code wrapping the vanilla trn_dataloader
@@ -673,7 +673,7 @@ def _train(
 
             # TODO: multi-gpu
             # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
-            if gpu_world_size is not None and gpu_world_size  > 1:
+            if gpu_world_size is not None and gpu_world_size > 0:
                 # Opacus DP Data Loader is used for distributed training with DP
                 trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
 
@@ -705,8 +705,12 @@ def _train(
         # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
         # For multi GPU it should be run BEFORE creating DataLoader iterator
         # when it is with DP and distributed trn_sampler is not used expliccitly, it is handled by DPDataLoader?
-        if gpu_world_size is not None and gpu_world_size  > 1 and trn_sampler is not None:
-            trn_sampler.set_epoch(int(epoch))
+        if gpu_world_size is not None and gpu_world_size > 0:
+            if trn_sampler is not None:
+                trn_sampler.set_epoch(int(epoch))
+            else:
+                # for DPDDP we don't specify Sampler explicitly
+                trn_dataloader.batch_sampler.epoch = int(epoch)
 
         trn_data_iter = iter(trn_dataloader)
         do_stop = False
@@ -722,12 +726,6 @@ def _train(
         # infinite loop over training steps, until we decide to stop
         # either because of max_epochs, max_training_time or early_stopping
         while not do_stop:
-            # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
-            # For multi GPU, it should be run BEFORE creating DataLoader iterator
-            # FIXME: if it continues training then it should be compared not with epoch 0
-            if epoch.is_integer() and int(epoch) != 0 and trn_sampler is not None:
-                trn_sampler.set_epoch(int(epoch))
-
             is_checkpoint = 0
             steps += 1
             epoch = steps / trn_steps
@@ -741,7 +739,17 @@ def _train(
                 try:
                     step_data = next(trn_data_iter)
                 except StopIteration:
-                    # Assume that this happens only at the end of the epoch, so for multi GPU the sampler was already reset above
+                    # TODO: multi-gpu
+                    # Assume that this happens only at the end of the epoch
+                    # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
+                    # For multi GPU, it should be run BEFORE creating DataLoader iterator
+                    # FIXME: if it continues training then it should be compared not with epoch 0
+                    if gpu_world_size is not None and gpu_world_size > 0:
+                        if trn_sampler is not None:
+                            trn_sampler.set_epoch(int(epoch))
+                        else:
+                            # for DPDDP we don't specify Sampler explicitly
+                            trn_dataloader.batch_sampler.epoch = int(epoch)
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 step_data = {k: v.to(device) for k, v in step_data.items()}
@@ -875,7 +883,7 @@ def _train(
             # TODO: multi-gpu
             # If early stopping happens for one device, then the other will wait the synchronization
             # resulting in a timeout, so we need to send a signal to stop the other devices
-            if gpu_world_size is not None and gpu_world_size  > 1:
+            if gpu_world_size is not None and gpu_world_size > 0:
                 if do_stop:
                     multi_gpu_do_stop = torch.tensor(True, dtype=torch.bool, device=device)
 
@@ -928,6 +936,6 @@ def _train(
             upload_model_data_callback()
             # TODO: multi-gpu
             # if there are multiple devices, we need to clean up the process group
-    if gpu_world_size is not None and gpu_world_size  > 1:
+    if gpu_world_size is not None and gpu_world_size > 0:
         destroy_process_group()
     _LOG.info(f"TRAIN_LANGUAGE finished in {time.time() - t0_:.2f}s")
