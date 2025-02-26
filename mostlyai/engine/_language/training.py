@@ -263,9 +263,8 @@ def train(
 
 # TODO: multi-gpu
 def _train(
-    *,
-    rank: int | None = None,
-    gpu_world_size: int | None = None,
+    rank: int | None, # TODO: should be fixed to None for cpu
+    gpu_world_size: int | None, # TODO: should be fixed to None for cpu
     model: str,
     max_training_time: float,
     max_epochs: float,
