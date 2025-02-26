@@ -1,7 +1,12 @@
 # Synthetic Data Engine 💎
-[![Documentation](https://img.shields.io/badge/docs-latest-green)](https://mostly-ai.github.io/mostlyai-engine/) ![license](https://img.shields.io/github/license/mostly-ai/mostlyai-engine) ![GitHub Release](https://img.shields.io/github/v/release/mostly-ai/mostlyai-engine) ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mostlyai-engine) [![stats](https://pepy.tech/badge/mostlyai-engine)](https://pypi.org/project/mostlyai-engine/)
 
-[Package Documentation](https://mostly-ai.github.io/mostlyai-engine/) | [Platform Documentation](https://mostly.ai/docs)
+![GitHub Release](https://img.shields.io/github/v/release/mostly-ai/mostlyai-engine)
+[![Documentation](https://img.shields.io/badge/docs-latest-green)](https://mostly-ai.github.io/mostlyai-engine/)
+[![stats](https://pepy.tech/badge/mostlyai-engine)](https://pypi.org/project/mostlyai-engine/)
+![license](https://img.shields.io/github/license/mostly-ai/mostlyai-engine)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mostlyai-engine)
+
+[Documentation](https://mostly-ai.github.io/mostlyai-engine/) | [Technical Paper](https://arxiv.org/abs/2501.12012) | [Free Cloud Service](https://app.mostly.ai/)
 
 Create high-fidelity privacy-safe synthetic data:
 
@@ -17,7 +22,7 @@ Create high-fidelity privacy-safe synthetic data:
 
 ...all within your safe compute environment, all with a few lines of Python code 💥.
 
-Note: This library is the underlying model engine of the [Synthetic Data SDK ✨](https://github.com/mostly-ai/mostlyai). Please refer to the latter, for an easy-to-use, higher-level software toolkit.
+Note: This library is the underlying model engine of the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). Please refer to the latter, for an easy-to-use, higher-level software toolkit.
 
 
 ## Installation
