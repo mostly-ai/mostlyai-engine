@@ -143,14 +143,22 @@ def compute_linear_grad_sample_full_precision(
 
 
 class LanguageModelCheckpoint(ModelCheckpoint):
-    def _save_model_weights(self, model: PreTrainedModel | GradSampleModule) -> None:
+    def _save_model_weights(self, model: PreTrainedModel | GradSampleModule | DDP) -> None:
         if isinstance(model, GradSampleModule):
-            # LSTMFromScratchLMHeadModel with DPLSTM layers can only be saved without safe serialization
-            # the weights will be saved as *.bin instead of .safetensors
-            safe_serialization = model._module.config.model_type != LSTMFromScratchConfig.model_type
-            model._module.save_pretrained(self.workspace.model_path, safe_serialization=safe_serialization)
+            # TODO: multi-gpu
+            # should be found more elegant way
+            if isinstance(model._module, DPDDP):
+                # LSTMFromScratchLMHeadModel with DPLSTM layers can only be saved without safe serialization
+                # the weights will be saved as *.bin instead of .safetensors
+                safe_serialization = model._module.module.config.model_type != LSTMFromScratchConfig.model_type
+                model._module.module.save_pretrained(self.workspace.model_path, safe_serialization=safe_serialization)
+            else:
+                # LSTMFromScratchLMHeadModel with DPLSTM layers can only be saved without safe serialization
+                # the weights will be saved as *.bin instead of .safetensors
+                safe_serialization = model._module.config.model_type != LSTMFromScratchConfig.model_type
+                model._module.save_pretrained(self.workspace.model_path, safe_serialization=safe_serialization)
         # TODO: multi-gpu
-        elif isinstance(model,DDP) or isinstance(model,DPDDP):
+        elif isinstance(model,DDP):
             model.module.save_pretrained(self.workspace.model_path)
         else:
             model.save_pretrained(self.workspace.model_path)
@@ -166,7 +174,7 @@ class LanguageModelCheckpoint(ModelCheckpoint):
 
 
 def _calculate_per_label_losses(
-    model: PreTrainedModel | GradSampleModule, step_data: dict
+    model: PreTrainedModel | GradSampleModule | DDP | DPDDP, step_data: dict
 ) -> tuple[torch.Tensor, torch.Tensor]:
     outputs = model(input_ids=step_data["input_ids"], attention_mask=step_data["attention_mask"])
     logits = outputs.logits
@@ -178,8 +186,13 @@ def _calculate_per_label_losses(
     # Flatten the tokens
     # TODO: multi-gpu
     if isinstance(model, GradSampleModule):
-        vocab_size = model._module.config.vocab_size
-    elif isinstance(model,DDP) or isinstance(model,DPDDP):
+        # TODO: multi-gpu
+        # should be found more elegant way
+        if isinstance(model._module, DPDDP):
+            vocab_size = model._module.module.config.vocab_size
+        else:
+            vocab_size = model._module.config.vocab_size
+    elif isinstance(model,DDP):
         vocab_size = model.module.config.vocab_size
     else:
         vocab_size = model.config.vocab_size
@@ -196,11 +209,15 @@ def _calculate_per_label_losses(
 
 
 @torch.no_grad()
-def _calculate_val_loss(model: PreTrainedModel | GradSampleModule | DDP | DPDDP, val_dataloader: DataLoader) -> float:
+def _calculate_val_loss(model: PreTrainedModel | GradSampleModule | DDP, val_dataloader: DataLoader) -> float:
     # TODO: multi-gpu
+    # should be found more elegant way
     if isinstance(model, GradSampleModule):
-        device = model._module.device
-    elif isinstance(model,DDP) or isinstance(model,DPDDP):
+        if isinstance(model._module, DPDDP):
+            device = model._module.module.device
+        else:
+            device = model._module.device
+    elif isinstance(model,DDP):
         device = model.module.device
     else:
         device = model.device
@@ -245,7 +262,7 @@ def train(
 
     # in general, we could keep mp.spawn() for single GPU amd CPU training as well
     # but for now, we keep the old code path for single GPU and CPU training
-    if gpu_world_size is not None and gpu_world_size > 1:
+    if gpu_world_size is not None and gpu_world_size  > 1:
         mp.spawn(_train, args=(gpu_world_size,
                                model,
                                max_training_time,
@@ -490,7 +507,7 @@ def _train(
 
         # TODO: multi-gpu
         # set up distributed training if there are multiple devices available
-        if gpu_world_size is not None and gpu_world_size > 1:
+        if gpu_world_size is not None and gpu_world_size  > 1:
             if with_dp:
                 model = DPDDP(model)
             else:
@@ -557,7 +574,7 @@ def _train(
 
         # TODO: multi-gpu
         # THIS PART REQUIRES MORE ATTENTION
-        if gpu_world_size is not None and gpu_world_size > 1 and not with_dp:
+        if gpu_world_size is not None and gpu_world_size  > 1 and not with_dp:
             # if it distributed training, we need to set up the samplers and data loaders accordingly
             # also we should adjust steps
             # also if it is with DP then the Opacus DP Data Loader will be used later in the code wrapping the vanilla trn_dataloader
@@ -656,7 +673,7 @@ def _train(
 
             # TODO: multi-gpu
             # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
-            if gpu_world_size is not None and gpu_world_size > 1:
+            if gpu_world_size is not None and gpu_world_size  > 1:
                 # Opacus DP Data Loader is used for distributed training with DP
                 trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
 
@@ -688,7 +705,7 @@ def _train(
         # https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
         # For multi GPU it should be run BEFORE creating DataLoader iterator
         # when it is with DP and distributed trn_sampler is not used expliccitly, it is handled by DPDataLoader?
-        if gpu_world_size is not None and gpu_world_size > 1 and trn_sampler is not None:
+        if gpu_world_size is not None and gpu_world_size  > 1 and trn_sampler is not None:
             trn_sampler.set_epoch(int(epoch))
 
         trn_data_iter = iter(trn_dataloader)
@@ -858,7 +875,7 @@ def _train(
             # TODO: multi-gpu
             # If early stopping happens for one device, then the other will wait the synchronization
             # resulting in a timeout, so we need to send a signal to stop the other devices
-            if gpu_world_size is not None and gpu_world_size > 1:
+            if gpu_world_size is not None and gpu_world_size  > 1:
                 if do_stop:
                     multi_gpu_do_stop = torch.tensor(True, dtype=torch.bool, device=device)
 
@@ -911,6 +928,6 @@ def _train(
             upload_model_data_callback()
             # TODO: multi-gpu
             # if there are multiple devices, we need to clean up the process group
-    if gpu_world_size is not None and gpu_world_size > 1:
+    if gpu_world_size is not None and gpu_world_size  > 1:
         destroy_process_group()
     _LOG.info(f"TRAIN_LANGUAGE finished in {time.time() - t0_:.2f}s")
