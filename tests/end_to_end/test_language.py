@@ -125,8 +125,7 @@ def test_tgt_only(tgt_only_text_dataset):
 @pytest.mark.parametrize(
     ("model_name", "sampling_temperature"),
     [
-        # ("amd/AMD-Llama-135m", 1.0),
-        ("HuggingFaceTB/SmolLM2-135M", 1.0),
+        ("amd/AMD-Llama-135m", 1.0),
         ("HuggingFaceTB/SmolLM-135M", 1.0),
         ("HuggingFaceTB/SmolLM-135M", 0.0),
         (LSTMFromScratchConfig.model_id, 1.0),
@@ -151,8 +150,7 @@ def test_language_with_context(encoded_text_dataset, model_name, sampling_temper
 @pytest.mark.parametrize(
     ("model_name", "dp_max_epsilon"),
     [
-        # ("amd/AMD-Llama-135m", None),
-        ("HuggingFaceTB/SmolLM2-135M", None),
+        ("amd/AMD-Llama-135m", None),
         (LSTMFromScratchConfig.model_id, 40),
     ],
 )
@@ -181,8 +179,7 @@ def test_language_with_dp(encoded_text_dataset, model_name, dp_max_epsilon):
 @pytest.mark.parametrize(
     "model_name",
     [
-        # "amd/AMD-Llama-135m",
-        "HuggingFaceTB/SmolLM2-135M",
+        "amd/AMD-Llama-135m",
         LSTMFromScratchConfig.model_id,
     ],
 )
@@ -341,8 +338,7 @@ class TestTokenizerAndDataCollator:
     @pytest.mark.parametrize(
         "model_name",
         [
-            # "amd/AMD-Llama-135m",  # LllmaTokenizerFast
-            "HuggingFaceTB/SmolLm2-135M",
+            "amd/AMD-Llama-135m",  # LllmaTokenizerFast
             "HuggingFaceTB/SmolLM-135M",  # GPT2TokenizerFast
             "Qwen/Qwen2-0.5B",  # Qwen2TokenizerFast
         ],
@@ -374,8 +370,7 @@ class TestTokenizerAndDataCollator:
     @pytest.mark.parametrize(
         "model_name",
         [
-            # "amd/AMD-Llama-135m",  # LllmaTokenizerFast
-            "HuggingFaceTB/SmolLm2-135M",
+            "amd/AMD-Llama-135m",  # LllmaTokenizerFast
             "HuggingFaceTB/SmolLM-135M",  # GPT2TokenizerFast
             "Qwen/Qwen2-0.5B",  # Qwen2TokenizerFast
         ],
@@ -472,8 +467,7 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     ("model_name"),
     [
         LSTMFromScratchConfig.model_id,
-        # "amd/AMD-Llama-135m",
-        "HuggingFaceTB/SmolLM2-135M",
+        "amd/AMD-Llama-135m",
         # "openai-community/gpt2",  # TEMP, better model than AMD
     ],
 )
