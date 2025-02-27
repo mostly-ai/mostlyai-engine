@@ -271,12 +271,40 @@ wheels = [
 name = "bitsandbytes"
 version = "0.42.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+]
 dependencies = [
-    { name = "scipy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "scipy", marker = "sys_platform == 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/95/a4/ee1a5c53a622ff6e68378e6f9f76f43ad8cadf440da53bb3bcc0bde30eb1/bitsandbytes-0.42.0.tar.gz", hash = "sha256:fc1505f184f0d275766f2a6c663f1a43b734c1409b5c5a406f3a6073d9f329fd", size = 103205096 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/63/489ef9cd7a33c1f08f1b2be51d1b511883c5e34591aaa9873b30021cd679/bitsandbytes-0.42.0-py3-none-any.whl", hash = "sha256:63798680912cc63bb77b535a2d0860af024e290a52e157f777ad2a52e2585967", size = 104960014 },
+]
+
+[[package]]
+name = "bitsandbytes"
+version = "0.43.3"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux'",
+]
+dependencies = [
+    { name = "numpy", marker = "sys_platform == 'linux'" },
+    { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/1a/3cbdd70ce276085602ffe7e4f52753a41c43464053eec9e76b3dd065e4c9/bitsandbytes-0.43.3-py3-none-manylinux_2_24_x86_64.whl", hash = "sha256:cc99507c352be0715098b2c7577b690dd158972dc4ea10c7495bac104c7c79f0", size = 137460618 },
+    { url = "https://files.pythonhosted.org/packages/9f/73/92084a26c983854078113cee7ff8b3b444a0528788c4c5b512f94fa4a535/bitsandbytes-0.43.3-py3-none-win_amd64.whl", hash = "sha256:257f6552f2144748a84e6c44e1f7a98f3da888f675ed74e18fd7f7eb13c6cafa", size = 136480428 },
 ]
 
 [[package]]
@@ -2021,7 +2049,8 @@ cpu = [
     { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
 ]
 gpu = [
-    { name = "bitsandbytes", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "bitsandbytes", version = "0.42.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "bitsandbytes", version = "0.43.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
     { name = "vllm", version = "0.7.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
     { name = "vllm", version = "0.7.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
@@ -2049,7 +2078,7 @@ docs = [
 requires-dist = [
     { name = "accelerate", specifier = ">=0.31.0" },
     { name = "bitsandbytes", marker = "sys_platform == 'darwin' and extra == 'gpu'", specifier = ">=0.42.0,<0.43" },
-    { name = "bitsandbytes", marker = "sys_platform == 'linux' and extra == 'gpu'", specifier = ">=0.42.0,<0.44" },
+    { name = "bitsandbytes", marker = "sys_platform == 'linux' and extra == 'gpu'", specifier = ">=0.43.3,<0.44" },
     { name = "datasets", specifier = ">=3.0.0,<4" },
     { name = "formatron", specifier = ">=0.4.11,<0.5" },
     { name = "huggingface-hub", specifier = ">=0.28.0,<0.29" },
