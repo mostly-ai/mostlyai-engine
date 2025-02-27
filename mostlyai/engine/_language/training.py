@@ -799,24 +799,23 @@ def _train(
 
             # do validation
             do_validation = epoch.is_integer()
-            if do_validation:
+            # TODO: multi-gpu
+            # calc val loss and save model weights for best model if there is only one device, or it is the master device
+            if do_validation and (rank is None or rank == 0):
                 # calculate val loss
-                # TODO: multi-gpu
-                # calc val loss and save model weights for best model if there is only one device, or it is the master device
-                if rank is None or rank == 0:
-                    with forward_ctx_mgr:
-                        val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
-                    dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
-                    has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
-                    # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
-                    if not has_exceeded_dp_max_epsilon:
-                        is_checkpoint = model_checkpoint.save_checkpoint_if_best(
-                            val_loss=val_loss,
-                            model=model,
-                            optimizer=optimizer,
-                            lr_scheduler=lr_scheduler,
-                            dp_accountant=privacy_engine.accountant if with_dp else None,
-                        )
+                with forward_ctx_mgr:
+                    val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
+                dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
+                has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
+                # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
+                if not has_exceeded_dp_max_epsilon:
+                    is_checkpoint = model_checkpoint.save_checkpoint_if_best(
+                        val_loss=val_loss,
+                        model=model,
+                        optimizer=optimizer,
+                        lr_scheduler=lr_scheduler,
+                        dp_accountant=privacy_engine.accountant if with_dp else None,
+                    )
                 else:
                     _LOG.info("early stopping: current DP epsilon has exceeded max epsilon")
                 # gather message for progress with checkpoint info
