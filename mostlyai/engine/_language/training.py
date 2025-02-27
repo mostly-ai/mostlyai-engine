@@ -581,15 +581,15 @@ def _train(
             # shuffling should not be set here, it is handled by .set_epoch(int(epoch)) below  (see DistributedSampler docs)
             # for validation, shall we use an entire val dataset on every node, so we don't need DistributedSampler?
             trn_sampler = DistributedSampler(tokenized_datasets["train"])
-            val_sampler = DistributedSampler(tokenized_datasets["validation"], shuffle=False) # ???
+            ## val_sampler = DistributedSampler(tokenized_datasets["validation"], shuffle=False) # ???
 
             _LOG.info(f"Total {trn_cnt=}, total {val_cnt=}")
 
             # TODO: This should be checked, if number of samples from trn_sampler should be used instead!?
             trn_cnt = trn_cnt // gpu_world_size
-            val_cnt = val_cnt // gpu_world_size # ???
+            ## val_cnt = val_cnt // gpu_world_size # ???
             trn_steps = max(1, trn_steps // gpu_world_size)
-            val_steps = max(1, val_steps // gpu_world_size) # ???
+            ## val_steps = max(1, val_steps // gpu_world_size) # ???
 
             # https://discuss.pytorch.org/t/how-to-choose-num-worker-when-using-ddp/140978
             # num_workers <= cpu_count / GPU_count if dataloader is CPU intensive,
@@ -609,7 +609,7 @@ def _train(
             val_dataloader = DataLoader(
                 tokenized_datasets["validation"],
                 shuffle=False,
-                sampler=val_sampler,
+                sampler=None, ## val_sampler?
                 batch_size=val_batch_size,
                 collate_fn=data_collator,
                 pin_memory=True,
@@ -801,21 +801,22 @@ def _train(
             do_validation = epoch.is_integer()
             if do_validation:
                 # calculate val loss
-                with forward_ctx_mgr:
-                    val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
-                dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
-                has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
-                # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
                 # TODO: multi-gpu
-                # save model weights for best model if there is only one device, or it is the master device
-                if not has_exceeded_dp_max_epsilon and (rank is None or rank == 0):
-                    is_checkpoint = model_checkpoint.save_checkpoint_if_best(
-                        val_loss=val_loss,
-                        model=model,
-                        optimizer=optimizer,
-                        lr_scheduler=lr_scheduler,
-                        dp_accountant=privacy_engine.accountant if with_dp else None,
-                    )
+                # calc val loss and save model weights for best model if there is only one device, or it is the master device
+                if rank is None or rank == 0:
+                    with forward_ctx_mgr:
+                        val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
+                    dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
+                    has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
+                    # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
+                    if not has_exceeded_dp_max_epsilon:
+                        is_checkpoint = model_checkpoint.save_checkpoint_if_best(
+                            val_loss=val_loss,
+                            model=model,
+                            optimizer=optimizer,
+                            lr_scheduler=lr_scheduler,
+                            dp_accountant=privacy_engine.accountant if with_dp else None,
+                        )
                 else:
                     _LOG.info("early stopping: current DP epsilon has exceeded max epsilon")
                 # gather message for progress with checkpoint info
