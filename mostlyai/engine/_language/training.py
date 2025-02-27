@@ -574,51 +574,63 @@ def _train(
 
         # TODO: multi-gpu
         # THIS PART REQUIRES MORE ATTENTION
-        if gpu_world_size is not None and gpu_world_size  > 1 and not with_dp:
+        if gpu_world_size is not None and gpu_world_size  > 1:
             # if it distributed training, we need to set up the samplers and data loaders accordingly
             # also we should adjust steps
             # also if it is with DP then the Opacus DP Data Loader will be used later in the code wrapping the vanilla trn_dataloader
             # shuffling should not be set here, it is handled by .set_epoch(int(epoch)) below  (see DistributedSampler docs)
+            # for validation, we use entire val dataset on every node, so we don't need DistributedSampler
             trn_sampler = DistributedSampler(tokenized_datasets["train"])
-            val_sampler = DistributedSampler(tokenized_datasets["validation"], shuffle=False)
 
             _LOG.info(f"Total {trn_cnt=}, total {val_cnt=}")
 
-            # TODO: This should be checked, if number of samples from trn_sampler and val_sampler should be used instead!?
+            # TODO: This should be checked, if number of samples from trn_sampler should be used instead!?
             trn_cnt = trn_cnt // gpu_world_size
-            val_cnt = val_cnt // gpu_world_size
             trn_steps = max(1, trn_steps // gpu_world_size)
-            val_steps = max(1, val_steps // gpu_world_size)
 
             # https://discuss.pytorch.org/t/how-to-choose-num-worker-when-using-ddp/140978
             # num_workers <= cpu_count / GPU_count if dataloader is CPU intensive,
             # if the dataloader is IO intensive, it might be larger and set to 2 * cpu_count / GPU_count
-            num_workers = mp.cpu_count() // gpu_world_size
+            # num_workers = mp.cpu_count() // gpu_world_size
+
+            trn_dataloader = DataLoader(
+                tokenized_datasets["train"],
+                shuffle=False,
+                sampler=None if with_dp else trn_sampler, # for DP, the sampler is set later in DPDataLoader from Opacus
+                # either DP logical batch size or grad accumulation physical batch size
+                batch_size=trn_batch_size if with_dp else batch_size,
+                collate_fn=data_collator,
+                pin_memory=True,
+                # num_workers=num_workers, # did not see any improvement
+            )
+            val_dataloader = DataLoader(
+                tokenized_datasets["validation"],
+                shuffle=False,
+                sampler=None,
+                batch_size=val_batch_size,
+                collate_fn=data_collator,
+                pin_memory=True,
+                # num_workers=num_workers, # did not see any improvement
+            )
+
+            # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
+            # Opacus DP Data Loader is used for distributed training with DP
+            if with_dp:
+                trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
         else:
-            trn_sampler = None
-            val_sampler = None
-            num_workers = 0
-
-
-        trn_dataloader = DataLoader(
-            tokenized_datasets["train"],
-            shuffle=(trn_sampler is None),
-            sampler=trn_sampler,
-            # either DP logical batch size or grad accumulation physical batch size
-            batch_size=trn_batch_size if with_dp else batch_size,
-            collate_fn=data_collator,
-            pin_memory=(device.type == "cuda"),
-            # num_workers=num_workers, # did not see any improvement
-        )
-        val_dataloader = DataLoader(
-            tokenized_datasets["validation"],
-            shuffle=False,
-            sampler=val_sampler,
-            batch_size=val_batch_size,
-            collate_fn=data_collator,
-            pin_memory=(device.type == "cuda"),
-            # num_workers=num_workers, # did not see any improvement
-        )
+            trn_dataloader = DataLoader(
+                tokenized_datasets["train"],
+                shuffle=True,
+                # either DP logical batch size or grad accumulation physical batch size
+                batch_size=trn_batch_size if with_dp else batch_size,
+                collate_fn=data_collator,
+            )
+            val_dataloader = DataLoader(
+                tokenized_datasets["validation"],
+                shuffle=False,
+                batch_size=val_batch_size,
+                collate_fn=data_collator,
+            )
 
         _LOG.info(f"{trn_cnt=}, {val_cnt=}")
         _LOG.info(f"{trn_batch_size=}, {val_batch_size=}")
@@ -683,11 +695,6 @@ def _train(
                 max_grad_norm=dp_config.get("max_grad_norm"),
                 poisson_sampling=True,
             )
-            # TODO: multi-gpu
-            # This part is not clear: how does it work with batch_sampler=BatchSplittingSampler from wrap_data_loader()?
-            if gpu_world_size is not None and gpu_world_size  > 1:
-                # Opacus DP Data Loader is used for distributed training with DP
-                trn_dataloader = DPDataLoader.from_data_loader(trn_dataloader, distributed=True)
             # this further wraps the dataloader with batch_sampler=BatchSplittingSampler to achieve gradient accumulation
             # it will split the sampled logical batches into smaller sub-batches with batch_size
             trn_dataloader = wrap_data_loader(
