@@ -579,16 +579,17 @@ def _train(
             # also we should adjust steps
             # also if it is with DP then the Opacus DP Data Loader will be used later in the code wrapping the vanilla trn_dataloader
             # shuffling should not be set here, it is handled by .set_epoch(int(epoch)) below  (see DistributedSampler docs)
-            # for validation, we use entire val dataset on every node, so we don't need DistributedSampler
+            # for validation, shall we use an entire val dataset on every node, so we don't need DistributedSampler?
             trn_sampler = DistributedSampler(tokenized_datasets["train"])
+            val_sampler = DistributedSampler(tokenized_datasets["validation"], shuffle=False) # ???
 
             _LOG.info(f"Total {trn_cnt=}, total {val_cnt=}")
 
             # TODO: This should be checked, if number of samples from trn_sampler should be used instead!?
             trn_cnt = trn_cnt // gpu_world_size
-            val_cnt = val_cnt // gpu_world_size
+            val_cnt = val_cnt // gpu_world_size # ???
             trn_steps = max(1, trn_steps // gpu_world_size)
-            val_steps = max(1, val_steps // gpu_world_size)
+            val_steps = max(1, val_steps // gpu_world_size) # ???
 
             # https://discuss.pytorch.org/t/how-to-choose-num-worker-when-using-ddp/140978
             # num_workers <= cpu_count / GPU_count if dataloader is CPU intensive,
@@ -608,7 +609,7 @@ def _train(
             val_dataloader = DataLoader(
                 tokenized_datasets["validation"],
                 shuffle=False,
-                sampler=DistributedSampler(tokenized_datasets["validation"], shuffle=False),
+                sampler=val_sampler,
                 batch_size=val_batch_size,
                 collate_fn=data_collator,
                 pin_memory=True,
