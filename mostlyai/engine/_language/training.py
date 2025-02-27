@@ -586,7 +586,9 @@ def _train(
 
             # TODO: This should be checked, if number of samples from trn_sampler should be used instead!?
             trn_cnt = trn_cnt // gpu_world_size
+            val_cnt = val_cnt // gpu_world_size
             trn_steps = max(1, trn_steps // gpu_world_size)
+            val_steps = max(1, val_steps // gpu_world_size)
 
             # https://discuss.pytorch.org/t/how-to-choose-num-worker-when-using-ddp/140978
             # num_workers <= cpu_count / GPU_count if dataloader is CPU intensive,
@@ -606,7 +608,7 @@ def _train(
             val_dataloader = DataLoader(
                 tokenized_datasets["validation"],
                 shuffle=False,
-                sampler=None,
+                sampler=DistributedSampler(tokenized_datasets["validation"], shuffle=False),
                 batch_size=val_batch_size,
                 collate_fn=data_collator,
                 pin_memory=True,
