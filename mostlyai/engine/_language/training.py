@@ -75,6 +75,7 @@ from mostlyai.engine._common import ddp_setup
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed import destroy_process_group, all_reduce
 from opacus.distributed import DifferentiallyPrivateDistributedDataParallel as DPDDP
 from opacus.data_loader import DPDataLoader
@@ -410,7 +411,7 @@ def _train(
         _LOG.info("create training model")
         model_checkpoint = LanguageModelCheckpoint(workspace=workspace)
         # TODO: multi-gpu
-        model: PreTrainedModel | PeftModel | DPDDP | DDP
+        model: PreTrainedModel | PeftModel | DPDDP | DDP | FSDP
 
         # check how to handle existing model weights
         if isinstance(model_state_strategy, str):
@@ -511,7 +512,8 @@ def _train(
             if with_dp:
                 model = DPDDP(model)
             else:
-                model = DDP(model)
+                model = FSDP(model)
+#                model = DDP(model)
 
         model.train()
         # TODO: multi-gpu
