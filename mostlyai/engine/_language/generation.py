@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import contextlib
+import importlib
 import json
 import os
+import platform
 
 import json_repair
 import logging
@@ -243,7 +245,9 @@ def generate(
         os.environ["HF_TOKEN"] = os.getenv("MOSTLY_HUGGING_FACE_TOKEN") or os.getenv("HF_TOKEN", "")
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
-        if is_peft_adapter and device.type == "cuda":
+        if is_peft_adapter and (
+            device.type == "cuda" or (platform.system() == "Darwin" and importlib.util.find_spec("vllm") is not None)
+        ):
             from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
 
             engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
