@@ -59,6 +59,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
+    get_device,
 )
 from mostlyai.engine._tabular.common import load_model_weights
 from mostlyai.engine._training_utils import (
@@ -361,11 +362,7 @@ def train(
     ) as progress:
         _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
         _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
-        device = (
-            torch.device(device)
-            if device is not None
-            else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        )
+        device = get_device(device)
         _LOG.info(f"{device=}")
         torch.set_default_dtype(torch.float32)
 

@@ -67,6 +67,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
+    get_device,
 )
 from mostlyai.engine._tabular.encoding import encode_df, pad_horizontally
 from mostlyai.engine._encoding_types.tabular.categorical import (
@@ -724,11 +725,7 @@ def generate(
         _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve device
-        device = (
-            torch.device(device)
-            if device is not None
-            else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        )
+        device = get_device(device)
         _LOG.info(f"{device=}")
 
         tgt_primary_key = tgt_stats.get("keys", {}).get("primary_key")

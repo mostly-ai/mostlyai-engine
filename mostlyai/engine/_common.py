@@ -31,6 +31,7 @@ from collections.abc import Callable, Iterable
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
+import torch
 
 
 from mostlyai.engine._dtypes import is_boolean_dtype, is_float_dtype, is_integer_dtype
@@ -610,3 +611,26 @@ class FixedSizeSampleBuffer:
         self.buffer = []
         self.current_size = 0
         self.n_clears += 1
+
+
+def get_device(device: torch.device | str | None = None) -> torch.device:
+    """
+    Get the appropriate torch device with fallback chain: CUDA -> MPS -> CPU.
+
+    Args:
+        device: Optional device specification. If provided, this device will be used.
+                If None, the best available device will be selected.
+
+    Returns:
+        torch.device: The selected device
+    """
+    if device is not None:
+        return torch.device(device)
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+
+    return torch.device("cpu")
