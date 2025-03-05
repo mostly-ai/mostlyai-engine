@@ -70,7 +70,8 @@ def load_base_model_and_config(
             # (see https://opacus.ai/api/dp_rnn.html#opacus.layers.dp_rnn.DPLSTM for more details)
             if not is_training:
                 config.with_dp = False
-            return AutoModelForCausalLM.from_pretrained(model_id_or_path, config=config, device_map=device), config
+                # FIXME: fsdp
+            return AutoModelForCausalLM.from_pretrained(model_id_or_path, config=config, device_map="auto"), config
 
     # Load pretrained base model
     use_cache = not is_training  # KV cache is not needed during training
@@ -96,7 +97,8 @@ def load_base_model_and_config(
         torch_dtype=torch_dtype,
         attn_implementation=attn_implementation,
         use_cache=use_cache,
-        device_map=device,
+        # FIXME: fsdp
+        device_map="auto",
         quantization_config=quantization_config,
     )
     if quantization_config:

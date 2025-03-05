@@ -70,6 +70,10 @@ from transformers import (
 from mostlyai.engine._language.lstm import LSTMFromScratchLMHeadModel, LSTMFromScratchConfig
 from peft import LoraConfig, PeftModel
 
+# FIXME: fsdp
+from accelerate import FullyShardedDataParallelPlugin, Accelerator
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -213,17 +217,28 @@ def train(
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
 
+    # FIXME: fsdp
+    # Initialize FSDP with configurations for state dictionary and optimizer state handling
+    fsdp_plugin = FullyShardedDataParallelPlugin(
+        state_dict_config=FullStateDictConfig(offload_to_cpu=True, rank0_only=False),
+        optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=False),
+    )
+    # Setup the Accelerator with the FSDP plugin
+    accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
+
     with ProgressCallbackWrapper(
         update_progress, progress_messages_path=workspace.model_progress_messages_path
     ) as progress:
         _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
         _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
         _LOG.info(f"transformers={version('transformers')}, peft={version('peft')}")
-        device = (
-            torch.device(device)
-            if device is not None
-            else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        )
+        # device = (
+        #     torch.device(device)
+        #     if device is not None
+        #     else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+        # )
+        # FIXME: fsdp
+        device = accelerator.device
         _LOG.info(f"{device=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
@@ -392,6 +407,14 @@ def train(
                     task_type="CAUSAL_LM",
                 )
                 model.add_adapter(peft_config)
+        # FIXME: fsdp
+        # Prepare model for distributed training with Accelerator
+        model = accelerator.prepare_model(model)
+        # FIXME: fsdp
+        # Enable model parallelism if multiple GPUs are available
+        if torch.cuda.device_count() > 1:
+            model.is_parallelizable = True
+            model.model_parallel = True
 
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
         model.train()
@@ -571,7 +594,9 @@ def train(
                     # FIXME approximation, should be divided by total sum of number of tokens in the batch
                     #  as in _calculate_per_label_losses, also the final sample may be smaller than the batch size.
                     step_loss = outputs.loss / (1 if with_dp else gradient_accumulation_steps)
-                    step_loss.backward()
+                    # FIXME: fsdp
+                    accelerator.backward(step_loss)
+                    # step_loss.backward()
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on
                 samples += step_data["input_ids"].shape[0]
