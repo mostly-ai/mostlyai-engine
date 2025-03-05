@@ -407,14 +407,6 @@ def train(
                     task_type="CAUSAL_LM",
                 )
                 model.add_adapter(peft_config)
-        # FIXME: fsdp
-        # Prepare model for distributed training with Accelerator
-        model = accelerator.prepare_model(model)
-        # FIXME: fsdp
-        # Enable model parallelism if multiple GPUs are available
-        if torch.cuda.device_count() > 1:
-            model.is_parallelizable = True
-            model.model_parallel = True
 
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
         model.train()
@@ -552,6 +544,17 @@ def train(
         else:
             privacy_engine = None
             dp_config, dp_delta, dp_accountant = None, None, None
+
+        # FIXME: fsdp
+        # Prepare model for distributed training with Accelerator
+        model, optimizer, trn_dataloader = accelerator.prepare(
+            model, optimizer, trn_dataloader
+        )
+        # FIXME: fsdp
+        # Enable model parallelism if multiple GPUs are available
+        if torch.cuda.device_count() > 1:
+            model.is_parallelizable = True
+            model.model_parallel = True
 
         progress_message = None
         start_trn_time = time.time()
