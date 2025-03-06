@@ -112,6 +112,8 @@ class VLLMEngine(LanguageEngine):
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
             swap_space=0,
             disable_log_stats=True,
+            # FIXME: multi-gpu for large models on a single node if needed
+            tensor_parallel_size = torch.cuda.device_count() if self.device.type == "cuda" else 1,
         )
         self._base_logits_processors = [MaskInvalidIndicesLogitsProcessor(self.llm.get_tokenizer())]
         self.tokenizer = AutoTokenizer.from_pretrained(
