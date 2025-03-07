@@ -25,7 +25,6 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from huggingface_hub import constants as hf_constants
 from transformers import (
     PreTrainedTokenizerBase,
 )
@@ -238,11 +237,9 @@ def generate(
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()
-        hf_constants.HF_HUB_OFFLINE = (
-            False  # needed for gated hf models that are not sharded, otherwise GatedRepoError in vLLM
-        )
-        # set the default env var so that we don't pass it explicitly to vLLM
-        os.environ["HF_TOKEN"] = os.getenv("MOSTLY_HUGGING_FACE_TOKEN") or os.getenv("HF_TOKEN", "")
+        # use MOSTLY_HUGGING_FACE_TOKEN if available, otherwise HF_TOKEN should be unset or with a pre-set value as is
+        if os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
+            os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
         if is_peft_adapter and (
