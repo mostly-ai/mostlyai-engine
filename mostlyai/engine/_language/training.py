@@ -460,8 +460,10 @@ def train(
                         raise RuntimeError("Could not find a batch size that fits in GPU memory")
                 finally:
                     model.zero_grad(set_to_none=True)
-                    del loss
-                    del outputs
+                    if "loss" in locals():
+                        del loss
+                    if "outputs" in locals():
+                        del outputs
                     del test_batch
                     gc.collect()
                     torch.cuda.empty_cache()
