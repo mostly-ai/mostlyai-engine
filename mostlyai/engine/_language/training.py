@@ -198,18 +198,6 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
 def _gpu_estimate_max_batch_size(
     model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens_estimate: int, initial_batch_size: int
 ) -> int:
-    """
-    Estimate maximum batch size that fits in GPU memory during training.
-
-    Args:
-        model: The model to test
-        device: The device to test on
-        max_tokens_estimate: Estimated maximum number of tokens in a sequence
-        initial_batch_size: Initial batch size to try
-
-    Returns:
-        Maximum batch size that fits in GPU memory
-    """
     batch_size = 2 ** int(np.log2(initial_batch_size))
     temp_optimizer = torch.optim.AdamW(params=model.parameters())
 
