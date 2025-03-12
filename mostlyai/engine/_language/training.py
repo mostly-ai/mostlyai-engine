@@ -255,11 +255,7 @@ def _gpu_estimate_max_batch_size(
     if batch_size > 1 and torch.cuda.get_device_properties(device).total_memory - mem_reserved < 2_000_000_000:
         batch_size //= 2
 
-    del outputs
-    del loss
     model.zero_grad(set_to_none=True)
-    del temp_optimizer
-    del mem_reserved
     return batch_size
 
 
