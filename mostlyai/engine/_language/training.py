@@ -195,40 +195,40 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     return val_loss_avg.item()
 
 
-def _gpu_estimate_max_batch_size(model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens_estimate: int, initial_batch_size: int) -> int:
+def _gpu_estimate_max_batch_size(
+    model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens_estimate: int, initial_batch_size: int
+) -> int:
     """
     Estimate maximum batch size that fits in GPU memory during training.
-    
+
     Args:
         model: The model to test
         device: The device to test on
         max_tokens_estimate: Estimated maximum number of tokens in a sequence
         initial_batch_size: Initial batch size to try
-        
+
     Returns:
         Maximum batch size that fits in GPU memory
     """
     batch_size = 2 ** int(np.log2(initial_batch_size))
     temp_optimizer = torch.optim.AdamW(params=model.parameters())
-    
+
     # create test batch of zeros with estimated max sequence length
     def create_test_batch(batch_size: int):
         return {
             "input_ids": torch.zeros((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
             "labels": torch.zeros((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
-            "attention_mask": torch.ones(
-                (batch_size, max_tokens_estimate), dtype=torch.long, device=device
-            ),
+            "attention_mask": torch.ones((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
         }
-        
+
     outputs = model(**create_test_batch(1))
     loss = outputs.loss
     loss.backward()
-    
+
     # initialise optimizer state before forward+backward pass to reach peak memory
     temp_optimizer.zero_grad()  # ensure no change to model and gradients initialised
     temp_optimizer.step()  # initialise optimizer state
-    
+
     batch_size_found = False
     while batch_size >= 1:
         try:
@@ -243,18 +243,18 @@ def _gpu_estimate_max_batch_size(model: PreTrainedModel | GradSampleModule, devi
             if batch_size < 1:
                 raise RuntimeError("Could not find a batch size that fits in GPU memory")
             # clean up memory after each attempt
-            if 'outputs' in locals():
+            if "outputs" in locals():
                 del outputs
-            if 'loss' in locals():
+            if "loss" in locals():
                 del loss
             gc.collect()
             torch.cuda.empty_cache()
         if batch_size_found:
             break
-            
+
     if batch_size > 1 and torch.cuda.get_device_properties(device).total_memory - mem_reserved < 2_000_000_000:
         batch_size //= 2
-        
+
     del outputs
     del loss
     model.zero_grad(set_to_none=True)
@@ -510,10 +510,7 @@ def train(
         # find largest batch size that fits in GPU memory during training
         if device.type == "cuda":
             batch_size = _gpu_estimate_max_batch_size(
-                model=model,
-                device=device, 
-                max_tokens_estimate=max_tokens_estimate,
-                initial_batch_size=batch_size
+                model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
             )
             gc.collect()
             torch.cuda.empty_cache()
