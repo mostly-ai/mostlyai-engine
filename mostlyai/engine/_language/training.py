@@ -199,7 +199,7 @@ def _gpu_estimate_max_batch_size(
     model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens_estimate: int, initial_batch_size: int
 ) -> int:
     batch_size = 2 ** int(np.log2(initial_batch_size))
-    temp_optimizer = torch.optim.AdamW(params=model.parameters())
+    optimizer = torch.optim.AdamW(params=model.parameters())
 
     # create test batch of zeros with estimated max sequence length
     def create_test_batch(batch_size: int):
@@ -214,8 +214,8 @@ def _gpu_estimate_max_batch_size(
     loss.backward()
 
     # initialise optimizer state before forward+backward pass to reach peak memory
-    temp_optimizer.zero_grad()  # ensure no change to model and gradients initialised
-    temp_optimizer.step()  # initialise optimizer state
+    optimizer.zero_grad()  # ensure no change to model and gradients initialised
+    optimizer.step()  # initialise optimizer state
 
     batch_size_found = False
     while batch_size >= 1:
