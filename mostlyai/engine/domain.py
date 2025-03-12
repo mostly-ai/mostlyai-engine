@@ -37,7 +37,8 @@ class ModelEncodingType(str, Enum):
     """
     The encoding type used for model training and data generation.
 
-    - `AUTO`: Model chooses among available encoding types based on the column's data type.
+    - `AUTO`: Automatically select among all encoding types based on the column's data.
+    - `TABULAR_AUTO`: Automatically select among all TABULAR encoding types based on the column's data.
     - `TABULAR_CATEGORICAL`: Model samples from existing (non-rare) categories.
     - `TABULAR_NUMERIC_AUTO`: Model chooses among 3 numeric encoding types based on the values.
     - `TABULAR_NUMERIC_DISCRETE`: Model samples from existing discrete numerical values.
@@ -47,6 +48,7 @@ class ModelEncodingType(str, Enum):
     - `TABULAR_DATETIME`: Model samples each part of a datetime value.
     - `TABULAR_DATETIME_RELATIVE`: Model samples the relative difference between datetimes within a sequence.
     - `TABULAR_LAT_LONG`: Model samples a latitude-longitude column. The format is "latitude,longitude".
+    - `LANGUAGE_AUTO`: Automatically select among all LANGUAGE encoding types based on the column's data.
     - `LANGUAGE_TEXT`: Model will sample free text, using a LANGUAGE model.
     - `LANGUAGE_CATEGORICAL`: Model samples from existing (non-rare) categories, using a LANGUAGE model.
     - `LANGUAGE_NUMERIC`: Model samples from the valid numeric value range, using a LANGUAGE model.
@@ -54,6 +56,7 @@ class ModelEncodingType(str, Enum):
     """
 
     auto = "AUTO"
+    tabular_auto = "TABULAR_AUTO"
     tabular_categorical = "TABULAR_CATEGORICAL"
     tabular_numeric_auto = "TABULAR_NUMERIC_AUTO"
     tabular_numeric_discrete = "TABULAR_NUMERIC_DISCRETE"
@@ -63,6 +66,7 @@ class ModelEncodingType(str, Enum):
     tabular_datetime = "TABULAR_DATETIME"
     tabular_datetime_relative = "TABULAR_DATETIME_RELATIVE"
     tabular_lat_long = "TABULAR_LAT_LONG"
+    language_auto = "LANGUAGE_AUTO"
     language_text = "LANGUAGE_TEXT"
     language_categorical = "LANGUAGE_CATEGORICAL"
     language_numeric = "LANGUAGE_NUMERIC"
