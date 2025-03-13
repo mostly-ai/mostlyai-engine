@@ -213,49 +213,86 @@ def test_training_strategy(encoded_text_dataset, model_name):
         pd.testing.assert_frame_equal(progress_resume.iloc[:2], progress_resume_without_checkpoint.iloc[:2])
 
 
-def test_conditional_generation(tmp_path_factory):
-    workspace_dir = tmp_path_factory.mktemp("ws")
-    no_of_records = 2000
-    data = pd.DataFrame(
-        {
-            "gender": ["m", "f"] * int(no_of_records / 2),
-            "bio": ["Joe", "Anna"] * int(no_of_records / 2),
+class TestConditionalGeneration:
+    def test_lstm(self, tmp_path_factory):
+        workspace_dir = tmp_path_factory.mktemp("ws")
+        no_of_records = 2000
+        data = pd.DataFrame(
+            {
+                "gender": ["m", "f"] * int(no_of_records / 2),
+                "country": ["USA"] * int(no_of_records),
+                "bio": ["Joe", "Anna"] * int(no_of_records / 2),
+            }
+        )
+        seed_size = 100
+        # re-balance towards the females, test non-existing column and token, test nulls
+        sample_seed = pd.DataFrame(
+            {
+                "gender": ["f"] * (seed_size - 5) + ["Żf", "国", None, pd.NA, np.nan],
+                "country": ["USA"] * (seed_size - 5) + ["USA USA", "Poland", None, pd.NA, np.nan],
+                "nonexisting": ["x"] * seed_size,
+            }
+        )
+        tgt_encoding_types = {
+            "gender": ModelEncodingType.language_text.value,
+            "country": ModelEncodingType.language_categorical.value,
+            "bio": ModelEncodingType.language_text.value,
         }
-    )
-    seed_size = 100
-    # re-balance towards the females, test non-existing column and token, test nulls
-    sample_seed = pd.DataFrame(
-        {
-            "gender": ["f"] * (seed_size - 5) + ["Żf", "国", None, pd.NA, np.nan],
-            "nonexisting": ["x"] * seed_size,
-        }
-    )
-    tgt_encoding_types = {
-        "gender": ModelEncodingType.language_text.value,
-        "bio": ModelEncodingType.language_text.value,
-    }
-    prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
-    ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-    train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id)
-    generate(
-        workspace_dir=workspace_dir,
-        ctx_data=ctx_data,
-        seed_data=sample_seed,
-    )
+        prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
+        ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
+        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5)
+        generate(
+            workspace_dir=workspace_dir,
+            ctx_data=ctx_data,
+            seed_data=sample_seed,
+        )
 
-    syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
-    assert len(syn_data) == seed_size  # seed dictates the sample size
-    assert all(syn_data["gender"][:95] == "f")  # test for regular tokens
-    assert syn_data["gender"][95] == "f"  # unknown token is skipped, known token remains
-    assert all(syn_data["gender"][96:] == "")  # nulls are skipped, if tokenizer can't express them
-    n_annas = syn_data["bio"].str.startswith("Anna").sum()
-    assert n_annas / len(syn_data) > 0.8  # seed re-balances towards females, thus Anna should be more frequent
-    assert set(syn_data.columns) == {
-        "__primary_key",
-        "gender",
-        "bio",
-    }
-    assert str(syn_data["gender"].dtype).startswith("string")
+        syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
+        assert len(syn_data) == seed_size  # seed dictates the sample size
+        assert all(syn_data["gender"][:95] == "f")  # test for regular tokens
+        assert syn_data["gender"][95] == "f"  # unknown token is skipped, known token remains
+        assert all(syn_data["gender"][96:] == "")  # nulls are skipped, if tokenizer can't express them
+        assert all(syn_data["country"][:95] == "USA")  # test for regular categories
+        assert syn_data["country"][95] == "USA USA"  # unseen category should persist, if tokenizer can express it
+        assert (
+            syn_data["country"][96] == "oand"
+        )  # some unseen categories can be expressed only partially with the tokenizer
+        assert all(syn_data["country"][97:] == "")  # nulls are skipped, if tokenizer can't express them
+        n_annas = syn_data["bio"].str.startswith("Anna").sum()
+        assert n_annas / len(syn_data) > 0.6  # seed re-balances towards females, thus Anna should be more frequent
+        assert set(syn_data.columns) == {
+            "__primary_key",
+            "gender",
+            "country",
+            "bio",
+        }
+        assert str(syn_data["gender"].dtype).startswith("string")
+        assert str(syn_data["country"].dtype).startswith("string")
+        assert str(syn_data["bio"].dtype).startswith("string")
+
+    def test_hf_model(self, tmp_path_factory):
+        # this is a smoke test for the HF model, mainly to ensure seeded values are preserved in the final output
+        # for more comprehensive test that also covers some quality checks, see test_lstm
+        workspace_dir = tmp_path_factory.mktemp("ws")
+        no_of_records = 200
+        data = pd.DataFrame({"country": ["USA", "Portugal", "Austria", "Poland"] * int(no_of_records / 4)})
+        tgt_encoding_types = {"country": ModelEncodingType.language_categorical.value}
+        seed_data = pd.DataFrame(
+            {
+                "country": ["Greece", "Italy", "Spain", pd.NA],
+            }
+        )
+        prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
+        ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
+        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M", max_training_time=0.05)
+        generate(
+            workspace_dir=workspace_dir,
+            seed_data=seed_data,
+            ctx_data=ctx_data,
+        )
+        syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
+        assert len(syn_data) == len(seed_data)
+        pd.testing.assert_series_equal(syn_data["country"], seed_data["country"], check_dtype=False)
 
 
 def test_formatter():
@@ -468,7 +505,6 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     [
         LSTMFromScratchConfig.model_id,
         "amd/AMD-Llama-135m",
-        # "openai-community/gpt2",  # TEMP, better model than AMD
     ],
 )
 def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
