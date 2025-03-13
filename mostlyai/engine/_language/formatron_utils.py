@@ -65,8 +65,8 @@ def get_formatter_builders(
     categorical_fields = field_types.get(ModelEncodingType.language_categorical, [])
     numeric_fields = field_types.get(ModelEncodingType.language_numeric, [])
     datetime_fields = field_types.get(ModelEncodingType.language_datetime, [])
+    reuse_first_formatter_builder = False
     for _, seed_row in seed_df.iterrows():
-        formatter_builder = FormatterBuilder()
         model_dict = {}
         if not seed_row.empty:
             model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore[valid-type]
@@ -97,8 +97,15 @@ def get_formatter_builders(
             else:
                 model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict, __base__=MostlyClassSchema)
+        formatter_builder = FormatterBuilder()
         formatter_builder.append_str(f"{formatter_builder.json(schema, capture_name=None)}")
         formatter_builders.append(formatter_builder)
+        if seed_row.empty:
+            # formatter builders are the same for all rows, if none of the columns are seeded
+            reuse_first_formatter_builder = True
+            break
+    if reuse_first_formatter_builder:
+        formatter_builders = formatter_builders * len(seed_df)
     return formatter_builders
 
 
