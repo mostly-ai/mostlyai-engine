@@ -55,8 +55,9 @@ def estimate_max_tokens(tgt_stats: dict[str, Any]) -> int:
 
 
 def load_base_model_and_config(
-    model_id_or_path: str | Path, device: torch.device, is_peft_adapter: bool, is_training: bool
+    model_id_or_path: str | Path, device: torch.device, is_peft_adapter: bool, is_training: bool, with_dp: bool = False
 ) -> tuple[PreTrainedModel, PretrainedConfig]:
+    # opacus DP does not support parallel/sharded training
     model_id_or_path = str(model_id_or_path)
     if is_peft_adapter:
         # get the base model name from adapter_config.json
@@ -91,12 +92,13 @@ def load_base_model_and_config(
         )
     else:
         quantization_config = None
+    device_map = "cuda:0" if device.type == "cuda" and with_dp else "auto"
     model = AutoModelForCausalLM.from_pretrained(
         model_id_or_path,
         torch_dtype=torch_dtype,
         attn_implementation=attn_implementation,
         use_cache=use_cache,
-        device_map=device,
+        device_map=device_map,
         quantization_config=quantization_config,
     )
     if quantization_config:

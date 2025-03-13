@@ -69,6 +69,8 @@ from transformers import (
 )
 from mostlyai.engine._language.lstm import LSTMFromScratchLMHeadModel, LSTMFromScratchConfig
 from peft import LoraConfig, PeftModel
+from accelerate import FullyShardedDataParallelPlugin, Accelerator
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
 
 _LOG = logging.getLogger(__name__)
 
@@ -218,12 +220,23 @@ def train(
     ) as progress:
         _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
         _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
-        _LOG.info(f"transformers={version('transformers')}, peft={version('peft')}")
+        _LOG.info(f"transformers={version('transformers')}, accelerate={version('accelerate')}, peft={version('peft')}")
+        with_dp = differential_privacy is not None
         device = (
             torch.device(device)
             if device is not None
             else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
         )
+        if not with_dp:
+            if device.type == "cuda":
+                fsdp_plugin = FullyShardedDataParallelPlugin(
+                    state_dict_config=FullStateDictConfig(offload_to_cpu=True, rank0_only=False),
+                    optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=False),
+                )
+            else:
+                fsdp_plugin = None
+            accelerator = Accelerator(fsdp_plugin=fsdp_plugin, cpu=device.type == "cpu")
+            device = accelerator.device
         _LOG.info(f"{device=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
@@ -247,7 +260,7 @@ def train(
             max_epochs = max_epochs_cap
         else:
             _LOG.info(f"{max_epochs=}")
-        with_dp = differential_privacy is not None
+
         _LOG.info(f"{with_dp=}")
         _LOG.info(f"{model_state_strategy=}")
 
@@ -342,7 +355,7 @@ def train(
             if resume_from_last_checkpoint:
                 tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
                 model, _ = load_base_model_and_config(
-                    model_id_or_path, device=device, is_peft_adapter=False, is_training=True
+                    model_id_or_path, device=device, is_peft_adapter=False, is_training=True, with_dp=with_dp
                 )
             else:
                 # fresh initialization of the custom tokenizer and LSTM model
@@ -360,6 +373,7 @@ def train(
                 device=device,
                 is_peft_adapter=resume_from_last_checkpoint,
                 is_training=True,
+                with_dp=with_dp,
             )
             tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
             if tokenizer.eos_token is None:
@@ -473,6 +487,9 @@ def train(
             min_lr=0.1 * initial_lr,
             # threshold=0,  # if we prefer to completely mimic the behavior of previous implementation
         )
+        if not with_dp:
+            model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
+
         if (
             model_state_strategy == ModelStateStrategy.resume
             and model_checkpoint.optimizer_and_lr_scheduler_paths_exist()
@@ -529,6 +546,7 @@ def train(
         else:
             privacy_engine = None
             dp_config, dp_delta, dp_accountant = None, None, None
+            trn_dataloader = accelerator.prepare(trn_dataloader)
 
         progress_message = None
         start_trn_time = time.time()
@@ -570,8 +588,12 @@ def train(
                         outputs = model(**step_data)
                     # FIXME approximation, should be divided by total sum of number of tokens in the batch
                     #  as in _calculate_per_label_losses, also the final sample may be smaller than the batch size.
-                    step_loss = outputs.loss / (1 if with_dp else gradient_accumulation_steps)
-                    step_loss.backward()
+                    if with_dp:
+                        step_loss = outputs.loss
+                        step_loss.backward()
+                    else:
+                        step_loss = outputs.loss / gradient_accumulation_steps
+                        accelerator.backward(step_loss)
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on
                 samples += step_data["input_ids"].shape[0]
@@ -589,9 +611,6 @@ def train(
             current_lr = optimizer.param_groups[0][
                 "lr"
             ]  # currently assume that we have the same lr for all param groups
-            # only the scheduling for ReduceLROnPlateau is postponed until the metric becomes available
-            if not isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                lr_scheduler.step()
 
             # do validation
             do_validation = epoch.is_integer()
@@ -627,9 +646,8 @@ def train(
                 )
                 # check for early stopping
                 do_stop = early_stopper(val_loss=val_loss) or has_exceeded_dp_max_epsilon
-                # scheduling for ReduceLROnPlateau
-                if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    lr_scheduler.step(metrics=val_loss)
+                # scheduling for ReduceLROnPlateau is postponed until the metric becomes available
+                lr_scheduler.step(metrics=val_loss)
 
             # log progress, either by time or by steps, whatever is shorter
             elapsed_training_time = time.time() - start_trn_time
@@ -687,7 +705,7 @@ def train(
         if not model_checkpoint.has_saved_once():
             _LOG.info("saving model weights, as none were saved so far")
             model_checkpoint.save_checkpoint(
-                model=model,
+                model=model if with_dp else accelerator.unwrap_model(model),
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
                 dp_accountant=privacy_engine.accountant if with_dp else None,
