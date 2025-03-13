@@ -102,15 +102,10 @@ def decode_buffered_samples(
     tgt_data = tgt_data.map(
         lambda x: x.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace") if not pd.isna(x) else x
     )
-    # overwrite generated columns with the seeded values
-    tgt_data.update(tgt_seed)
 
     # prepend the context keys to the data (if not dummy context)
     if ctx_keys.name != DUMMY_CONTEXT_KEY:
         tgt_data = pd.concat([ctx_keys, tgt_data], axis=1)
-    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
-        "{:.2f}%".format
-    )
 
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
@@ -123,6 +118,12 @@ def decode_buffered_samples(
         else:
             tgt_data[col] = decode_text(tgt_data[col], col_stats)
 
+    # overwrite generated columns with the seeded values
+    tgt_data.update(tgt_seed)
+
+    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
+        "{:.2f}%".format
+    )
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")
     return tgt_data
