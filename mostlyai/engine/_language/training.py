@@ -484,6 +484,7 @@ def train(
                 batch_size = 2**8  # 256, max 8 reductions
             if gradient_accumulation_steps is None:
                 gradient_accumulation_steps = 1
+        _LOG.info(f"{batch_size=}, {gradient_accumulation_steps=}")
 
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
@@ -495,6 +496,7 @@ def train(
             gc.collect()
             torch.cuda.empty_cache()
         gradient_accumulation_steps = max(1, min(gradient_accumulation_steps, trn_cnt // batch_size))
+        _LOG.info(f"{batch_size=}, {gradient_accumulation_steps=}")
         trn_batch_size = batch_size * gradient_accumulation_steps
         trn_steps = max(1, trn_cnt // trn_batch_size)
         val_batch_size = max(1, min(batch_size, val_cnt))
