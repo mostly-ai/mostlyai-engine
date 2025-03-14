@@ -285,7 +285,7 @@ class TestConditionalGeneration:
         )
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M", max_training_time=0.05)
+        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M")
         generate(
             workspace_dir=workspace_dir,
             seed_data=seed_data,
