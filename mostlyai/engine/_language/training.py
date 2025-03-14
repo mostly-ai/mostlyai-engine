@@ -489,12 +489,12 @@ def train(
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
         # find largest batch size that fits in GPU memory during training
-        if device.type == "cuda":
-            batch_size = _gpu_estimate_max_batch_size(
-                model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
-            )
-            gc.collect()
-            torch.cuda.empty_cache()
+        # if device.type == "cuda":
+        #     batch_size = _gpu_estimate_max_batch_size(
+        #         model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
+        #     )
+        #     gc.collect()
+        #     torch.cuda.empty_cache()
         gradient_accumulation_steps = max(1, min(gradient_accumulation_steps, trn_cnt // batch_size))
         trn_batch_size = batch_size * gradient_accumulation_steps
         trn_steps = max(1, trn_cnt // trn_batch_size)
