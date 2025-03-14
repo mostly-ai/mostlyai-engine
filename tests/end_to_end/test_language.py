@@ -30,7 +30,7 @@ from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
-from mostlyai.engine._language.training import train
+from mostlyai.engine._language.training import train, _gpu_estimate_max_batch_size
 from mostlyai.engine.domain import (
     ModelEncodingType,
     ModelStateStrategy,
@@ -550,3 +550,20 @@ def test_number_metadata():
 
     with pytest.raises(NotImplementedError, match="gt and lt are not supported for number metadata"):
         _number_metadata(number_type, "test_number")
+
+
+def test_gpu_estimate_max_batch_size():
+    import torch
+    if not torch.cuda.is_available():
+        pytest.skip("Skipping gpu only test")
+    from transformers import AutoModelForCausalLM
+    
+    model = AutoModelForCausalLM.from_pretrained("amd/AMD-Llama-135m")
+    model.to("cuda")
+    initial_params = {name: param.clone().detach() for name, param in model.named_parameters()}
+    max_batch_size = _gpu_estimate_max_batch_size(model, "cuda", 1024, 16)  # on an A10G, will return 8
+    
+    # verify parameters unchanged
+    for name, param in model.named_parameters():
+        assert torch.equal(param, initial_params[name])
+        assert param.grad is None

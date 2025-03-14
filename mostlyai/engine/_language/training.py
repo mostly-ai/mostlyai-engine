@@ -216,34 +216,31 @@ def _gpu_estimate_max_batch_size(
     # initialise optimizer state before forward+backward pass to reach peak memory
     optimizer.zero_grad()  # ensure no change to model and gradients initialised
     optimizer.step()  # initialise optimizer state
-
     batch_size_found = False
+
+    # essential to be in function, otherwise part of memory is not released
+    def forward_and_backward_pass(batch_size: int):
+        outputs = model(**create_test_batch(batch_size))
+        loss = outputs.loss
+        loss.backward()
+    
     while batch_size >= 1:
         try:
-            # forward and backward pass but don't apply gradient
-            outputs = model(**create_test_batch(batch_size))
-            loss = outputs.loss
-            loss.backward()
             mem_reserved = torch.cuda.memory_reserved()
+            forward_and_backward_pass(batch_size)
             batch_size_found = True
-        except torch.cuda.OutOfMemoryError:
+        except torch.cuda.OutOfMemoryError as e:
             batch_size //= 2
             if batch_size < 1:
                 raise RuntimeError("Could not find a batch size that fits in GPU memory")
-            # clean up memory after each attempt
-            if "outputs" in locals():
-                del outputs
-            if "loss" in locals():
-                del loss
-            gc.collect()
-            torch.cuda.empty_cache()
+        # clean up memory and gradients after each attempt
+        model.zero_grad(set_to_none=True)
+        gc.collect()
+        torch.cuda.empty_cache()
         if batch_size_found:
             break
-
     if batch_size > 1 and torch.cuda.get_device_properties(device).total_memory - mem_reserved < 2_000_000_000:
         batch_size //= 2
-
-    model.zero_grad(set_to_none=True)
     return batch_size
 
 
