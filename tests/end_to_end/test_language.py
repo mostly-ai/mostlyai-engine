@@ -18,7 +18,8 @@ from itertools import chain
 import pandas as pd
 import pytest
 import numpy as np
-from transformers import AutoTokenizer
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from mostlyai.engine import split
 from mostlyai.engine._workspace import Workspace
@@ -553,10 +554,8 @@ def test_number_metadata():
 
 
 def test_gpu_estimate_max_batch_size():
-    import torch
     if not torch.cuda.is_available():
         pytest.skip("Skipping gpu only test")
-    from transformers import AutoModelForCausalLM
     
     model = AutoModelForCausalLM.from_pretrained("amd/AMD-Llama-135m")
     model.to("cuda")
