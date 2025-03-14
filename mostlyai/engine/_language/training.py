@@ -15,7 +15,6 @@
 import json
 import logging
 import math
-import os
 import time
 import gc
 from contextlib import nullcontext
@@ -259,8 +258,8 @@ def train(
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ):
-    if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    # if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+    #     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     _LOG.info("TRAIN_LANGUAGE started")
     t0_ = time.time()
     workspace_dir = ensure_workspace_dir(workspace_dir)
