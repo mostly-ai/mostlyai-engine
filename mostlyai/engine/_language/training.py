@@ -471,36 +471,29 @@ def train(
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
         max_tokens_estimate = estimate_max_tokens(tgt_stats)
-        default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-            no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
-        )
-        if batch_size is None:
-            batch_size = default_batch_size
-        if gradient_accumulation_steps is None:
-            gradient_accumulation_steps = default_gradient_accumulation_steps
-        # if device.type != "cuda":
-        #     default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-        #         no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
-        #     )
-        #     if batch_size is None:
-        #         batch_size = default_batch_size
-        #     if gradient_accumulation_steps is None:
-        #         gradient_accumulation_steps = default_gradient_accumulation_steps
-        # else:
-        #     if batch_size is None:
-        #         batch_size = 2**8  # 256, max 8 reductions
-        #     if gradient_accumulation_steps is None:
-        #         gradient_accumulation_steps = 1
+        if device.type != "cuda":
+            default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
+                no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
+            )
+            if batch_size is None:
+                batch_size = default_batch_size
+            if gradient_accumulation_steps is None:
+                gradient_accumulation_steps = default_gradient_accumulation_steps
+        else:
+            if batch_size is None:
+                batch_size = 2**8  # 256, max 8 reductions
+            if gradient_accumulation_steps is None:
+                gradient_accumulation_steps = 1
 
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
         # find largest batch size that fits in GPU memory during training
-        # if device.type == "cuda":
-        #     batch_size = _gpu_estimate_max_batch_size(
-        #         model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
-        #     )
-        #     gc.collect()
-        #     torch.cuda.empty_cache()
+        if device.type == "cuda":
+            batch_size = _gpu_estimate_max_batch_size(
+                model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
+            )
+            gc.collect()
+            torch.cuda.empty_cache()
         gradient_accumulation_steps = max(1, min(gradient_accumulation_steps, trn_cnt // batch_size))
         trn_batch_size = batch_size * gradient_accumulation_steps
         trn_steps = max(1, trn_cnt // trn_batch_size)
