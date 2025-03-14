@@ -25,7 +25,6 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from huggingface_hub import constants as hf_constants
 from transformers import (
     PreTrainedTokenizerBase,
 )
@@ -103,15 +102,10 @@ def decode_buffered_samples(
     tgt_data = tgt_data.map(
         lambda x: x.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace") if not pd.isna(x) else x
     )
-    # overwrite generated columns with the seeded values
-    tgt_data.update(tgt_seed)
 
     # prepend the context keys to the data (if not dummy context)
     if ctx_keys.name != DUMMY_CONTEXT_KEY:
         tgt_data = pd.concat([ctx_keys, tgt_data], axis=1)
-    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
-        "{:.2f}%".format
-    )
 
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
@@ -124,6 +118,12 @@ def decode_buffered_samples(
         else:
             tgt_data[col] = decode_text(tgt_data[col], col_stats)
 
+    # overwrite generated columns with the seeded values
+    tgt_data.update(tgt_seed)
+
+    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
+        "{:.2f}%".format
+    )
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")
     return tgt_data
@@ -238,11 +238,9 @@ def generate(
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()
-        hf_constants.HF_HUB_OFFLINE = (
-            False  # needed for gated hf models that are not sharded, otherwise GatedRepoError in vLLM
-        )
-        # set the default env var so that we don't pass it explicitly to vLLM
-        os.environ["HF_TOKEN"] = os.getenv("MOSTLY_HUGGING_FACE_TOKEN") or os.getenv("HF_TOKEN", "")
+        # use MOSTLY_HUGGING_FACE_TOKEN if available, otherwise HF_TOKEN should be unset or with a pre-set value as is
+        if os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
+            os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
         if is_peft_adapter and (
