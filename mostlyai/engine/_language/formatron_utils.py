@@ -67,7 +67,7 @@ def get_formatter_builders(
     datetime_fields = field_types.get(ModelEncodingType.language_datetime, [])
     cache = {}
     for _, seed_row in seed_df.iterrows():
-        cache_key = tuple(sorted([(field, str(value)) for field, value in seed_row.items()]))
+        cache_key = hash(tuple(sorted([(field_name, str(seed_value)) for field_name, seed_value in seed_row.items()])))
         if cache_key in cache:
             formatter_builders.append(cache[cache_key])
             continue
