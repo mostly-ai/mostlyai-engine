@@ -556,12 +556,12 @@ def test_number_metadata():
 def test_gpu_estimate_max_batch_size():
     if not torch.cuda.is_available():
         pytest.skip("Skipping gpu only test")
-    
+
     model = AutoModelForCausalLM.from_pretrained("amd/AMD-Llama-135m")
     model.to("cuda")
     initial_params = {name: param.clone().detach() for name, param in model.named_parameters()}
-    max_batch_size = _gpu_estimate_max_batch_size(model, "cuda", 1024, 16)  # on an A10G, will return 8
-    
+    _gpu_estimate_max_batch_size(model, "cuda", 1024, 16)  # on an A10G, will return 8
+
     # verify parameters unchanged
     for name, param in model.named_parameters():
         assert torch.equal(param, initial_params[name])

@@ -223,13 +223,13 @@ def _gpu_estimate_max_batch_size(
         outputs = model(**create_test_batch(batch_size))
         loss = outputs.loss
         loss.backward()
-    
+
     while batch_size >= 1:
         try:
             mem_reserved = torch.cuda.memory_reserved()
             forward_and_backward_pass(batch_size)
             batch_size_found = True
-        except torch.cuda.OutOfMemoryError as e:
+        except torch.cuda.OutOfMemoryError:
             batch_size //= 2
             if batch_size < 1:
                 raise RuntimeError("Could not find a batch size that fits in GPU memory")
