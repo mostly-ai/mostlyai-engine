@@ -472,19 +472,26 @@ def train(
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
         max_tokens_estimate = estimate_max_tokens(tgt_stats)
-        if device.type != "cuda":
-            default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-                no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
-            )
-            if batch_size is None:
-                batch_size = default_batch_size
-            if gradient_accumulation_steps is None:
-                gradient_accumulation_steps = default_gradient_accumulation_steps
-        else:
-            if batch_size is None:
-                batch_size = 2**8  # 256, max 8 reductions
-            if gradient_accumulation_steps is None:
-                gradient_accumulation_steps = 1
+        default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
+            no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
+        )
+        if batch_size is None:
+            batch_size = default_batch_size
+        if gradient_accumulation_steps is None:
+            gradient_accumulation_steps = default_gradient_accumulation_steps
+        # if device.type != "cuda":
+        #     default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
+        #         no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
+        #     )
+        #     if batch_size is None:
+        #         batch_size = default_batch_size
+        #     if gradient_accumulation_steps is None:
+        #         gradient_accumulation_steps = default_gradient_accumulation_steps
+        # else:
+        #     if batch_size is None:
+        #         batch_size = 2**8  # 256, max 8 reductions
+        #     if gradient_accumulation_steps is None:
+        #         gradient_accumulation_steps = 1
 
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
