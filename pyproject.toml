@@ -42,11 +42,15 @@ dependencies = [
     "json-repair>=0.30.0",
     "rich>=13.9.4,<14",
     "torch>=2.5.1; sys_platform == 'darwin'",
+    "torchaudio==2.5.1",  # not needed by mostlyai-engine but vllm pins torch 2.5.1 without properly pinning torchvision / torchaudio
+    "torchvision==0.20.1",  # not needed by mostlyai-engine but vllm pins torch 2.5.1 without properly pinning torchvision / torchaudio
 ]
 
 [project.optional-dependencies]
 gpu = [
     "torch>=2.5.1",
+    "torchaudio==2.5.1",  # not needed by mostlyai-engine but vllm pins torch 2.5.1 without properly pinning torchvision / torchaudio
+    "torchvision==0.20.1",  # not needed by mostlyai-engine but vllm pins torch 2.5.1 without properly pinning torchvision / torchaudio
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
     "vllm>=0.7.3,<0.8; sys_platform == 'darwin'",
     "bitsandbytes>=0.43.3,<0.44; sys_platform == 'linux'",
@@ -55,6 +59,8 @@ gpu = [
 cpu = [
     "torch==2.5.1+cpu; sys_platform == 'linux'",
     "torch>=2.5.1; sys_platform != 'linux'",
+    "torchaudio==2.5.1",  # not needed by mostlyai-engine but vllm pins torch 2.5.1 without properly pinning torchvision / torchaudio
+    "torchvision==0.20.1",  # not needed by mostlyai-engine but vllm pins torch 2.5.1 without properly pinning torchvision / torchaudio
 ]
 
 [dependency-groups]
