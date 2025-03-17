@@ -250,6 +250,10 @@ def generate(
 
             engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
         else:
+            if device.type == "cuda" and importlib.util.find_spec("vllm") is None:
+                _LOG.warning(
+                    "CUDA device was found but vllm is not available. Please use `pip install -U 'mostlyai-engine[gpu]'` to install vllm"
+                )
             from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
 
             engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
