@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import time
+import gc
 from contextlib import nullcontext
 from functools import partial
 from pathlib import Path
@@ -191,6 +192,55 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     model.train()
     val_loss_avg = total_loss / total_num_labels
     return val_loss_avg.item()
+
+
+def _gpu_estimate_max_batch_size(
+    model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens_estimate: int, initial_batch_size: int
+) -> int:
+    batch_size = 2 ** int(np.log2(initial_batch_size))
+    optimizer = torch.optim.AdamW(params=model.parameters())
+
+    # create test batch of zeros with estimated max sequence length
+    def create_test_batch(batch_size: int):
+        return {
+            "input_ids": torch.zeros((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
+            "labels": torch.zeros((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
+            "attention_mask": torch.ones((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
+        }
+
+    outputs = model(**create_test_batch(1))
+    loss = outputs.loss
+    loss.backward()
+
+    # initialise optimizer state before forward+backward pass to reach peak memory
+    optimizer.zero_grad()  # ensure no change to model and gradients initialised
+    optimizer.step()  # initialise optimizer state
+    batch_size_found = False
+
+    # essential to be in function, otherwise part of memory is not released
+    def forward_and_backward_pass(batch_size: int):
+        outputs = model(**create_test_batch(batch_size))
+        loss = outputs.loss
+        loss.backward()
+
+    while batch_size >= 1:
+        try:
+            mem_reserved = torch.cuda.memory_reserved()
+            forward_and_backward_pass(batch_size)
+            batch_size_found = True
+        except torch.cuda.OutOfMemoryError:
+            batch_size //= 2
+            if batch_size < 1:
+                raise RuntimeError("Could not find a batch size that fits in GPU memory")
+        # clean up memory and gradients after each attempt
+        model.zero_grad(set_to_none=True)
+        gc.collect()
+        torch.cuda.empty_cache()
+        if batch_size_found:
+            break
+    if batch_size > 1 and torch.cuda.get_device_properties(device).total_memory - mem_reserved < 2_000_000_000:
+        batch_size //= 2
+    return batch_size
 
 
 def train(
@@ -418,18 +468,31 @@ def train(
             remove_columns=content_dataset["train"].column_names,
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
         max_tokens_estimate = estimate_max_tokens(tgt_stats)
-        default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-            no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
-        )
-        if batch_size is None:
-            batch_size = default_batch_size
-        if gradient_accumulation_steps is None:
-            gradient_accumulation_steps = default_gradient_accumulation_steps
+        batch_size_provided = batch_size is not None
+        if device.type != "cuda":
+            default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
+                no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
+            )
+            if batch_size is None:
+                batch_size = default_batch_size
+            if gradient_accumulation_steps is None:
+                gradient_accumulation_steps = default_gradient_accumulation_steps
+        else:
+            if batch_size is None:
+                batch_size = 2**8  # 256, max 8 reductions
+            if gradient_accumulation_steps is None:
+                gradient_accumulation_steps = 1
 
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
+        # find largest batch size that fits in GPU memory during training
+        if device.type == "cuda" and not batch_size_provided:
+            batch_size = _gpu_estimate_max_batch_size(
+                model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
+            )
+            gc.collect()
+            torch.cuda.empty_cache()
         gradient_accumulation_steps = max(1, min(gradient_accumulation_steps, trn_cnt // batch_size))
         trn_batch_size = batch_size * gradient_accumulation_steps
         trn_steps = max(1, trn_cnt // trn_batch_size)
@@ -463,9 +526,8 @@ def train(
             batch_size=val_batch_size,
             collate_fn=data_collator,
         )
-
-        early_stopper = EarlyStopper(val_loss_patience=4)
         optimizer = torch.optim.AdamW(params=model.parameters(), lr=initial_lr)
+        early_stopper = EarlyStopper(val_loss_patience=4)
         lr_scheduler: LRScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer=optimizer,
             factor=0.5,
