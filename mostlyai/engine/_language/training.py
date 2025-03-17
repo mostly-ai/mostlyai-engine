@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import contextlib
 import json
 import logging
 import math
-import os
 import time
 import gc
 from contextlib import nullcontext
@@ -260,29 +258,14 @@ def train(
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ):
-    @contextlib.contextmanager
-    def with_pytorch_cuda_alloc_conf():
-        old_conf = os.getenv("PYTORCH_CUDA_ALLOC_CONF")
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-        try:
-            yield
-        finally:
-            if old_conf is not None:
-                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = old_conf
-            else:
-                del os.environ["PYTORCH_CUDA_ALLOC_CONF"]
-
     _LOG.info("TRAIN_LANGUAGE started")
     t0_ = time.time()
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
 
-    with (
-        ProgressCallbackWrapper(
-            update_progress, progress_messages_path=workspace.model_progress_messages_path
-        ) as progress,
-        with_pytorch_cuda_alloc_conf(),
-    ):
+    with ProgressCallbackWrapper(
+        update_progress, progress_messages_path=workspace.model_progress_messages_path
+    ) as progress:
         _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
         _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
         _LOG.info(f"transformers={version('transformers')}, peft={version('peft')}")

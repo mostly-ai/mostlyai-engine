@@ -597,7 +597,6 @@ def test_gpu_estimate_max_batch_size():
     model.to("cuda")
     initial_params = {name: param.clone().detach() for name, param in model.named_parameters()}
     _gpu_estimate_max_batch_size(model, "cuda", 1024, 16)  # on an A10G, will return 8
-
     # verify parameters unchanged
     for name, param in model.named_parameters():
         assert torch.equal(param, initial_params[name])
