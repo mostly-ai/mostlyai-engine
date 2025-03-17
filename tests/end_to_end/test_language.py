@@ -18,7 +18,8 @@ from itertools import chain
 import pandas as pd
 import pytest
 import numpy as np
-from transformers import AutoTokenizer
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from mostlyai.engine import split
 from mostlyai.engine._workspace import Workspace
@@ -30,7 +31,7 @@ from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
-from mostlyai.engine._language.training import train
+from mostlyai.engine._language.training import train, _gpu_estimate_max_batch_size
 from mostlyai.engine.domain import (
     ModelEncodingType,
     ModelStateStrategy,
@@ -240,7 +241,7 @@ class TestConditionalGeneration:
         }
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5)
+        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5, batch_size=32)
         generate(
             workspace_dir=workspace_dir,
             ctx_data=ctx_data,
@@ -284,7 +285,7 @@ class TestConditionalGeneration:
         )
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M", max_training_time=0.05)
+        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M")
         generate(
             workspace_dir=workspace_dir,
             seed_data=seed_data,
@@ -586,3 +587,17 @@ def test_number_metadata():
 
     with pytest.raises(NotImplementedError, match="gt and lt are not supported for number metadata"):
         _number_metadata(number_type, "test_number")
+
+
+def test_gpu_estimate_max_batch_size():
+    if not torch.cuda.is_available():
+        pytest.skip("Skipping gpu only test")
+
+    model = AutoModelForCausalLM.from_pretrained("amd/AMD-Llama-135m")
+    model.to("cuda")
+    initial_params = {name: param.clone().detach() for name, param in model.named_parameters()}
+    _gpu_estimate_max_batch_size(model, "cuda", 1024, 16)  # on an A10G, will return 8
+    # verify parameters unchanged
+    for name, param in model.named_parameters():
+        assert torch.equal(param, initial_params[name])
+        assert param.grad is None
