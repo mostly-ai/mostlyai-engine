@@ -469,6 +469,7 @@ def train(
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
         max_tokens_estimate = estimate_max_tokens(tgt_stats)
+        batch_size_provided = batch_size is not None
         if device.type != "cuda":
             default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
                 no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
@@ -486,7 +487,7 @@ def train(
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
         # find largest batch size that fits in GPU memory during training
-        if device.type == "cuda":
+        if device.type == "cuda" and not batch_size_provided:
             batch_size = _gpu_estimate_max_batch_size(
                 model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
             )

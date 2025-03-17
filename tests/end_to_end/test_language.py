@@ -241,7 +241,7 @@ class TestConditionalGeneration:
         }
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5)
+        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5, batch_size=32)
         generate(
             workspace_dir=workspace_dir,
             ctx_data=ctx_data,
