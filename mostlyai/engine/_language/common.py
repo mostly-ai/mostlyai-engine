@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import logging
 from typing import Any
 
@@ -74,7 +75,7 @@ def load_base_model_and_config(
 
     # Load pretrained base model
     use_cache = not is_training  # KV cache is not needed during training
-    is_gpu_training = is_training and device.type == "cuda"
+    is_gpu_training = is_training and device.type == "cuda" and importlib.util.find_spec("bitsandbytes") is not None
     bf16_supported = is_bf16_supported(device)
     if bf16_supported:
         attn_implementation = get_attention_implementation(config)

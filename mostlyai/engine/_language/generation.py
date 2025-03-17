@@ -244,7 +244,7 @@ def generate(
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
         if is_peft_adapter and (
-            device.type == "cuda" or (platform.system() == "Darwin" and importlib.util.find_spec("vllm") is not None)
+            (device.type == "cuda" or platform.system() == "Darwin") and importlib.util.find_spec("vllm") is not None
         ):
             from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
 
