@@ -243,13 +243,14 @@ def generate(
             os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
-        if is_peft_adapter and (
-            device.type == "cuda" or (platform.system() == "Darwin" and importlib.util.find_spec("vllm") is not None)
-        ):
+        is_vllm_available = importlib.util.find_spec("vllm") is not None
+        if is_peft_adapter and ((device.type == "cuda" or platform.system() == "Darwin") and is_vllm_available):
             from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
 
             engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
         else:
+            if device.type == "cuda" and not is_vllm_available:
+                _LOG.warning("CUDA device was found but vllm is not available. Please use extra [gpu] to install vllm")
             from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
 
             engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)

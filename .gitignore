@@ -4,6 +4,6 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 dist/
-examples/*-ws/
+examples/ws-*/
 LICENSE_HEADER
 /site/

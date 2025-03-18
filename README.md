@@ -33,7 +33,12 @@ The latest release of `mostlyai-engine` can be installed via pip:
 pip install -U mostlyai-engine
 ```
 
-or alternatively for a GPU setup:
+or alternatively for a CPU-only setup:
+```bash
+pip install -U 'mostlyai-engine[cpu]' --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
+or alternatively for a GPU setup (needed for LLM finetuning):
 ```bash
 pip install -U 'mostlyai-engine[gpu]'
 ```
