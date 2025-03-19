@@ -54,7 +54,7 @@ gpu = [
     "torchvision==0.21.0",  # for vllm 0.8.0 compatibility
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
     "vllm>=0.7.3,<0.9; sys_platform == 'darwin'",
-    "bitsandbytes>=0.43.3,<0.44; sys_platform == 'linux'",
+    "bitsandbytes>=0.43.3,<0.46; sys_platform == 'linux'",
     "vllm>=0.8.0,<0.9; sys_platform == 'linux'",
 ]
 cpu = [
