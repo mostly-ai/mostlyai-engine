@@ -480,7 +480,7 @@ def train(
                 gradient_accumulation_steps = default_gradient_accumulation_steps
         else:
             if batch_size is None:
-                batch_size = 2**8  # 256, max 8 reductions
+                batch_size = 2**10  # 1024, max 10 reductions
             if gradient_accumulation_steps is None:
                 gradient_accumulation_steps = 1
 
