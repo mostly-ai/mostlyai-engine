@@ -41,27 +41,27 @@ dependencies = [
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0",
     "rich>=13.9.4,<14",
-    "torch>=2.5.1; sys_platform == 'darwin'",
-    "torch==2.5.1; sys_platform == 'linux'",  # pinned to 2.5.1 for vllm 0.7.2 compatibility
-    "torchaudio==2.5.1; sys_platform == 'linux'",  # pinned to 2.5.1 for vllm 0.7.2 compatibility
-    "torchvision==0.20.1; sys_platform == 'linux'"  # pinned to 0.20.1 for vllm 0.7.2 compatibility
+    "torch>=2.6.0; sys_platform == 'darwin'",
+    "torch==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torchaudio==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torchvision==0.21.0; sys_platform == 'linux'"  # for vllm 0.8.0 compatibility
 ]
 
 [project.optional-dependencies]
 gpu = [
-    "torch==2.5.1",  # pinned to 2.5.1 for vllm 0.7.2 compatibility
-    "torchaudio==2.5.1",  # pinned to 2.5.1 for vllm 0.7.2 compatibility
-    "torchvision==0.20.1",  # pinned to 0.20.1 for vllm 0.7.2 compatibility
+    "torch==2.6.0",  # for vllm 0.8.0 compatibility
+    "torchaudio==2.6.0",  # for vllm 0.8.0 compatibility
+    "torchvision==0.21.0",  # for vllm 0.8.0 compatibility
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
-    "vllm>=0.7.3,<0.8; sys_platform == 'darwin'",
-    "bitsandbytes>=0.43.3,<0.44; sys_platform == 'linux'",
-    "vllm>=0.7.2,<0.7.3; sys_platform == 'linux'",
+    "vllm>=0.7.3,<0.9; sys_platform == 'darwin'",
+    "bitsandbytes>=0.43.3,<0.46; sys_platform == 'linux'",
+    "vllm>=0.8.0,<0.9; sys_platform == 'linux'",
 ]
 cpu = [
-    "torch==2.5.1+cpu; sys_platform == 'linux'",  # pinned to 2.5.1 for vllm 0.7.2 compatibility
-    "torchaudio==2.5.1+cpu; sys_platform == 'linux'",  # pinned to 2.5.1 for vllm 0.7.2 compatibility
-    "torchvision==0.20.1+cpu; sys_platform == 'linux'",  # pinned to 0.20.1 for vllm 0.7.2 compatibility
-    "torch==2.5.1; sys_platform != 'linux'",
+    "torch==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torchaudio==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torchvision==0.21.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torch==2.6.0; sys_platform != 'linux'",
 ]
 
 [dependency-groups]
