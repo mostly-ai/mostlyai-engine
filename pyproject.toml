@@ -58,9 +58,9 @@ gpu = [
     "vllm>=0.8.0,<0.9; sys_platform == 'linux'",
 ]
 cpu = [
-    "torch==2.6.0+cpu; sys_platform == 'linux'",  # updated for vllm 0.8.0 compatibility
-    "torchaudio==2.6.0+cpu; sys_platform == 'linux'",  # updated for vllm 0.8.0 compatibility
-    "torchvision==0.21.0+cpu; sys_platform == 'linux'",  # updated for vllm 0.8.0 compatibility
+    "torch==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torchaudio==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
+    "torchvision==0.21.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.0 compatibility
     "torch==2.6.0; sys_platform != 'linux'",
 ]
 
