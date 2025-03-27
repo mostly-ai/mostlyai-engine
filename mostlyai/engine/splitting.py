@@ -147,24 +147,32 @@ def split(
         elif not model_type and tgt_encoding_types:
             # consider ModelType of the first encoding type
             first_enc_type = next(iter(tgt_encoding_types.values()))
-            model_type = ModelType.tabular if first_enc_type.startswith(ModelType.tabular.value) else ModelType.language
+            if first_enc_type.startswith(ModelType.language.value):
+                model_type = ModelType.language
+            else:
+                model_type = ModelType.tabular
         model_type = ModelType(model_type).value
 
         # populate model_encoding_types with defaults if not specified
         tgt_encoding_types = tgt_encoding_types or {}
         tgt_cols = [c for c in tgt_data if c != tgt_primary_key and c != tgt_context_key]
         for col in tgt_cols:
-            if col not in tgt_encoding_types:
+            if col not in tgt_encoding_types or tgt_encoding_types[col] == ModelEncodingType.auto:
                 if model_type == ModelType.language:
-                    tgt_encoding_types[col] = _get_default_language_encoding_type(tgt_data[col]).value
+                    tgt_encoding_types[col] = ModelEncodingType.language_auto
                 else:
-                    tgt_encoding_types[col] = _get_default_tabular_encoding_type(tgt_data[col]).value
+                    tgt_encoding_types[col] = ModelEncodingType.tabular_auto
+        for col in tgt_cols:
+            if tgt_encoding_types[col] == ModelEncodingType.language_auto:
+                tgt_encoding_types[col] = _get_default_language_encoding_type(tgt_data[col]).value
+            elif tgt_encoding_types[col] == ModelEncodingType.tabular_auto:
+                tgt_encoding_types[col] = _get_default_tabular_encoding_type(tgt_data[col]).value
             else:
                 tgt_encoding_types[col] = ModelEncodingType(tgt_encoding_types[col]).value
         ctx_encoding_types = ctx_encoding_types or {}
         ctx_cols = [c for c in ctx_data if c != ctx_primary_key] if ctx_data is not None else []
         for col in ctx_cols:
-            if col not in ctx_encoding_types:
+            if col not in ctx_encoding_types or ctx_encoding_types[col] == ModelEncodingType.auto:
                 ctx_encoding_types[col] = _get_default_tabular_encoding_type(ctx_data[col]).value
             else:
                 ctx_encoding_types[col] = ModelEncodingType(ctx_encoding_types[col]).value
