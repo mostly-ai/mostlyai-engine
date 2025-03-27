@@ -14,7 +14,6 @@
 
 import importlib
 import logging
-from typing import Any
 
 from peft import PeftConfig, prepare_model_for_kbit_training
 from transformers import AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig, PreTrainedModel, PretrainedConfig
@@ -41,18 +40,6 @@ def get_attention_implementation(config: PretrainedConfig) -> str | None:
     if getattr(model_cls, "_supports_sdpa", False):
         attn_implementation = "sdpa"
     return attn_implementation
-
-
-def estimate_max_tokens(tgt_stats: dict[str, Any]) -> int:
-    estimated_nchar = (
-        # accommodate leading space, curly brackets and eos
-        10
-        # each column is roughly like '"' + col + '": "' + value + '", '
-        + sum([(1 + len(col) + 4 + stats["nchar_max"] + 3) for col, stats in tgt_stats["columns"].items()])
-    )
-    estimated_tokens = estimated_nchar / 2  # ~2 chars per tokens
-    max_tokens = int(estimated_tokens * 1.4)  # add some safety buffer
-    return max_tokens
 
 
 def load_base_model_and_config(
