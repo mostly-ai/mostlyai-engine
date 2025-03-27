@@ -17,6 +17,7 @@ import importlib
 import json
 import os
 import platform
+from typing import Any
 
 import json_repair
 import logging
@@ -37,7 +38,7 @@ from mostlyai.engine._encoding_types.language.categorical import decode_language
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
 from mostlyai.engine._encoding_types.language.numeric import decode_language_numeric
 from mostlyai.engine._encoding_types.language.text import decode_text
-from mostlyai.engine._language.common import estimate_max_new_tokens, MAX_LENGTH
+from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._language.formatron_utils import (
@@ -50,6 +51,19 @@ from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMet
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
 DUMMY_CONTEXT_KEY = "__dummy_context_key"
 _LOG = logging.getLogger(__name__)
+
+
+def _estimate_max_new_tokens(tgt_stats: dict[str, Any]) -> int:
+    estimated_new_nchar = (
+        # accommodate leading space, curly brackets and eos
+        10
+        # each column is roughly like '"' + col + '": "' + value + '", '
+        + sum([(1 + len(col) + 4 + stats["nchar_max"] + 3) for col, stats in tgt_stats["columns"].items()])
+    )
+    estimated_new_tokens = estimated_new_nchar / 2  # ~2 chars per tokens
+    estimated_new_tokens = int(estimated_new_tokens * 1.4)  # add some safety buffer
+    _LOG.info(f"{estimated_new_tokens=}")
+    return estimated_new_tokens
 
 
 def decode_buffered_samples(
@@ -231,7 +245,7 @@ def generate(
         encoded_ctx_data = encode_df(ctx_df=ctx_data, ctx_stats=ctx_stats)
 
         # estimate max new tokens based on char length of original data; consider JSON overhead
-        max_new_tokens = estimate_max_new_tokens(tgt_stats)
+        max_new_tokens = _estimate_max_new_tokens(tgt_stats)
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()

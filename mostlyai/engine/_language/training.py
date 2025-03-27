@@ -44,7 +44,6 @@ from mostlyai.engine._common import (
     TABLE_COLUMN_INFIX,
 )
 from mostlyai.engine._language.common import (
-    calculate_max_tokens,
     is_bf16_supported,
     load_base_model_and_config,
     MAX_LENGTH,
@@ -192,6 +191,15 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     model.train()
     val_loss_avg = total_loss / total_num_labels
     return val_loss_avg.item()
+
+
+def _calculate_max_tokens(tokenized_trn_dataset: Dataset) -> int:
+    max_tokens = 0
+    for example in tokenized_trn_dataset:
+        max_tokens = max(len(example["input_ids"]), max_tokens)
+    max_tokens = max(max_tokens, 1)  # ensure max_tokens is greater than 0
+    _LOG.info(f"{max_tokens=}")
+    return max_tokens
 
 
 def _gpu_estimate_max_batch_size(
@@ -467,7 +475,7 @@ def train(
             remove_columns=content_dataset["train"].column_names,
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-        max_tokens = calculate_max_tokens(tokenized_datasets["train"])
+        max_tokens = _calculate_max_tokens(tokenized_datasets["train"])
         batch_size_provided = batch_size is not None
         if device.type != "cuda":
             default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
