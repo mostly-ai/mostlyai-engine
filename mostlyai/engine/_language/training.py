@@ -44,9 +44,9 @@ from mostlyai.engine._common import (
     TABLE_COLUMN_INFIX,
 )
 from mostlyai.engine._language.common import (
+    calculate_max_tokens,
     is_bf16_supported,
     load_base_model_and_config,
-    estimate_max_tokens,
     MAX_LENGTH,
 )
 from mostlyai.engine._language.encoding import row_to_json
@@ -195,7 +195,7 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
 
 
 def _gpu_estimate_max_batch_size(
-    model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens_estimate: int, initial_batch_size: int
+    model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens: int, initial_batch_size: int
 ) -> int:
     batch_size = 2 ** int(np.log2(initial_batch_size))
     optimizer = torch.optim.AdamW(params=model.parameters())
@@ -203,9 +203,9 @@ def _gpu_estimate_max_batch_size(
     # create test batch of zeros with estimated max sequence length
     def create_test_batch(batch_size: int):
         return {
-            "input_ids": torch.zeros((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
-            "labels": torch.zeros((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
-            "attention_mask": torch.ones((batch_size, max_tokens_estimate), dtype=torch.long, device=device),
+            "input_ids": torch.zeros((batch_size, max_tokens), dtype=torch.long, device=device),
+            "labels": torch.zeros((batch_size, max_tokens), dtype=torch.long, device=device),
+            "attention_mask": torch.ones((batch_size, max_tokens), dtype=torch.long, device=device),
         }
 
     outputs = model(**create_test_batch(1))
@@ -467,11 +467,11 @@ def train(
             remove_columns=content_dataset["train"].column_names,
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-        max_tokens_estimate = estimate_max_tokens(tgt_stats)
+        max_tokens = calculate_max_tokens(tokenized_datasets["train"])
         batch_size_provided = batch_size is not None
         if device.type != "cuda":
             default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-                no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
+                no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens
             )
             if batch_size is None:
                 batch_size = default_batch_size
@@ -488,7 +488,7 @@ def train(
         # find largest batch size that fits in GPU memory during training
         if device.type == "cuda" and not batch_size_provided:
             batch_size = _gpu_estimate_max_batch_size(
-                model=model, device=device, max_tokens_estimate=max_tokens_estimate, initial_batch_size=batch_size
+                model=model, device=device, max_tokens=max_tokens, initial_batch_size=batch_size
             )
             gc.collect()
             torch.cuda.empty_cache()

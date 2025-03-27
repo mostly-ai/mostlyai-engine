@@ -15,6 +15,7 @@
 import importlib
 import logging
 from typing import Any
+from datasets import Dataset
 
 from peft import PeftConfig, prepare_model_for_kbit_training
 from transformers import AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig, PreTrainedModel, PretrainedConfig
@@ -43,15 +44,24 @@ def get_attention_implementation(config: PretrainedConfig) -> str | None:
     return attn_implementation
 
 
-def estimate_max_tokens(tgt_stats: dict[str, Any]) -> int:
-    estimated_nchar = (
+def estimate_max_new_tokens(tgt_stats: dict[str, Any]) -> int:
+    estimated_new_nchar = (
         # accommodate leading space, curly brackets and eos
         10
         # each column is roughly like '"' + col + '": "' + value + '", '
         + sum([(1 + len(col) + 4 + stats["nchar_max"] + 3) for col, stats in tgt_stats["columns"].items()])
     )
-    estimated_tokens = estimated_nchar / 2  # ~2 chars per tokens
-    max_tokens = int(estimated_tokens * 1.4)  # add some safety buffer
+    estimated_new_tokens = estimated_new_nchar / 2  # ~2 chars per tokens
+    estimated_new_tokens = int(estimated_new_tokens * 1.4)  # add some safety buffer
+    _LOG.info(f"{estimated_new_tokens=}")
+    return estimated_new_tokens
+
+
+def calculate_max_tokens(tokenized_trn_dataset: Dataset) -> int:
+    max_tokens = 0
+    for example in tokenized_trn_dataset:
+        max_tokens = max(len(example["input_ids"]), max_tokens)
+    _LOG.info(f"{max_tokens=}")
     return max_tokens
 
 

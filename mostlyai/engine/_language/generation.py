@@ -25,10 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from transformers import (
-    PreTrainedTokenizerBase,
-)
-
+from transformers import PreTrainedTokenizerBase
 
 from mostlyai.engine._common import (
     persist_data_part,
@@ -40,7 +37,7 @@ from mostlyai.engine._encoding_types.language.categorical import decode_language
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
 from mostlyai.engine._encoding_types.language.numeric import decode_language_numeric
 from mostlyai.engine._encoding_types.language.text import decode_text
-from mostlyai.engine._language.common import estimate_max_tokens, MAX_LENGTH
+from mostlyai.engine._language.common import estimate_max_new_tokens, MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._language.formatron_utils import (
@@ -234,7 +231,7 @@ def generate(
         encoded_ctx_data = encode_df(ctx_df=ctx_data, ctx_stats=ctx_stats)
 
         # estimate max new tokens based on char length of original data; consider JSON overhead
-        max_new_tokens = estimate_max_tokens(tgt_stats)
+        max_new_tokens = estimate_max_new_tokens(tgt_stats)
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()
