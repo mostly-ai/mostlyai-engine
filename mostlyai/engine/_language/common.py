@@ -61,6 +61,7 @@ def calculate_max_tokens(tokenized_trn_dataset: Dataset) -> int:
     max_tokens = 0
     for example in tokenized_trn_dataset:
         max_tokens = max(len(example["input_ids"]), max_tokens)
+    max_tokens = max(max_tokens, 1)  # ensure max_tokens is greater than 0
     _LOG.info(f"{max_tokens=}")
     return max_tokens
 
