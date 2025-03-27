@@ -167,7 +167,7 @@ def test_language_with_dp(encoded_text_dataset, model_name, dp_max_epsilon):
         max_epsilon=dp_max_epsilon,
         noise_multiplier=0.2,
     )
-    train(workspace_dir=workspace_dir, model=model_name, differential_privacy=differential_privacy)
+    train(workspace_dir=workspace_dir, model=model_name, differential_privacy=differential_privacy, batch_size=16)
     generate(
         workspace_dir=workspace_dir,
         ctx_data=ctx_data,
