@@ -245,7 +245,7 @@ def _gpu_estimate_max_batch_size(
         torch.cuda.empty_cache()
         if batch_size_found:
             break
-    if batch_size > 1:
+    if batch_size > 1:  # for extra safety, halve the batch size once more
         batch_size //= 2
     return batch_size
 
