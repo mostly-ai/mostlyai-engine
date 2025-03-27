@@ -225,7 +225,6 @@ def _gpu_estimate_max_batch_size(
 
     while batch_size >= 1:
         try:
-            mem_reserved = torch.cuda.memory_reserved()
             forward_and_backward_pass(batch_size)
             batch_size_found = True
         except torch.cuda.OutOfMemoryError:
@@ -238,7 +237,7 @@ def _gpu_estimate_max_batch_size(
         torch.cuda.empty_cache()
         if batch_size_found:
             break
-    if batch_size > 1 and torch.cuda.get_device_properties(device).total_memory - mem_reserved < 2_000_000_000:
+    if batch_size > 1:
         batch_size //= 2
     return batch_size
 
