@@ -77,15 +77,15 @@ _LOG = logging.getLogger(__name__)
 ##################
 
 
-def _training_batch_size_heuristic(
+def _physical_batch_size_heuristic(
     mem_available_gb: float,
     no_of_records: int,
     no_tgt_data_points: int,
     no_ctx_data_points: int,
     no_of_model_params: int,
-) -> tuple[int, int]:
+) -> int:
     """
-    Calculate the physical batch size and gradient accumulation steps.
+    Calculate the physical batch size.
 
     Args:
         mem_available_gb (float): Available memory in GB.
@@ -95,9 +95,7 @@ def _training_batch_size_heuristic(
         no_of_model_params (int): Number of model parameters.
 
     Returns:
-        Tuple[int, int]: A tuple containing:
-            - Batch size (int)
-            - Gradient accumulation steps (int)
+        Batch size (int)
     """
     data_points = no_tgt_data_points + no_ctx_data_points
     min_batch_size = 8
@@ -122,7 +120,7 @@ def _training_batch_size_heuristic(
     # ensure a minimum number of batches to avoid excessive padding
     min_batches = 64
     batch_size = 2 ** int(np.log2(no_of_records / min_batches)) if no_of_records > 0 else min_batch_size
-    return int(np.clip(a=batch_size, a_min=min_batch_size, a_max=max_batch_size)), 1
+    return int(np.clip(a=batch_size, a_min=min_batch_size, a_max=max_batch_size))
 
 
 def _learn_rate_heuristic(batch_size: int) -> float:
@@ -516,17 +514,16 @@ def train(
         mem_available_gb = get_available_ram_for_heuristics() / 1024**3
         no_tgt_data_points = get_max_data_points_per_sample(tgt_stats)
         no_ctx_data_points = get_max_data_points_per_sample(ctx_stats)
-        default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-            mem_available_gb=mem_available_gb,
-            no_of_records=trn_cnt,
-            no_tgt_data_points=no_tgt_data_points,
-            no_ctx_data_points=no_ctx_data_points,
-            no_of_model_params=no_of_model_params,
-        )
         if batch_size is None:
-            batch_size = default_batch_size
+            batch_size = _physical_batch_size_heuristic(
+                mem_available_gb=mem_available_gb,
+                no_of_records=trn_cnt,
+                no_tgt_data_points=no_tgt_data_points,
+                no_ctx_data_points=no_ctx_data_points,
+                no_of_model_params=no_of_model_params,
+            )
         if gradient_accumulation_steps is None:
-            gradient_accumulation_steps = default_gradient_accumulation_steps
+            gradient_accumulation_steps = 1
 
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
