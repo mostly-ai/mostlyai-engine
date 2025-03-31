@@ -18,6 +18,7 @@ import json
 import os
 import platform
 from typing import Any
+import xgrammar as xgr
 
 import json_repair
 import logging
@@ -307,6 +308,11 @@ def generate(
 
             if enforce_json_output and len(seeded_tgt_columns) > 0:
                 t0 = time.time()
+
+                tokenizer_info = xgr.TokenizerInfo.from_huggingface(
+                    engine.tokenizer, vocab_size=engine.tokenizer.vocab_size
+                )
+
                 # some columns are seeded, so we need to create a new logits processor for each batch
                 formatter_builders = get_formatter_builders(
                     seed_df=sample_seed_batch,
