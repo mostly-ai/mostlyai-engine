@@ -17,6 +17,8 @@ from os import PathLike
 import time
 import typing
 
+from pydantic import BaseModel
+
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 import torch
@@ -33,6 +35,8 @@ from vllm.config import _get_and_verify_max_len
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from formatron.integrations.vllm import create_engine_vocabulary, FormattersLogitsProcessor
 from vllm.distributed import destroy_model_parallel, destroy_distributed_environment
+from vllm.sampling_params import GuidedDecodingParams
+from vllm.model_executor.guided_decoding.xgrammar_decoding import get_local_xgrammar_guided_decoding_logits_processor, XGrammarLogitsProcessor
 
 import gc
 from vllm.platforms import current_platform
@@ -64,6 +68,23 @@ def create_vllm_logits_processors(
         i.build(vocab, lambda tokens: tokenizer.decode(tokens)) if i is not None else None for i in formatter_builders
     ]
     return [FormattersLogitsProcessor([formatter], tokenizer.eos_token_id, configs) for formatter in formatters]
+
+
+def create_vllm_xgrammar_logits_processors(llm: LLM, schemas: list[BaseModel]) -> list[XGrammarLogitsProcessor]:
+    """
+    Create list of formatter logits processors for xgrammar.
+    """
+    logits_processors = []
+    for schema in schemas:
+        guided_decoding_params = GuidedDecodingParams(json=schema.model_json_schema())
+        logits_processor = get_local_xgrammar_guided_decoding_logits_processor(
+            guided_decoding_params,
+            tokenizer=llm.get_tokenizer(),
+            model_config=llm.llm_engine.get_model_config(),
+            reasoner=None,
+        )
+        logits_processors.append(logits_processor)
+    return logits_processors
 
 
 class MaskInvalidIndicesLogitsProcessor:
@@ -139,10 +160,13 @@ class VLLMEngine(LanguageEngine):
         vocab_processors: list[typing.Callable] | None = None,
         dev=None,
     ):
-        self._logits_processors = create_vllm_logits_processors(
-            llm=self.llm, formatter_builders=formatter_builders, configs=None, vocab_processors=vocab_processors
-        )
-
+        if self._dev["use_xgrammar"]:
+            self._logits_processors = create_vllm_xgrammar_logits_processors(llm=self.llm, schemas=dev["schemas"])
+        else:
+            self._logits_processors = create_vllm_logits_processors(
+                llm=self.llm, formatter_builders=formatter_builders, configs=None, vocab_processors=vocab_processors
+            )
+            
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
@@ -186,7 +210,7 @@ class VLLMEngine(LanguageEngine):
             lora_request=self._lora_request,
         )
         generate_time = time.time() - t_generate
-        if self._logits_processors is not None:
+        if self._logits_processors is not None and not self._dev["use_xgrammar"]:
             for lp in self._logits_processors:
                 lp.reset()
         metrics = EngineMetrics(tokenize_time=tokenize_time, generate_time=generate_time)

@@ -298,14 +298,17 @@ def generate(
             formatter_builders = get_formatter_builders(
                 size=batch_size, stats=tgt_stats, rare_category_replacement_method=rare_category_replacement_method
             )
+            engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+            total_logits_processor_build_time += time.time() - t0
+
+        if enforce_json_output and len(seeded_tgt_columns) == 0 and _use_xgrammar:
+            t0 = time.time()
             schemas = get_schemas(
                 size=batch_size,
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.initialize_logits_processors(
-                formatter_builders, formatron_vocab_processors, dev={"schemas": schemas}
-            )
+            engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -319,7 +322,7 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            if enforce_json_output and len(seeded_tgt_columns) > 0 or _use_xgrammar:
+            if enforce_json_output and len(seeded_tgt_columns) > 0 and not _use_xgrammar:
                 t0 = time.time()
                 # some columns are seeded, so we need to create a new logits processor for each batch
                 formatter_builders = get_formatter_builders(
@@ -327,16 +330,19 @@ def generate(
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
+                engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+                total_logits_processor_build_time += time.time() - t0
+
+            if enforce_json_output and len(seeded_tgt_columns) > 0 and _use_xgrammar:
+                t0 = time.time()
                 schemas = get_schemas(
                     seed_df=sample_seed_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(
-                    formatter_builders, formatron_vocab_processors, dev={"schemas": schemas}
-                )
+                engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
                 total_logits_processor_build_time += time.time() - t0
-
+            
             outputs, metrics = engine.generate(
                 encoded_ctx_batch["ctx"].tolist(),
                 sampling_temperature=sampling_temperature,
