@@ -88,7 +88,7 @@ class MaskInvalidIndicesLogitsProcessor:
 
 class VLLMEngine(LanguageEngine):
     def __init__(
-        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int
+        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int, dev=None
     ):
         self.device = device
         self.tokenizer_max_length = tokenizer_max_length
@@ -125,6 +125,7 @@ class VLLMEngine(LanguageEngine):
         )
         self._logits_processors = None
         monkey_patch_formatron()
+        self._dev = dev
 
     def get_default_batch_size(self) -> int:
         return 192
@@ -133,7 +134,10 @@ class VLLMEngine(LanguageEngine):
         return True
 
     def initialize_logits_processors(
-        self, formatter_builders: list[FormatterBuilder], vocab_processors: list[typing.Callable] | None = None
+        self,
+        formatter_builders: list[FormatterBuilder],
+        vocab_processors: list[typing.Callable] | None = None,
+        dev=None,
     ):
         self._logits_processors = create_vllm_logits_processors(
             llm=self.llm, formatter_builders=formatter_builders, configs=None, vocab_processors=vocab_processors

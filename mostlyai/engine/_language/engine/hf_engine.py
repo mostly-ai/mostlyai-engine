@@ -17,6 +17,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from pydantic import BaseModel
 import torch
 from formatron.integrations.transformers import create_formatter_logits_processor_list
 from peft import PeftModel
@@ -28,11 +29,25 @@ from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from formatron.formatter import FormatterBuilder
+import xgrammar as xgr
+import transformers
+
+from mostlyai.engine._language.xgrammar_utils import XGrammarHFLogitsProcessor
+
+
+def create_hf_logits_processors(
+    schemas: list[BaseModel], tokenizer: AutoTokenizer
+) -> list[transformers.LogitsProcessor]:
+    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=tokenizer.vocab_size)
+    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+    compiled_grammars = [grammar_compiler.compile_json_schema(schema) for schema in schemas]
+    logits_processor = XGrammarHFLogitsProcessor(compiled_grammars)
+    return [logits_processor]
 
 
 class HuggingFaceEngine(LanguageEngine):
     def __init__(
-        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int
+        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int, dev=None
     ):
         self.device = device
         self.max_new_tokens = max_new_tokens
@@ -69,6 +84,7 @@ class HuggingFaceEngine(LanguageEngine):
         if self.supports_json_enforcing():
             monkey_patch_formatron()
         self._logits_processors = None
+        self._dev = dev
 
     def get_default_batch_size(self) -> int:
         return self._default_batch_size
@@ -77,11 +93,17 @@ class HuggingFaceEngine(LanguageEngine):
         return self._json_enforcing_possible
 
     def initialize_logits_processors(
-        self, formatter_builders: list[FormatterBuilder], vocab_processors: list[Callable] | None = None
+        self,
+        formatter_builders: list[FormatterBuilder],
+        vocab_processors: list[Callable] | None = None,
+        dev=None,
     ):
-        self._logits_processors = create_formatter_logits_processor_list(
-            tokenizer=self.tokenizer, formatter_builders=formatter_builders, vocab_processors=vocab_processors
-        )
+        if self._dev["use_xgrammar"]:
+            self._logits_processors = create_hf_logits_processors(schemas=dev["schemas"], tokenizer=self.tokenizer)
+        else:
+            self._logits_processors = create_formatter_logits_processor_list(
+                tokenizer=self.tokenizer, formatter_builders=formatter_builders, vocab_processors=vocab_processors
+            )
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
@@ -111,7 +133,7 @@ class HuggingFaceEngine(LanguageEngine):
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        if self._logits_processors is not None:
+        if self._logits_processors is not None and not self._dev["use_xgrammar"]:
             # number of formatters must match the batch size, batch size is always reduced so this is fine
             actual_batch_size = len(inputs["input_ids"])
             self._logits_processors[0]._formatters = self._logits_processors[0]._formatters[:actual_batch_size]
@@ -120,7 +142,7 @@ class HuggingFaceEngine(LanguageEngine):
         outputs = self._model.generate(**inputs, **generate_kwargs, logits_processor=self._logits_processors)
         generate_time = time.time() - t_generate
 
-        if self._logits_processors:
+        if self._logits_processors and not self._dev["use_xgrammar"]:
             self._logits_processors[0].reset()
 
         _, input_length = inputs["input_ids"].shape

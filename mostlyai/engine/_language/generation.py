@@ -18,7 +18,6 @@ import json
 import os
 import platform
 from typing import Any
-import xgrammar as xgr
 
 import json_repair
 import logging
@@ -41,6 +40,7 @@ from mostlyai.engine._encoding_types.language.numeric import decode_language_num
 from mostlyai.engine._encoding_types.language.text import decode_text
 from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
+from mostlyai.engine._language.xgrammar_utils import get_schemas
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._language.formatron_utils import (
     get_formatter_builders,
@@ -153,6 +153,7 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    _use_xgrammar: bool = True,
 ):
     _LOG.info("GENERATE_LANGUAGE started")
     t0_ = time.time()
@@ -259,13 +260,17 @@ def generate(
         if is_peft_adapter and ((device.type == "cuda" or platform.system() == "Darwin") and is_vllm_available):
             from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
 
-            engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
+            engine = VLLMEngine(
+                workspace.model_path, device, max_new_tokens, MAX_LENGTH, dev={"use_xgrammar": _use_xgrammar}
+            )
         else:
             if device.type == "cuda" and not is_vllm_available:
                 _LOG.warning("CUDA device was found but vllm is not available. Please use extra [gpu] to install vllm")
             from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
 
-            engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
+            engine = HuggingFaceEngine(
+                workspace.model_path, device, max_new_tokens, MAX_LENGTH, dev={"use_xgrammar": _use_xgrammar}
+            )
         _LOG.info(f"inference engine: {engine.__class__.__name__}")
 
         batch_size = batch_size or engine.get_default_batch_size()
@@ -287,12 +292,19 @@ def generate(
         _LOG.info(f"{enforce_json_output=}")
         formatron_vocab_processors = get_vocab_processors(is_peft_adapter)
 
-        if enforce_json_output and len(seeded_tgt_columns) == 0:
+        if enforce_json_output and len(seeded_tgt_columns) == 0 and not _use_xgrammar:
             t0 = time.time()
             formatter_builders = get_formatter_builders(
                 size=batch_size, stats=tgt_stats, rare_category_replacement_method=rare_category_replacement_method
             )
-            engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+            schemas = get_schemas(
+                size=batch_size,
+                stats=tgt_stats,
+                rare_category_replacement_method=rare_category_replacement_method,
+            )
+            engine.initialize_logits_processors(
+                formatter_builders, formatron_vocab_processors, dev={"schemas": schemas}
+            )
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -306,20 +318,22 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            if enforce_json_output and len(seeded_tgt_columns) > 0:
+            if enforce_json_output and len(seeded_tgt_columns) > 0 or _use_xgrammar:
                 t0 = time.time()
-
-                tokenizer_info = xgr.TokenizerInfo.from_huggingface(
-                    engine.tokenizer, vocab_size=engine.tokenizer.vocab_size
-                )
-
                 # some columns are seeded, so we need to create a new logits processor for each batch
                 formatter_builders = get_formatter_builders(
                     seed_df=sample_seed_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+                schemas = get_schemas(
+                    seed_df=sample_seed_batch,
+                    stats=tgt_stats,
+                    rare_category_replacement_method=rare_category_replacement_method,
+                )
+                engine.initialize_logits_processors(
+                    formatter_builders, formatron_vocab_processors, dev={"schemas": schemas}
+                )
                 total_logits_processor_build_time += time.time() - t0
 
             outputs, metrics = engine.generate(
