@@ -302,14 +302,15 @@ def generate(
             total_logits_processor_build_time += time.time() - t0
 
         if enforce_json_output and len(seeded_tgt_columns) == 0 and _use_xgrammar:
-            t0 = time.time()
-            schemas = get_schemas(
-                size=batch_size,
-                stats=tgt_stats,
-                rare_category_replacement_method=rare_category_replacement_method,
-            )
-            engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
-            total_logits_processor_build_time += time.time() - t0
+            if engine.__class__.__name__ == "VLLMEngine":
+                t0 = time.time()
+                schemas = get_schemas(
+                    size=batch_size,
+                    stats=tgt_stats,
+                    rare_category_replacement_method=rare_category_replacement_method,
+                )
+                engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
+                total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)
@@ -334,14 +335,26 @@ def generate(
                 total_logits_processor_build_time += time.time() - t0
 
             if enforce_json_output and len(seeded_tgt_columns) > 0 and _use_xgrammar:
-                t0 = time.time()
-                schemas = get_schemas(
-                    seed_df=sample_seed_batch,
-                    stats=tgt_stats,
-                    rare_category_replacement_method=rare_category_replacement_method,
-                )
-                engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
-                total_logits_processor_build_time += time.time() - t0
+                if engine.__class__.__name__ == "VLLMEngine":
+                    t0 = time.time()
+                    schemas = get_schemas(
+                        seed_df=sample_seed_batch,
+                        stats=tgt_stats,
+                        rare_category_replacement_method=rare_category_replacement_method,
+                    )
+                    engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
+                    total_logits_processor_build_time += time.time() - t0
+            
+            if enforce_json_output and _use_xgrammar:
+                if engine.__class__.__name__ == "HuggingFaceEngine":
+                    t0 = time.time()
+                    schemas = get_schemas(
+                        seed_df=sample_seed_batch,
+                        stats=tgt_stats,
+                        rare_category_replacement_method=rare_category_replacement_method,
+                    )
+                    engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
+                    total_logits_processor_build_time += time.time() - t0
             
             outputs, metrics = engine.generate(
                 encoded_ctx_batch["ctx"].tolist(),

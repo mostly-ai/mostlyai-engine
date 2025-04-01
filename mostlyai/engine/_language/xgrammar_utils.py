@@ -182,6 +182,7 @@ class XGrammarHFLogitsProcessor(transformers.LogitsProcessor):
         # LogitsProcessor
 
         return scores
+
     
 
 @dataclass
