@@ -36,10 +36,12 @@ from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from formatron.integrations.vllm import create_engine_vocabulary, FormattersLogitsProcessor
 from vllm.distributed import destroy_model_parallel, destroy_distributed_environment
 from vllm.sampling_params import GuidedDecodingParams
-from vllm.model_executor.guided_decoding.xgrammar_decoding import get_local_xgrammar_guided_decoding_logits_processor, XGrammarLogitsProcessor
+from vllm.model_executor.guided_decoding.xgrammar_decoding import XGrammarLogitsProcessor, GrammarConfig
 
 import gc
 from vllm.platforms import current_platform
+
+from mostlyai.engine._language.xgrammar_utils import XGrammarVLLMLogitsProcessor
 
 
 def cleanup_dist_env_and_memory():
@@ -75,14 +77,13 @@ def create_vllm_xgrammar_logits_processors(llm: LLM, schemas: list[BaseModel]) -
     Create list of formatter logits processors for xgrammar.
     """
     logits_processors = []
+    tokenizer = llm.get_tokenizer()
+    model_config = llm.llm_engine.get_model_config()
     for schema in schemas:
         guided_decoding_params = GuidedDecodingParams(json=schema.model_json_schema())
-        logits_processor = get_local_xgrammar_guided_decoding_logits_processor(
-            guided_decoding_params,
-            tokenizer=llm.get_tokenizer(),
-            model_config=llm.llm_engine.get_model_config(),
-            reasoner=None,
-        )
+        grammar_config = GrammarConfig.from_guided_params(guided_params=guided_decoding_params, model_config=model_config, tokenizer=tokenizer, max_threads=8)
+        tokenizer_info = GrammarConfig.tokenizer_info(grammar_config.tokenizer_data)
+        logits_processor = XGrammarVLLMLogitsProcessor(config=grammar_config, tokenizer_info=tokenizer_info)
         logits_processors.append(logits_processor)
     return logits_processors
 
@@ -210,9 +211,12 @@ class VLLMEngine(LanguageEngine):
             lora_request=self._lora_request,
         )
         generate_time = time.time() - t_generate
+        print(f"generate time: {generate_time:.2f}s")
         if self._logits_processors is not None and not self._dev["use_xgrammar"]:
             for lp in self._logits_processors:
                 lp.reset()
+        if self._logits_processors is not None and self._dev["use_xgrammar"]:
+            self._logits_processors = [lp.clone() for lp in self._logits_processors]
         metrics = EngineMetrics(tokenize_time=tokenize_time, generate_time=generate_time)
         return [r.outputs[0].token_ids for r in outputs], metrics
 
