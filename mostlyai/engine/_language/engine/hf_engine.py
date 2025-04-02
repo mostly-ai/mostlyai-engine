@@ -12,22 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from os import PathLike
+import json
 import time
+from os import PathLike
 from pathlib import Path
 
-from pydantic import BaseModel
 import torch
-from peft import PeftModel
-
-from transformers import AutoTokenizer
-from mostlyai.engine._language.common import load_base_model_and_config
-from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-
-from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
-import xgrammar as xgr
 import transformers
+import xgrammar as xgr
+from peft import PeftModel
+from pydantic import BaseModel
+from transformers import AutoTokenizer
+from xgrammar.testing import _json_schema_to_ebnf
 
+from mostlyai.engine._language.common import load_base_model_and_config
+from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
+from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from mostlyai.engine._language.xgrammar_utils import XGrammarHFLogitsProcessor
 
 
@@ -37,16 +37,14 @@ def _adapt_grammar(grammar: str) -> str:
     return grammar
 
 
-def create_formatter_logits_processors(
-    schemas: list[BaseModel], tokenizer: AutoTokenizer
-) -> list[transformers.LogitsProcessor]:
-    # TODO: take vocab_size from model's config
-    # TODO: if/else for LSTM and LLMs
+def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
+    # trimmed down version of xgr.TokenizerInfo.from_huggingface
+    # the original function sets vocab_type to VocabType.RAW,
+    # but LSTM tokenizer needs VocabType.BYTE_FALLBACK, because the usage of metaspace ("▁")
     vocab_dict = tokenizer.get_vocab()
-    vocab_size = tokenizer.vocab_size
     stop_token_ids = [tokenizer.eos_token_id]
     vocab_type = xgr.VocabType.BYTE_FALLBACK
-    add_prefix_space = True  # TODO: what should be this?
+    add_prefix_space = True  # TODO: what should this be?
     encoded_vocab = [""] * vocab_size
     for token, idx in vocab_dict.items():
         if idx < vocab_size:
@@ -58,11 +56,19 @@ def create_formatter_logits_processors(
         stop_token_ids=stop_token_ids,
         add_prefix_space=add_prefix_space,
     )
-    # tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=tokenizer.vocab_size)
-    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    from xgrammar.testing import _json_schema_to_ebnf
-    import json
+    return tokenizer_info
 
+
+def create_formatter_logits_processors(
+    schemas: list[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool
+) -> list[transformers.LogitsProcessor]:
+    # TODO: take vocab_size from model's config
+    vocab_size = tokenizer.vocab_size
+    if is_peft_adapter:
+        tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)
+    else:
+        tokenizer_info = get_tokenizer_info_for_lstm(tokenizer, vocab_size=vocab_size)
+    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
     grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
     grammars = (_adapt_grammar(grammar) for grammar in grammars)
     compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]
@@ -77,13 +83,13 @@ class HuggingFaceEngine(LanguageEngine):
         self.device = device
         self.max_new_tokens = max_new_tokens
         self.tokenizer_max_length = tokenizer_max_length
+        self.is_peft_adapter = (Path(model_path) / "adapter_config.json").exists()
 
-        is_peft_adapter = (Path(model_path) / "adapter_config.json").exists()
         model_path = str(model_path)
         self._model, _ = load_base_model_and_config(
-            model_path, device=device, is_peft_adapter=is_peft_adapter, is_training=False
+            model_path, device=device, is_peft_adapter=self.is_peft_adapter, is_training=False
         )
-        if is_peft_adapter:
+        if self.is_peft_adapter:
             self._model = PeftModel.from_pretrained(self._model, model_path, is_trainable=False)
             self._model = self._model.merge_and_unload()
             self._default_batch_size = 64
@@ -102,10 +108,10 @@ class HuggingFaceEngine(LanguageEngine):
         )
 
         # we can't enforce JSON output if LSTM tokenizer training was skipped
-        is_trained_lstm_tokenizer = not is_peft_adapter and self.tokenizer.vocab_size > len(
+        is_trained_lstm_tokenizer = not self.is_peft_adapter and self.tokenizer.vocab_size > len(
             self.tokenizer.special_tokens_map
         )
-        self._json_enforcing_possible = is_peft_adapter or is_trained_lstm_tokenizer
+        self._json_enforcing_possible = self.is_peft_adapter or is_trained_lstm_tokenizer
         self._logits_processors = None
 
     def get_default_batch_size(self) -> int:
@@ -115,7 +121,9 @@ class HuggingFaceEngine(LanguageEngine):
         return self._json_enforcing_possible
 
     def initialize_logits_processors(self, schemas: list[BaseModel]):
-        self._logits_processors = create_formatter_logits_processors(schemas=schemas, tokenizer=self.tokenizer)
+        self._logits_processors = create_formatter_logits_processors(
+            schemas=schemas, tokenizer=self.tokenizer, is_peft_adapter=self.is_peft_adapter
+        )
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
