@@ -41,7 +41,6 @@ def generate(
     fairness: FairnessConfig | dict | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    _use_xgrammar: bool = True,
 ) -> None:
     """
     Generates synthetic data from a trained model.
@@ -104,5 +103,4 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
-            _use_xgrammar=_use_xgrammar,
         )
