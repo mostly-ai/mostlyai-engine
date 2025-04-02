@@ -14,7 +14,6 @@
 
 from os import PathLike
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -26,7 +25,6 @@ from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
-from formatron.formatter import FormatterBuilder
 import xgrammar as xgr
 import transformers
 
@@ -74,7 +72,7 @@ def create_formatter_logits_processors(
 
 class HuggingFaceEngine(LanguageEngine):
     def __init__(
-        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int, dev=None
+        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int
     ):
         self.device = device
         self.max_new_tokens = max_new_tokens
@@ -109,7 +107,6 @@ class HuggingFaceEngine(LanguageEngine):
         )
         self._json_enforcing_possible = is_peft_adapter or is_trained_lstm_tokenizer
         self._logits_processors = None
-        self._dev = dev
 
     def get_default_batch_size(self) -> int:
         return self._default_batch_size
@@ -117,13 +114,8 @@ class HuggingFaceEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return self._json_enforcing_possible
 
-    def initialize_logits_processors(
-        self,
-        formatter_builders: list[FormatterBuilder],
-        vocab_processors: list[Callable] | None = None,
-        dev=None,
-    ):
-        self._logits_processors = create_formatter_logits_processors(schemas=dev["schemas"], tokenizer=self.tokenizer)
+    def initialize_logits_processors(self, schemas: list[BaseModel]):
+        self._logits_processors = create_formatter_logits_processors(schemas=schemas, tokenizer=self.tokenizer)
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float

@@ -282,14 +282,15 @@ def generate(
         enforce_json_output = engine.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
 
-        if enforce_json_output and len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine":
+        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine"
+        if enforce_json_output and initialize_logits_processors_once:
             t0 = time.time()
             schemas = get_schemas(
                 size=batch_size,
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
+            engine.initialize_logits_processors(schemas=schemas)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -303,24 +304,14 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            if enforce_json_output and len(seeded_tgt_columns) > 0 and engine.__class__.__name__ == "VLLMEngine":
+            if enforce_json_output and not initialize_logits_processors_once:
                 t0 = time.time()
                 schemas = get_schemas(
                     seed_df=sample_seed_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
-                total_logits_processor_build_time += time.time() - t0
-
-            if enforce_json_output and engine.__class__.__name__ == "HuggingFaceEngine":
-                t0 = time.time()
-                schemas = get_schemas(
-                    seed_df=sample_seed_batch,
-                    stats=tgt_stats,
-                    rare_category_replacement_method=rare_category_replacement_method,
-                )
-                engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
+                engine.initialize_logits_processors(schemas=schemas)
                 total_logits_processor_build_time += time.time() - t0
 
             outputs, metrics = engine.generate(

@@ -17,13 +17,11 @@ from __future__ import annotations
 import contextlib
 import gc
 import time
-import typing
 from dataclasses import dataclass, field
 from os import PathLike
 
 import torch
 import xgrammar as xgr
-from formatron.formatter import FormatterBuilder
 from peft import PeftConfig
 from pydantic import BaseModel
 from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizerBase
@@ -181,7 +179,7 @@ class MaskInvalidIndicesLogitsProcessor:
 
 class VLLMEngine(LanguageEngine):
     def __init__(
-        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int, dev=None
+        self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int
     ):
         self.device = device
         self.tokenizer_max_length = tokenizer_max_length
@@ -217,7 +215,6 @@ class VLLMEngine(LanguageEngine):
             add_eos_token=False,
         )
         self._logits_processors = None
-        self._dev = dev
 
     def get_default_batch_size(self) -> int:
         return 192
@@ -225,13 +222,8 @@ class VLLMEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return True
 
-    def initialize_logits_processors(
-        self,
-        formatter_builders: list[FormatterBuilder],
-        vocab_processors: list[typing.Callable] | None = None,
-        dev=None,
-    ):
-        self._logits_processors = create_formatter_logits_processors(llm=self.llm, schemas=dev["schemas"])
+    def initialize_logits_processors(self, schemas: list[BaseModel]):
+        self._logits_processors = create_formatter_logits_processors(schemas=schemas, llm=self.llm)
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
