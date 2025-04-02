@@ -37,7 +37,6 @@ from vllm.sampling_params import GuidedDecodingParams
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
-from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 
 
@@ -218,7 +217,6 @@ class VLLMEngine(LanguageEngine):
             add_eos_token=False,
         )
         self._logits_processors = None
-        monkey_patch_formatron()
         self._dev = dev
 
     def get_default_batch_size(self) -> int:

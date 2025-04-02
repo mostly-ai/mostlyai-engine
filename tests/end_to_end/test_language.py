@@ -38,8 +38,6 @@ from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     RareCategoryReplacementMethod,
 )
-from mostlyai.engine._language.formatron_utils import get_formatter_builders, _number_metadata
-from formatron.integrations.transformers import create_formatter_logits_processor_list
 
 
 def prepare_encoded_dataset(data: pd.DataFrame, workspace_dir, tgt_encoding_types, ctx_encoding_types=None):
@@ -296,19 +294,6 @@ class TestConditionalGeneration:
         pd.testing.assert_series_equal(syn_data["country"], seed_data["country"], check_dtype=False)
 
 
-def test_formatter():
-    lone_leading_surrogate_issue = '{"E0": "[b]\\ud83c\\udc00\\ud83d\\ud8bc}{"}'
-    unexpected_end_of_hex_escape_issue = '{"E0": "』』』\u200f』 avex\\ud8dd"}'
-    formatter_builders = get_formatter_builders(
-        size=1, stats={"columns": {}}, rare_category_replacement_method=RareCategoryReplacementMethod.constant
-    )
-    tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M", legacy=True)
-    logits_processor = create_formatter_logits_processor_list(tokenizer, formatter_builders)
-    formatter = logits_processor[0]._formatters[0]
-    formatter._on_completion(lone_leading_surrogate_issue)
-    formatter._on_completion(unexpected_end_of_hex_escape_issue)
-
-
 @pytest.mark.parametrize(
     "model_name",
     [
@@ -539,54 +524,6 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
     if not dates.empty:
         assert dates.min() >= pd.Timestamp("2019-01-06")
         assert dates.max() <= pd.Timestamp("2026-01-05")
-
-
-def test_number_metadata():
-    class TypeWithMetadata:
-        def __init__(self, type, metadata):
-            self.type = type
-            self.metadata = metadata
-
-    # test positive integer range
-    number_type = TypeWithMetadata(int, {"ge": 10, "le": 450})
-    pattern, deps = _number_metadata(number_type, "test_number")
-
-    assert deps == []
-    # should match 2-3 digit numbers between 10-999
-    assert 'test_number ::= #"([1-9][0-9]{1,2})";\n' in pattern
-
-    # test negative integer range
-    number_type = TypeWithMetadata(int, {"ge": -269, "le": -10})
-    pattern, deps = _number_metadata(number_type, "test_number")
-
-    # should match negative 2-3 digit numbers
-    assert 'test_number ::= #"-([1-9][0-9]{1,2})";\n' in pattern
-
-    # test range including both negative and positive
-    number_type = TypeWithMetadata(int, {"ge": -10, "le": 100})
-    pattern, deps = _number_metadata(number_type, "test_number")
-
-    # should allow optional negative sign and up to 3 digits and 0
-    assert 'test_number ::= #"-?(0|[1-9][0-9]{0,2})";\n' in pattern
-
-    # test float with decimal places
-    number_type = TypeWithMetadata(float, {"ge": 0.0, "le": 100.0, "decimal_places": 2})
-    pattern, deps = _number_metadata(number_type, "test_number")
-
-    # should match numbers with optional decimal part
-    assert r'test_number ::= #"(0|[1-9][0-9]{0,2})(\\.[0-9]{0,2})?";' + "\n" in pattern
-
-    # test invalid range where le < ge
-    number_type = TypeWithMetadata(int, {"ge": 100, "le": 10})
-
-    with pytest.raises(ValueError, match="le must be greater than or equal to ge"):
-        _number_metadata(number_type, "test_number")
-
-    # test unsupported gt/lt constraints
-    number_type = TypeWithMetadata(int, {"gt": 10, "lt": 100})
-
-    with pytest.raises(NotImplementedError, match="gt and lt are not supported for number metadata"):
-        _number_metadata(number_type, "test_number")
 
 
 def test_gpu_estimate_max_batch_size():

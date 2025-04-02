@@ -22,6 +22,24 @@ from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNK
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 import xgrammar as xgr
 import transformers
+from transformers import PreTrainedTokenizerBase
+
+
+JSON_NULL = "null"
+
+
+def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:
+    def transform(x: str | None) -> str:
+        if pd.isna(x):
+            null = tokenizer.decode(tokenizer.encode(JSON_NULL), skip_special_tokens=True)
+            # xgrammar needs to be able to express JSON_NULL with available vocabulary
+            # if that's the case, harmonize null-like values to None (e.g. pd.NA would cause xgrammar to fail)
+            # otherwise, fallback to empty string
+            return None if null == JSON_NULL else ""
+        # skip tokens unseen during training
+        return tokenizer.decode(tokenizer.encode(x), skip_special_tokens=True)
+
+    return sample_seed.astype("string[pyarrow]").map(transform)
 
 
 def get_schemas(

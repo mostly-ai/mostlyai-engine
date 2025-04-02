@@ -42,7 +42,7 @@ from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._language.xgrammar_utils import get_schemas
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
-from mostlyai.engine._language.formatron_utils import prepare_seed_for_formatron
+from mostlyai.engine._language.xgrammar_utils import ensure_seed_can_be_tokenized
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
@@ -272,7 +272,7 @@ def generate(
         _LOG.info(f"{batch_size=}")
 
         # prepare seed data for clean consumption by formatron
-        seed_data = prepare_seed_for_formatron(seed_data, engine.tokenizer)
+        seed_data = ensure_seed_can_be_tokenized(seed_data, engine.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
 
         total_tokenize_fn_time = 0
