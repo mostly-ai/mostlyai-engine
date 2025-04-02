@@ -344,7 +344,7 @@ def generate(
                     )
                     engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
                     total_logits_processor_build_time += time.time() - t0
-            
+
             if enforce_json_output and _use_xgrammar:
                 if engine.__class__.__name__ == "HuggingFaceEngine":
                     t0 = time.time()
@@ -355,7 +355,7 @@ def generate(
                     )
                     engine.initialize_logits_processors(None, None, dev={"schemas": schemas})
                     total_logits_processor_build_time += time.time() - t0
-            
+
             outputs, metrics = engine.generate(
                 encoded_ctx_batch["ctx"].tolist(),
                 sampling_temperature=sampling_temperature,

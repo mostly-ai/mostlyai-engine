@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-import time
 import pandas as pd
 from pydantic import BaseModel, Field, SkipValidation, create_model
 import torch
@@ -183,7 +182,6 @@ class XGrammarHFLogitsProcessor(transformers.LogitsProcessor):
 
         return scores
 
-    
 
 @dataclass
 class XGrammarVLLMLogitsProcessor:
@@ -198,35 +196,27 @@ class XGrammarVLLMLogitsProcessor:
     batch_size: int = field(default=1)
     prefilled: bool = field(default=False)
 
-
     def _ensure_ctx(self):
         """Lazily initialize the processor in the worker process"""
         if self.ctx is None:
             compiler = GrammarCompilerCache.get_compiler(self.config)
             if self.config.json_str is not None:
                 any_whitespace = self.config.any_whitespace
-                self.ctx = compiler\
-                    .compile_json_schema(self.config.json_str,
-                                         any_whitespace=any_whitespace)
+                self.ctx = compiler.compile_json_schema(self.config.json_str, any_whitespace=any_whitespace)
             elif self.config.grammar_str is not None:
                 self.ctx = compiler.compile_grammar(self.config.grammar_str)
             elif self.config.json_object:
                 self.ctx = compiler.compile_builtin_json_grammar()
             else:
-                raise ValueError(
-                    "Invalid configuration for xgrammar logits processor")
+                raise ValueError("Invalid configuration for xgrammar logits processor")
 
-    def __call__(self, input_ids: list[int],
-                 scores: torch.Tensor) -> torch.Tensor:
+    def __call__(self, input_ids: list[int], scores: torch.Tensor) -> torch.Tensor:
         if self.ctx is None:
             self._ensure_ctx()
 
         if len(self.matchers) == 0:
-            self.matchers = [
-                xgr.GrammarMatcher(self.ctx) for _ in range(self.batch_size)
-            ]
-            self.token_bitmask = xgr.allocate_token_bitmask(
-                self.batch_size, self.tokenizer_info.vocab_size)
+            self.matchers = [xgr.GrammarMatcher(self.ctx) for _ in range(self.batch_size)]
+            self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.tokenizer_info.vocab_size)
 
         if not self.prefilled:
             # Have not sampled a token yet
@@ -256,15 +246,14 @@ class XGrammarVLLMLogitsProcessor:
         # Note: In this method, if the tensors have different dimensions
         # on CPU device fails, but on GPU it runs without error. Hence the
         # unsqueeze above for scores, to match the token bitmask shape
-        xgr.apply_token_bitmask_inplace(
-            scores, self.token_bitmask.to(scores.device, non_blocking=True))
+        xgr.apply_token_bitmask_inplace(scores, self.token_bitmask.to(scores.device, non_blocking=True))
         if device_type != "cuda":
             scores = scores.to(dtype).to(device_type).squeeze()
         return scores
 
     def clone(self) -> XGrammarVLLMLogitsProcessor:
         """Create a new instance with shared compiled grammar
-          but separate state"""
+        but separate state"""
         new_processor = XGrammarVLLMLogitsProcessor(self.config, self.tokenizer_info)
 
         # Share the compiled grammar context (immutable after compilation)
@@ -272,12 +261,10 @@ class XGrammarVLLMLogitsProcessor:
 
         # Create fresh matchers for the new sequence
         if self.ctx is not None:
-            new_processor.matchers = [
-                xgr.GrammarMatcher(self.ctx) for _ in range(self.batch_size)
-            ]
+            new_processor.matchers = [xgr.GrammarMatcher(self.ctx) for _ in range(self.batch_size)]
 
         # Create a new token bitmask with the same size
-        if hasattr(self, 'token_bitmask') and self.token_bitmask is not None:
+        if hasattr(self, "token_bitmask") and self.token_bitmask is not None:
             new_processor.token_bitmask = self.token_bitmask
 
         # Copy simple attributes

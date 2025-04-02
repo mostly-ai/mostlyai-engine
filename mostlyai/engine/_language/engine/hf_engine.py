@@ -34,10 +34,12 @@ import transformers
 
 from mostlyai.engine._language.xgrammar_utils import XGrammarHFLogitsProcessor
 
+
 def _adapt_grammar(grammar: str) -> str:
     if 'root ::= "{"' in grammar:
         return grammar.replace('root ::= "{"', 'root ::= " {"')
     return grammar
+
 
 def create_hf_logits_processors(
     schemas: list[BaseModel], tokenizer: AutoTokenizer
@@ -63,6 +65,7 @@ def create_hf_logits_processors(
     grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
     from xgrammar.testing import _json_schema_to_ebnf
     import json
+
     grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
     grammars = (_adapt_grammar(grammar) for grammar in grammars)
     compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]

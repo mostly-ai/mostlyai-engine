@@ -81,7 +81,9 @@ def create_vllm_xgrammar_logits_processors(llm: LLM, schemas: list[BaseModel]) -
     model_config = llm.llm_engine.get_model_config()
     for schema in schemas:
         guided_decoding_params = GuidedDecodingParams(json=schema.model_json_schema())
-        grammar_config = GrammarConfig.from_guided_params(guided_params=guided_decoding_params, model_config=model_config, tokenizer=tokenizer, max_threads=8)
+        grammar_config = GrammarConfig.from_guided_params(
+            guided_params=guided_decoding_params, model_config=model_config, tokenizer=tokenizer, max_threads=8
+        )
         tokenizer_info = GrammarConfig.tokenizer_info(grammar_config.tokenizer_data)
         logits_processor = XGrammarVLLMLogitsProcessor(config=grammar_config, tokenizer_info=tokenizer_info)
         logits_processors.append(logits_processor)
@@ -167,7 +169,7 @@ class VLLMEngine(LanguageEngine):
             self._logits_processors = create_vllm_logits_processors(
                 llm=self.llm, formatter_builders=formatter_builders, configs=None, vocab_processors=vocab_processors
             )
-            
+
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
