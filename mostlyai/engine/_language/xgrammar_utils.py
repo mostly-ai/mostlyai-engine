@@ -28,6 +28,12 @@ from transformers import PreTrainedTokenizerBase
 JSON_NULL = "null"
 
 
+def adapt_grammar(grammar: str) -> str:
+    if 'root ::= "{"' in grammar:
+        return grammar.replace('root ::= "{"', 'root ::= " {"')
+    return grammar
+
+
 def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:
     def transform(x: str | None) -> str:
         if pd.isna(x):

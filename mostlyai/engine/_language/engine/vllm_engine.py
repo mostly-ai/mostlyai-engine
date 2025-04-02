@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import json
 import time
 from dataclasses import dataclass, field
 from os import PathLike
@@ -32,10 +33,12 @@ from vllm.lora.request import LoRARequest
 from vllm.model_executor.guided_decoding.xgrammar_decoding import GrammarCompilerCache, GrammarConfig
 from vllm.platforms import current_platform
 from vllm.sampling_params import GuidedDecodingParams
+from xgrammar.testing import _json_schema_to_ebnf
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
+from mostlyai.engine._language.xgrammar_utils import adapt_grammar
 
 
 def cleanup_dist_env_and_memory():
@@ -50,12 +53,12 @@ def cleanup_dist_env_and_memory():
 
 
 def create_formatter_logits_processors(llm: LLM, schemas: list[BaseModel]) -> list[XGrammarLogitsProcessor]:
-    # TODO: add space in root ::= "{"
     logits_processors = []
     tokenizer = llm.get_tokenizer()
     model_config = llm.llm_engine.get_model_config()
     for schema in schemas:
-        guided_decoding_params = GuidedDecodingParams(json=schema.model_json_schema())
+        grammar = adapt_grammar(_json_schema_to_ebnf(json.dumps(schema.model_json_schema())))
+        guided_decoding_params = GuidedDecodingParams(grammar=grammar)
         grammar_config = GrammarConfig.from_guided_params(
             guided_params=guided_decoding_params, model_config=model_config, tokenizer=tokenizer, max_threads=8
         )

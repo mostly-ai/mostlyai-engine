@@ -28,13 +28,7 @@ from xgrammar.testing import _json_schema_to_ebnf
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.xgrammar_utils import XGrammarHFLogitsProcessor
-
-
-def _adapt_grammar(grammar: str) -> str:
-    if 'root ::= "{"' in grammar:
-        return grammar.replace('root ::= "{"', 'root ::= " {"')
-    return grammar
+from mostlyai.engine._language.xgrammar_utils import XGrammarHFLogitsProcessor, adapt_grammar
 
 
 def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
@@ -70,7 +64,7 @@ def create_formatter_logits_processors(
         tokenizer_info = get_tokenizer_info_for_lstm(tokenizer, vocab_size=vocab_size)
     grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
     grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
-    grammars = (_adapt_grammar(grammar) for grammar in grammars)
+    grammars = (adapt_grammar(grammar) for grammar in grammars)
     compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]
     logits_processor = XGrammarHFLogitsProcessor(compiled_grammars)
     return [logits_processor]
