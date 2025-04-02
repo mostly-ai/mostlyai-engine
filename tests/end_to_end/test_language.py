@@ -31,7 +31,12 @@ from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
-from mostlyai.engine._language.training import train, _gpu_estimate_max_batch_size
+from mostlyai.engine._language.training import (
+    train,
+    _gpu_estimate_max_batch_size,
+    _physical_batch_size_heuristic,
+    _gradient_accumulation_steps_heuristic,
+)
 from mostlyai.engine.domain import (
     ModelEncodingType,
     ModelStateStrategy,
@@ -601,3 +606,33 @@ def test_gpu_estimate_max_batch_size():
     for name, param in model.named_parameters():
         assert torch.equal(param, initial_params[name])
         assert param.grad is None
+
+
+def test_batch_size_and_gradient_accumulation_heuristics():
+    gpu_device = torch.device("cuda")
+    bs = _physical_batch_size_heuristic(
+        no_of_records=1000, no_of_model_params=5_000_000, max_tokens=50, device=gpu_device
+    )
+    assert bs == 64
+    steps = _gradient_accumulation_steps_heuristic(
+        batch_size=64,
+        no_of_records=1000,
+    )
+    assert steps == 1
+
+    steps = _gradient_accumulation_steps_heuristic(
+        batch_size=32,
+        no_of_records=6000,
+    )
+    assert steps == 2
+
+    # very small dataset
+    bs = _physical_batch_size_heuristic(
+        no_of_records=10, no_of_model_params=5_000_000, max_tokens=50, device=gpu_device
+    )
+    assert bs == 1
+    steps = _gradient_accumulation_steps_heuristic(
+        batch_size=32,
+        no_of_records=10,
+    )
+    assert steps == 1
