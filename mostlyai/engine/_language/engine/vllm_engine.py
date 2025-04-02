@@ -13,35 +13,32 @@
 # limitations under the License.
 
 from __future__ import annotations
+
 import contextlib
-from dataclasses import dataclass, field
-from os import PathLike
+import gc
 import time
 import typing
+from dataclasses import dataclass, field
+from os import PathLike
 
+import torch
+import xgrammar as xgr
+from formatron.formatter import FormatterBuilder
+from peft import PeftConfig
 from pydantic import BaseModel
+from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizerBase
+from vllm import LLM, SamplingParams
+from vllm.config import _get_and_verify_max_len
+from vllm.distributed import destroy_distributed_environment, destroy_model_parallel
+from vllm.lora.request import LoRARequest
+from vllm.model_executor.guided_decoding.xgrammar_decoding import GrammarCompilerCache, GrammarConfig
+from vllm.platforms import current_platform
+from vllm.sampling_params import GuidedDecodingParams
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
-import torch
-from formatron.formatter import FormatterBuilder
-
-from peft import PeftConfig
-
-from transformers import AutoTokenizer, AutoConfig, PreTrainedTokenizerBase
 from mostlyai.engine._language.formatron_utils import monkey_patch_formatron
-from vllm import LLM, SamplingParams
-from vllm.lora.request import LoRARequest
-from vllm.config import _get_and_verify_max_len
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from vllm.distributed import destroy_model_parallel, destroy_distributed_environment
-from vllm.sampling_params import GuidedDecodingParams
-from vllm.model_executor.guided_decoding.xgrammar_decoding import GrammarConfig
-
-import gc
-from vllm.platforms import current_platform
-import xgrammar as xgr
-from vllm.model_executor.guided_decoding.xgrammar_decoding import GrammarCompilerCache
 
 
 def cleanup_dist_env_and_memory():
