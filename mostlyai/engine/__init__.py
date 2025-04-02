@@ -22,7 +22,7 @@ from mostlyai.engine.generation import generate
 
 
 __all__ = ["split", "analyze", "encode", "train", "generate", "init_logging"]
-__version__ = "1.1.10"
+__version__ = "1.1.11"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*multi-threaded.*fork.*")
