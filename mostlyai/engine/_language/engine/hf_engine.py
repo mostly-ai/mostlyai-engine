@@ -19,7 +19,6 @@ from pathlib import Path
 
 from pydantic import BaseModel
 import torch
-from formatron.integrations.transformers import create_formatter_logits_processor_list
 from peft import PeftModel
 
 from transformers import AutoTokenizer
@@ -41,15 +40,16 @@ def _adapt_grammar(grammar: str) -> str:
     return grammar
 
 
-def create_hf_logits_processors(
+def create_formatter_logits_processors(
     schemas: list[BaseModel], tokenizer: AutoTokenizer
 ) -> list[transformers.LogitsProcessor]:
     # TODO: take vocab_size from model's config
+    # TODO: if/else for LSTM and LLMs
     vocab_dict = tokenizer.get_vocab()
     vocab_size = tokenizer.vocab_size
     stop_token_ids = [tokenizer.eos_token_id]
     vocab_type = xgr.VocabType.BYTE_FALLBACK
-    add_prefix_space = True
+    add_prefix_space = True  # TODO: what should be this?
     encoded_vocab = [""] * vocab_size
     for token, idx in vocab_dict.items():
         if idx < vocab_size:
@@ -126,12 +126,7 @@ class HuggingFaceEngine(LanguageEngine):
         vocab_processors: list[Callable] | None = None,
         dev=None,
     ):
-        if self._dev["use_xgrammar"]:
-            self._logits_processors = create_hf_logits_processors(schemas=dev["schemas"], tokenizer=self.tokenizer)
-        else:
-            self._logits_processors = create_formatter_logits_processor_list(
-                tokenizer=self.tokenizer, formatter_builders=formatter_builders, vocab_processors=vocab_processors
-            )
+        self._logits_processors = create_formatter_logits_processors(schemas=dev["schemas"], tokenizer=self.tokenizer)
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
@@ -161,17 +156,9 @@ class HuggingFaceEngine(LanguageEngine):
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        if self._logits_processors is not None and not self._dev["use_xgrammar"]:
-            # number of formatters must match the batch size, batch size is always reduced so this is fine
-            actual_batch_size = len(inputs["input_ids"])
-            self._logits_processors[0]._formatters = self._logits_processors[0]._formatters[:actual_batch_size]
-
         t_generate = time.time()
         outputs = self._model.generate(**inputs, **generate_kwargs, logits_processor=self._logits_processors)
         generate_time = time.time() - t_generate
-
-        if self._logits_processors and not self._dev["use_xgrammar"]:
-            self._logits_processors[0].reset()
 
         _, input_length = inputs["input_ids"].shape
         # truncate the prompt from the outputs

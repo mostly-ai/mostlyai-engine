@@ -53,6 +53,7 @@ def cleanup_dist_env_and_memory():
 
 
 def create_formatter_logits_processors(llm: LLM, schemas: list[BaseModel]) -> list[XGrammarLogitsProcessor]:
+    # TODO: add space in root ::= "{"
     logits_processors = []
     tokenizer = llm.get_tokenizer()
     model_config = llm.llm_engine.get_model_config()
@@ -277,11 +278,8 @@ class VLLMEngine(LanguageEngine):
             lora_request=self._lora_request,
         )
         generate_time = time.time() - t_generate
-        print(f"generate time: {generate_time:.2f}s")
-        if self._logits_processors is not None and not self._dev["use_xgrammar"]:
-            for lp in self._logits_processors:
-                lp.reset()
-        if self._logits_processors is not None and self._dev["use_xgrammar"]:
+        # TODO: do we need this?
+        if self._logits_processors is not None:
             self._logits_processors = [lp.clone() for lp in self._logits_processors]
         metrics = EngineMetrics(tokenize_time=tokenize_time, generate_time=generate_time)
         return [r.outputs[0].token_ids for r in outputs], metrics
