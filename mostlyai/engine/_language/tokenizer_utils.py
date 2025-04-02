@@ -48,7 +48,6 @@ def train_tokenizer(
     }
     SPECIAL_TOKENS = list(special_tokens.values())
     NEW_LINE_VALUE = "\n"
-    SPACE_VALUE = " "
     NEW_LINE_SYMBOL = "\u240a"  # https://www.fileformat.info/info/unicode/char/240a/index.htm
     MIN_FREQ_MERGE = 20
     VOCAB_SIZE = 5000
@@ -60,7 +59,7 @@ def train_tokenizer(
     has_datetime_columns = any(
         col_stats["encoding_type"] == ModelEncodingType.language_datetime for col_stats in tgt_stats["columns"].values()
     )
-    initial_alphabet = {NEW_LINE_VALUE, SPACE_VALUE}
+    initial_alphabet = set()
     if has_numeric_columns:
         # FIXME: maybe the set can be more fine-grained based on max_scale in stats
         initial_alphabet |= {str(i) for i in range(10)} | {".", "-", "+", "e", "E"}

@@ -34,13 +34,38 @@ import transformers
 
 from mostlyai.engine._language.xgrammar_utils import XGrammarHFLogitsProcessor
 
+def _adapt_grammar(grammar: str) -> str:
+    if 'root ::= "{"' in grammar:
+        return grammar.replace('root ::= "{"', 'root ::= " {"')
+    return grammar
 
 def create_hf_logits_processors(
     schemas: list[BaseModel], tokenizer: AutoTokenizer
 ) -> list[transformers.LogitsProcessor]:
-    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=tokenizer.vocab_size)
+    # TODO: take vocab_size from model's config
+    vocab_dict = tokenizer.get_vocab()
+    vocab_size = tokenizer.vocab_size
+    stop_token_ids = [tokenizer.eos_token_id]
+    vocab_type = xgr.VocabType.BYTE_FALLBACK
+    add_prefix_space = True
+    encoded_vocab = [""] * vocab_size
+    for token, idx in vocab_dict.items():
+        if idx < vocab_size:
+            encoded_vocab[idx] = token
+    tokenizer_info = xgr.TokenizerInfo(
+        encoded_vocab,
+        vocab_type=vocab_type,
+        vocab_size=vocab_size,
+        stop_token_ids=stop_token_ids,
+        add_prefix_space=add_prefix_space,
+    )
+    # tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=tokenizer.vocab_size)
     grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    compiled_grammars = [grammar_compiler.compile_json_schema(schema) for schema in schemas]
+    from xgrammar.testing import _json_schema_to_ebnf
+    import json
+    grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
+    grammars = (_adapt_grammar(grammar) for grammar in grammars)
+    compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]
     logits_processor = XGrammarHFLogitsProcessor(compiled_grammars)
     return [logits_processor]
 
