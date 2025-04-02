@@ -523,6 +523,7 @@ def train(
                 no_of_model_params=no_of_model_params,
             )
         if gradient_accumulation_steps is None:
+            # for TABULAR the batch size is typically large, so we use step=1 as default
             gradient_accumulation_steps = 1
 
         # setup params for input pipeline

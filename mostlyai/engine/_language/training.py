@@ -506,8 +506,8 @@ def train(
                 device=device,
             )
         batch_size = max(1, min(batch_size, trn_cnt))
-        # find largest batch size that fits in GPU memory during training
         if device.type == "cuda" and not batch_size_provided:
+            # find largest batch size that fits in GPU memory during training
             batch_size = _gpu_estimate_max_batch_size(
                 model=model, device=device, max_tokens=max_tokens, initial_batch_size=batch_size
             )
