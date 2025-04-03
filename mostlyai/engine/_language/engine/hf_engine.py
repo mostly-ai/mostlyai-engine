@@ -191,7 +191,7 @@ class HuggingFaceEngine(LanguageEngine):
             temperature=sampling_temperature if do_sample else None,
             top_p=sampling_top_p if do_sample else None,
             bos_token_id=self.tokenizer.bos_token_id,
-            pad_token_id=self.tokenizer.eos_token_id,  # must be eos or will get ValueError from formatron
+            pad_token_id=self.tokenizer.eos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
         )
 

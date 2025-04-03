@@ -38,7 +38,6 @@ dependencies = [
     "peft>=0.12.0",
     "huggingface-hub>=0.28.0,<0.29",
     "opacus>=1.5.2,<2",
-    "formatron>=0.4.11,<0.5",
     "xgrammar==0.1.16",  # for vllm 0.8.1 compatibility
     "json-repair>=0.30.0",
     "rich>=13.9.4,<14",

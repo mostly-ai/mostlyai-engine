@@ -271,7 +271,6 @@ def generate(
             batch_size = sample_size
         _LOG.info(f"{batch_size=}")
 
-        # prepare seed data for clean consumption by formatron
         seed_data = ensure_seed_can_be_tokenized(seed_data, engine.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
 
