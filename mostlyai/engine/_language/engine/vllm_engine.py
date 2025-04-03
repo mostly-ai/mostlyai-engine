@@ -19,7 +19,7 @@ import gc
 import json
 import time
 from os import PathLike
-from typing import Generator
+from collections.abc import Generator
 
 import torch
 import xgrammar as xgr
@@ -50,7 +50,7 @@ def cleanup_dist_env_and_memory():
         torch.cuda.empty_cache()
 
 
-def create_formatter_logits_processors(llm: LLM, schemas: Generator[BaseModel, None, None]) -> list[XGrammarLogitsProcessor]:
+def create_formatter_logits_processors(llm: LLM, schemas: Generator[BaseModel]) -> list[XGrammarLogitsProcessor]:
     tokenizer = llm.get_tokenizer()
     # in general, there might be misalignment between the model's and tokenizer's vocab_size
     # the former is expected by XGrammar
@@ -129,7 +129,7 @@ class XGrammarLogitsProcessor:
             new_processor.token_bitmask = self.token_bitmask
 
         new_processor.batch_size = self.batch_size
-        
+
         # reset prefilled state for new sequence
         new_processor.prefilled = False
 
@@ -201,7 +201,7 @@ class VLLMEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return True
 
-    def initialize_logits_processors(self, schemas: Generator[BaseModel, None, None]):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
         self._logits_processors = create_formatter_logits_processors(schemas=schemas, llm=self.llm)
 
     def generate(

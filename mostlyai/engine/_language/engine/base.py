@@ -14,10 +14,8 @@
 
 from dataclasses import dataclass
 from abc import abstractmethod, ABC
-from collections.abc import Callable
-from typing import Generator
+from collections.abc import Generator
 
-from formatron.formatter import FormatterBuilder
 from pydantic import BaseModel
 
 

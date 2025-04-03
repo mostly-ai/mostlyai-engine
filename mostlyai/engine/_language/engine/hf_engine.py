@@ -16,7 +16,7 @@ import json
 import time
 from os import PathLike
 from pathlib import Path
-from typing import Generator
+from collections.abc import Generator
 
 import torch
 import transformers

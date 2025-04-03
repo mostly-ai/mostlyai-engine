@@ -14,7 +14,8 @@
 
 from __future__ import annotations
 
-from typing import Generator, Literal
+from typing import Literal
+from collections.abc import Generator
 
 import pandas as pd
 from pydantic import BaseModel, Field, SkipValidation, create_model
@@ -57,7 +58,7 @@ def get_schemas(
     size: int | None = None,
     stats: dict,
     rare_category_replacement_method: RareCategoryReplacementMethod,
-) -> Generator[BaseModel, None, None]:
+) -> Generator[BaseModel]:
     assert (seed_df is not None) ^ (size is not None), "exactly one of seed_df or size must be provided"
     if seed_df is None:
         seed_df = pd.DataFrame(index=range(size))
