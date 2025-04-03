@@ -31,66 +31,57 @@ from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from mostlyai.engine._language.xgrammar_utils import prepend_grammar_root_with_space
 
 
-class XGrammarHFLogitsProcessor(transformers.LogitsProcessor):
-    """
-    LogitsProcessor for processing logits in transformers' generate() method.
+def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
+    # trimmed down version of xgr.TokenizerInfo.from_huggingface
+    # the original function sets vocab_type to VocabType.RAW,
+    # but LSTM tokenizer needs VocabType.BYTE_FALLBACK, because of the usage of metaspace ("▁")
+    encoded_vocab = [""] * vocab_size
+    for token, idx in tokenizer.get_vocab().items():
+        if idx < vocab_size:
+            encoded_vocab[idx] = token
+    tokenizer_info = xgr.TokenizerInfo(
+        encoded_vocab,
+        vocab_type=xgr.VocabType.BYTE_FALLBACK,
+        vocab_size=vocab_size,
+        stop_token_ids=[tokenizer.eos_token_id],
+        add_prefix_space=True,
+    )
+    return tokenizer_info
 
-    Example usage
-    -------------
-        .. code:: python
 
-            model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            config = AutoConfig.from_pretrained(model_name)
-            # This can be larger than tokenizer.vocab_size due to paddings
-            full_vocab_size = config.vocab_size
-            tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=full_vocab_size)
+def create_formatter_logits_processors(
+    schemas: list[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
+) -> list[transformers.LogitsProcessor]:
+    # in general, there might be misalignment between the model's and tokenizer's vocab_size
+    # the former is expected by XGrammar
+    if is_peft_adapter:
+        tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)
+    else:
+        tokenizer_info = get_tokenizer_info_for_lstm(tokenizer, vocab_size=vocab_size)
+    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+    grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
+    grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
+    compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]
+    logits_processor = XGrammarLogitsProcessor(compiled_grammars)
+    return [logits_processor]
 
-            grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-            compiled_grammar = grammar_compiler.compile_builtin_json_grammar()
-            xgr_logits_processor = xgr.contrib.hf.LogitsProcessor(compiled_grammar)
-            model.generate(prompt, logits_processor=[xgr_logits_processor])
 
-        For an end-to-end example, see folder `examples/hf_transformers/`.
+class XGrammarLogitsProcessor(transformers.LogitsProcessor):
+    # HuggingFace'sXGrammarLogitsProcessor cannot be reused
+    # logits processors must be initialized for each call to generate()
 
-    Notes
-    -----
-        - Note that this LogitsProcessor can only be used once. For each `generate()` call,
-            instantiate a new one.
-        - Note that this implementation may contain extra overhead.
-    """
-
-    def __init__(self, compiled_grammar: xgr.CompiledGrammar | list[xgr.CompiledGrammar]):
-        """Initialize the LogitsProcessor.
-
-        Parameters
-        ----------
-        compiled_grammar : xgr.CompiledGrammar | List[xgr.CompiledGrammar]
-            One or more grammars compiled according to the given grammar and the model's tokenizer_info.
-        """
-        self.matchers: list[xgr.GrammarMatcher] = []
-        self.compiled_grammars = compiled_grammar if isinstance(compiled_grammar, list) else [compiled_grammar]
+    def __init__(self, compiled_grammars: list[xgr.CompiledGrammar]):
+        self.compiled_grammars = compiled_grammars
         self.full_vocab_size = self.compiled_grammars[0].tokenizer_info.vocab_size
+        self.batch_size = len(compiled_grammars)
+
+        self.matchers: list[xgr.GrammarMatcher] = []
         self.token_bitmask = None
         self.prefilled = False
-        self.batch_size = 0
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """
-        Accept token sampled in the last iteration, fill in bitmask, and apply bitmask to logits.
-
-        Returns:
-            scores: Logits modified with bitmask.
-        """
         # Lazily initialize GrammarMatchers and bitmask
         if len(self.matchers) == 0:
-            self.batch_size = input_ids.shape[0]
-            self.compiled_grammars = (
-                self.compiled_grammars if len(self.compiled_grammars) > 1 else self.compiled_grammars * self.batch_size
-            )
-            assert len(self.compiled_grammars) == self.batch_size, (
-                "The number of compiled grammars must be equal to the batch size."
-            )
             self.matchers = [xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)]
             self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.full_vocab_size)
 
@@ -113,58 +104,13 @@ class XGrammarHFLogitsProcessor(transformers.LogitsProcessor):
             if not self.matchers[i].is_terminated():
                 self.matchers[i].fill_next_token_bitmask(self.token_bitmask, i)
 
-        # We only support masking logits on CUDA or CPU
         device_type = scores.device.type
         if device_type != "cuda":
             scores = scores.to("cpu")
         xgr.apply_token_bitmask_inplace(scores, self.token_bitmask.to(scores.device))
         if device_type != "cuda":
             scores = scores.to(device_type)
-
-        # NOTE: Cannot reset here because __call__ is not invoked when stop token
-        # is sampled. This is why each `generate()` call needs to instantiate an
-        # LogitsProcessor
-
         return scores
-
-
-def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
-    # trimmed down version of xgr.TokenizerInfo.from_huggingface
-    # the original function sets vocab_type to VocabType.RAW,
-    # but LSTM tokenizer needs VocabType.BYTE_FALLBACK, because the usage of metaspace ("▁")
-    vocab_dict = tokenizer.get_vocab()
-    stop_token_ids = [tokenizer.eos_token_id]
-    vocab_type = xgr.VocabType.BYTE_FALLBACK
-    add_prefix_space = True  # TODO: what should this be?
-    encoded_vocab = [""] * vocab_size
-    for token, idx in vocab_dict.items():
-        if idx < vocab_size:
-            encoded_vocab[idx] = token
-    tokenizer_info = xgr.TokenizerInfo(
-        encoded_vocab,
-        vocab_type=vocab_type,
-        vocab_size=vocab_size,
-        stop_token_ids=stop_token_ids,
-        add_prefix_space=add_prefix_space,
-    )
-    return tokenizer_info
-
-
-def create_formatter_logits_processors(
-    schemas: list[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool
-) -> list[transformers.LogitsProcessor]:
-    # TODO: take vocab_size from model's config
-    vocab_size = tokenizer.vocab_size
-    if is_peft_adapter:
-        tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)
-    else:
-        tokenizer_info = get_tokenizer_info_for_lstm(tokenizer, vocab_size=vocab_size)
-    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
-    grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
-    compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]
-    logits_processor = XGrammarHFLogitsProcessor(compiled_grammars)
-    return [logits_processor]
 
 
 class HuggingFaceEngine(LanguageEngine):
@@ -177,7 +123,7 @@ class HuggingFaceEngine(LanguageEngine):
         self.is_peft_adapter = (Path(model_path) / "adapter_config.json").exists()
 
         model_path = str(model_path)
-        self._model, _ = load_base_model_and_config(
+        self._model, self._model_config = load_base_model_and_config(
             model_path, device=device, is_peft_adapter=self.is_peft_adapter, is_training=False
         )
         if self.is_peft_adapter:
@@ -213,7 +159,10 @@ class HuggingFaceEngine(LanguageEngine):
 
     def initialize_logits_processors(self, schemas: list[BaseModel]):
         self._logits_processors = create_formatter_logits_processors(
-            schemas=schemas, tokenizer=self.tokenizer, is_peft_adapter=self.is_peft_adapter
+            schemas=schemas,
+            tokenizer=self.tokenizer,
+            is_peft_adapter=self.is_peft_adapter,
+            vocab_size=self._model_config.vocab_size,
         )
 
     def generate(
