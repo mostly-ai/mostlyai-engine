@@ -38,7 +38,7 @@ from xgrammar.testing import _json_schema_to_ebnf
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.xgrammar_utils import adapt_grammar
+from mostlyai.engine._language.xgrammar_utils import prepend_grammar_root_with_space
 
 
 def cleanup_dist_env_and_memory():
@@ -57,7 +57,7 @@ def create_formatter_logits_processors(llm: LLM, schemas: list[BaseModel]) -> li
     tokenizer = llm.get_tokenizer()
     model_config = llm.llm_engine.get_model_config()
     for schema in schemas:
-        grammar = adapt_grammar(_json_schema_to_ebnf(json.dumps(schema.model_json_schema())))
+        grammar = prepend_grammar_root_with_space(_json_schema_to_ebnf(json.dumps(schema.model_json_schema())))
         guided_decoding_params = GuidedDecodingParams(grammar=grammar)
         grammar_config = GrammarConfig.from_guided_params(
             guided_params=guided_decoding_params, model_config=model_config, tokenizer=tokenizer, max_threads=8

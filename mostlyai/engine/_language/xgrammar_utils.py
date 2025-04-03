@@ -26,10 +26,15 @@ from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMet
 JSON_NULL = "null"
 
 
-def adapt_grammar(grammar: str) -> str:
-    if 'root ::= "{"' in grammar:
-        return grammar.replace('root ::= "{"', 'root ::= " {"')
-    return grammar
+def prepend_grammar_root_with_space(grammar: str) -> str:
+    # XGrammar always starts with "{" when enforcing JSON Schema
+    # training is done on strings like ` {...} {...}`
+    # later, generation is done with prompt like ` {...}`
+    # so the first output token must be a space
+    start_of_grammar = 'root ::= "{"'
+    start_of_grammar_with_space = 'root ::= " {"'
+    assert start_of_grammar in grammar
+    return grammar.replace(start_of_grammar, start_of_grammar_with_space)
 
 
 def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:
