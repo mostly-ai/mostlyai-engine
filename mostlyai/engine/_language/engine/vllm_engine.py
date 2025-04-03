@@ -18,7 +18,6 @@ import contextlib
 import gc
 import json
 import time
-from dataclasses import dataclass, field
 from os import PathLike
 
 import torch
@@ -30,9 +29,7 @@ from vllm import LLM, SamplingParams
 from vllm.config import _get_and_verify_max_len
 from vllm.distributed import destroy_distributed_environment, destroy_model_parallel
 from vllm.lora.request import LoRARequest
-from vllm.model_executor.guided_decoding.xgrammar_decoding import GrammarCompilerCache, GrammarConfig
 from vllm.platforms import current_platform
-from vllm.sampling_params import GuidedDecodingParams
 from xgrammar.testing import _json_schema_to_ebnf
 
 from mostlyai.engine._language.common import is_bf16_supported
