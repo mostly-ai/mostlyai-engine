@@ -67,12 +67,14 @@ def create_formatter_logits_processors(
 
 
 class XGrammarLogitsProcessor(transformers.LogitsProcessor):
-    # HuggingFace'sXGrammarLogitsProcessor cannot be reused
-    # logits processors must be initialized for each call to generate()
+    """
+    Inspired by [LogitsProcessor](https://github.com/mlc-ai/xgrammar/blob/414473e7c029d0d9e2dfbeacb48afa946d0e3419/python/xgrammar/contrib/hf.py#L14).
+    HuggingFace's XGrammarLogitsProcessor cannot be reused. Logits processors must be initialized for each call to generate().
+    """
 
     def __init__(self, compiled_grammars: list[xgr.CompiledGrammar]):
         self.compiled_grammars = compiled_grammars
-        self.full_vocab_size = self.compiled_grammars[0].tokenizer_info.vocab_size
+        self.vocab_size = self.compiled_grammars[0].tokenizer_info.vocab_size
         self.batch_size = len(compiled_grammars)
 
         self.matchers: list[xgr.GrammarMatcher] = []
@@ -83,7 +85,7 @@ class XGrammarLogitsProcessor(transformers.LogitsProcessor):
         # Lazily initialize GrammarMatchers and bitmask
         if len(self.matchers) == 0:
             self.matchers = [xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)]
-            self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.full_vocab_size)
+            self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.vocab_size)
 
         if input_ids.shape[0] != self.batch_size:
             raise RuntimeError(

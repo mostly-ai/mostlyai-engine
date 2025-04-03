@@ -54,47 +54,41 @@ def cleanup_dist_env_and_memory():
 
 def create_formatter_logits_processors(llm: LLM, schemas: list[BaseModel]) -> list[XGrammarLogitsProcessor]:
     logits_processors = []
-    tokenizer = llm.get_tokenizer()
-    model_config = llm.llm_engine.get_model_config()
+    # in general, there might be misalignment between the model's and tokenizer's vocab_size
+    # the former is expected by XGrammar
+    vocab_size = llm.llm_engine.get_model_config().get_vocab_size()
     for schema in schemas:
-        grammar = prepend_grammar_root_with_space(_json_schema_to_ebnf(json.dumps(schema.model_json_schema())))
-        guided_decoding_params = GuidedDecodingParams(grammar=grammar)
-        grammar_config = GrammarConfig.from_guided_params(
-            guided_params=guided_decoding_params, model_config=model_config, tokenizer=tokenizer, max_threads=8
-        )
-        tokenizer_info = GrammarConfig.tokenizer_info(grammar_config.tokenizer_data)
-        logits_processor = XGrammarLogitsProcessor(config=grammar_config, tokenizer_info=tokenizer_info)
+        tokenizer_info = xgr.TokenizerInfo.from_huggingface(llm.get_tokenizer(), vocab_size=vocab_size)
+        grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+        json_schema = json.dumps(schema.model_json_schema())
+        grammar = _json_schema_to_ebnf(json_schema)
+        grammar = prepend_grammar_root_with_space(_json_schema_to_ebnf(json_schema))
+        compiled_grammar = grammar_compiler.compile_grammar(grammar)
+        logits_processor = XGrammarLogitsProcessor(compiled_grammar)
         logits_processors.append(logits_processor)
     return logits_processors
 
 
-@dataclass
 class XGrammarLogitsProcessor:
-    # TODO: trim down further
-    """Adapted from vllm.model_executor.guided_decoding.xgrammar_decoding.XGrammarLogitsProcessor"""
+    """
+    Inspired by [XGrammarLogitsProcessor](https://github.com/vllm-project/vllm/blob/a43aa183dc0cb2639044c15d272e0ce1941392b0/vllm/model_executor/guided_decoding/xgrammar_decoding.py#L280).
+    TODO: can be reused comment
+    """
 
-    config: GrammarConfig
-    tokenizer_info: xgr.TokenizerInfo
+    def __init__(self, compiled_grammar: xgr.CompiledGrammar):
+        self.compiled_grammar = compiled_grammar
+        self.tokenizer_info = compiled_grammar.tokenizer_info
+        self.batch_size = 1
 
-    ctx: xgr.CompiledGrammar | None = None
-    token_bitmask: torch.Tensor = None  # type: ignore[assignment]
-    matchers: list[xgr.GrammarMatcher] = field(default_factory=list)
-    batch_size: int = field(default=1)
-    prefilled: bool = field(default=False)
+        self.ctx = None
+        self.matchers: list[xgr.GrammarMatcher] = []
+        self.token_bitmask = None
+        self.prefilled = False
 
     def _ensure_ctx(self):
         """Lazily initialize the processor in the worker process"""
         if self.ctx is None:
-            compiler = GrammarCompilerCache.get_compiler(self.config)
-            if self.config.json_str is not None:
-                any_whitespace = self.config.any_whitespace
-                self.ctx = compiler.compile_json_schema(self.config.json_str, any_whitespace=any_whitespace)
-            elif self.config.grammar_str is not None:
-                self.ctx = compiler.compile_grammar(self.config.grammar_str)
-            elif self.config.json_object:
-                self.ctx = compiler.compile_builtin_json_grammar()
-            else:
-                raise ValueError("Invalid configuration for xgrammar logits processor")
+            self.ctx = self.compiled_grammar
 
     def __call__(self, input_ids: list[int], scores: torch.Tensor) -> torch.Tensor:
         if self.ctx is None:
@@ -138,9 +132,8 @@ class XGrammarLogitsProcessor:
         return scores
 
     def clone(self) -> XGrammarLogitsProcessor:
-        """Create a new instance with shared compiled grammar
-        but separate state"""
-        new_processor = XGrammarLogitsProcessor(self.config, self.tokenizer_info)
+        """Create a new instance with shared compiled grammar but separate state"""
+        new_processor = XGrammarLogitsProcessor(self.compiled_grammar)
 
         # Share the compiled grammar context (immutable after compilation)
         new_processor.ctx = self.ctx
