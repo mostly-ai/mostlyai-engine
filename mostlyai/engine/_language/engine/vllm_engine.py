@@ -271,9 +271,6 @@ class VLLMEngine(LanguageEngine):
             lora_request=self._lora_request,
         )
         generate_time = time.time() - t_generate
-        # TODO: do we need this?
-        # if self._logits_processors is not None:
-        #     self._logits_processors = [lp.clone() for lp in self._logits_processors]
         metrics = EngineMetrics(tokenize_time=tokenize_time, generate_time=generate_time)
         return [r.outputs[0].token_ids for r in outputs], metrics
 
