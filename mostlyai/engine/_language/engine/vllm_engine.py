@@ -19,6 +19,7 @@ import gc
 import json
 import time
 from os import PathLike
+from typing import Generator
 
 import torch
 import xgrammar as xgr
@@ -49,27 +50,25 @@ def cleanup_dist_env_and_memory():
         torch.cuda.empty_cache()
 
 
-def create_formatter_logits_processors(llm: LLM, schemas: list[BaseModel]) -> list[XGrammarLogitsProcessor]:
-    logits_processors = []
+def create_formatter_logits_processors(llm: LLM, schemas: Generator[BaseModel, None, None]) -> list[XGrammarLogitsProcessor]:
+    tokenizer = llm.get_tokenizer()
     # in general, there might be misalignment between the model's and tokenizer's vocab_size
     # the former is expected by XGrammar
     vocab_size = llm.llm_engine.get_model_config().get_vocab_size()
-    for schema in schemas:
-        tokenizer_info = xgr.TokenizerInfo.from_huggingface(llm.get_tokenizer(), vocab_size=vocab_size)
-        grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-        json_schema = json.dumps(schema.model_json_schema())
-        grammar = _json_schema_to_ebnf(json_schema)
-        grammar = prepend_grammar_root_with_space(_json_schema_to_ebnf(json_schema))
-        compiled_grammar = grammar_compiler.compile_grammar(grammar)
-        logits_processor = XGrammarLogitsProcessor(compiled_grammar)
-        logits_processors.append(logits_processor)
+    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)
+    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+    schemas = (json.dumps(schema.model_json_schema()) for schema in schemas)
+    grammars = (_json_schema_to_ebnf(schema) for schema in schemas)
+    grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
+    compiled_grammars = (grammar_compiler.compile_grammar(grammar) for grammar in grammars)
+    logits_processors = [XGrammarLogitsProcessor(compiled_grammar) for compiled_grammar in compiled_grammars]
     return logits_processors
 
 
 class XGrammarLogitsProcessor:
     """
     Inspired by [XGrammarLogitsProcessor](https://github.com/vllm-project/vllm/blob/a43aa183dc0cb2639044c15d272e0ce1941392b0/vllm/model_executor/guided_decoding/xgrammar_decoding.py#L280).
-    TODO: can be reused comment
+    VLLM's XGrammarLogitsProcessor can be reused.
     """
 
     def __init__(self, compiled_grammar: xgr.CompiledGrammar):
@@ -77,26 +76,18 @@ class XGrammarLogitsProcessor:
         self.tokenizer_info = compiled_grammar.tokenizer_info
         self.batch_size = 1
 
-        self.ctx = None
         self.matchers: list[xgr.GrammarMatcher] = []
         self.token_bitmask = None
         self.prefilled = False
 
-    def _ensure_ctx(self):
-        """Lazily initialize the processor in the worker process"""
-        if self.ctx is None:
-            self.ctx = self.compiled_grammar
-
-    def __call__(self, input_ids: list[int], scores: torch.Tensor) -> torch.Tensor:
-        if self.ctx is None:
-            self._ensure_ctx()
-
+    def __call__(self, input_ids: tuple[int], scores: torch.Tensor) -> torch.Tensor:
+        # lazily initialize GrammarMatchers and bitmask
         if len(self.matchers) == 0:
-            self.matchers = [xgr.GrammarMatcher(self.ctx) for _ in range(self.batch_size)]
+            self.matchers = [xgr.GrammarMatcher(self.compiled_grammar) for _ in range(self.batch_size)]
             self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.tokenizer_info.vocab_size)
 
         if not self.prefilled:
-            # Have not sampled a token yet
+            # have not sampled a token yet
             self.prefilled = True
         else:
             for i, matcher in enumerate(self.matchers):
@@ -106,9 +97,6 @@ class XGrammarLogitsProcessor:
 
         for i, matcher in enumerate(self.matchers):
             if not matcher.is_terminated():
-                # @ubospica: ideally, fill_next_token_bitmask should be
-                # parallelized with model decoding
-                # See https://github.com/vllm-project/vllm/pull/10785/files#r1864278303
                 matcher.fill_next_token_bitmask(self.token_bitmask, i)
 
         # token_bitmask is a CPU tensor for use with accept_token and
@@ -132,21 +120,19 @@ class XGrammarLogitsProcessor:
         """Create a new instance with shared compiled grammar but separate state"""
         new_processor = XGrammarLogitsProcessor(self.compiled_grammar)
 
-        # Share the compiled grammar context (immutable after compilation)
-        new_processor.ctx = self.ctx
+        # create fresh matchers for the new sequence
+        if len(self.matchers) > 0:
+            new_processor.matchers = [xgr.GrammarMatcher(self.compiled_grammar) for _ in range(self.batch_size)]
 
-        # Create fresh matchers for the new sequence
-        if self.ctx is not None:
-            new_processor.matchers = [xgr.GrammarMatcher(self.ctx) for _ in range(self.batch_size)]
-
-        # Create a new token bitmask with the same size
-        if hasattr(self, "token_bitmask") and self.token_bitmask is not None:
+        # create a new token bitmask with the same size
+        if self.token_bitmask is not None:
             new_processor.token_bitmask = self.token_bitmask
 
-        # Copy simple attributes
         new_processor.batch_size = self.batch_size
-        # Reset prefilled state for new sequence
+        
+        # reset prefilled state for new sequence
         new_processor.prefilled = False
+
         return new_processor
 
 
@@ -215,7 +201,7 @@ class VLLMEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return True
 
-    def initialize_logits_processors(self, schemas: list[BaseModel]):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel, None, None]):
         self._logits_processors = create_formatter_logits_processors(schemas=schemas, llm=self.llm)
 
     def generate(

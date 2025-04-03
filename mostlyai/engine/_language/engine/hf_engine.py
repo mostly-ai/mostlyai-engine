@@ -16,6 +16,7 @@ import json
 import time
 from os import PathLike
 from pathlib import Path
+from typing import Generator
 
 import torch
 import transformers
@@ -50,20 +51,19 @@ def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
 
 
 def create_formatter_logits_processors(
-    schemas: list[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
+    schemas: Generator[BaseModel, None, None], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
 ) -> list[transformers.LogitsProcessor]:
     # in general, there might be misalignment between the model's and tokenizer's vocab_size
     # the former is expected by XGrammar
-    if is_peft_adapter:
-        tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)
-    else:
-        tokenizer_info = get_tokenizer_info_for_lstm(tokenizer, vocab_size=vocab_size)
+    make_tokenizer_info = xgr.TokenizerInfo.from_huggingface if is_peft_adapter else get_tokenizer_info_for_lstm
+    tokenizer_info = make_tokenizer_info(tokenizer, vocab_size=vocab_size)
     grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    grammars = (_json_schema_to_ebnf(json.dumps(schema.model_json_schema())) for schema in schemas)
+    schemas = (json.dumps(schema.model_json_schema()) for schema in schemas)
+    grammars = (_json_schema_to_ebnf(schema) for schema in schemas)
     grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
-    compiled_grammars = [grammar_compiler.compile_grammar(grammar) for grammar in grammars]
-    logits_processor = XGrammarLogitsProcessor(compiled_grammars)
-    return [logits_processor]
+    compiled_grammars = (grammar_compiler.compile_grammar(grammar) for grammar in grammars)
+    logits_processors = [XGrammarLogitsProcessor(list(compiled_grammars))]
+    return logits_processors
 
 
 class XGrammarLogitsProcessor(transformers.LogitsProcessor):
@@ -82,19 +82,19 @@ class XGrammarLogitsProcessor(transformers.LogitsProcessor):
         self.prefilled = False
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Lazily initialize GrammarMatchers and bitmask
+        # lazily initialize GrammarMatchers and bitmask
         if len(self.matchers) == 0:
             self.matchers = [xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)]
             self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.vocab_size)
 
         if input_ids.shape[0] != self.batch_size:
             raise RuntimeError(
-                "Expect input_ids.shape[0] to be LogitsProcessor.batch_size."
+                "Expect input_ids.shape[0] to be XGrammarLogitsProcessor.batch_size. "
                 + f"Got {input_ids.shape[0]} for the former, and {self.batch_size} for the latter."
             )
 
         if not self.prefilled:
-            # Have not sampled a token yet
+            # have not sampled a token yet
             self.prefilled = True
         else:
             for i in range(self.batch_size):
@@ -159,7 +159,7 @@ class HuggingFaceEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return self._json_enforcing_possible
 
-    def initialize_logits_processors(self, schemas: list[BaseModel]):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel, None, None]):
         self._logits_processors = create_formatter_logits_processors(
             schemas=schemas,
             tokenizer=self.tokenizer,

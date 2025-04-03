@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Generator, Literal
 
 import pandas as pd
 from pydantic import BaseModel, Field, SkipValidation, create_model
@@ -57,9 +57,8 @@ def get_schemas(
     size: int | None = None,
     stats: dict,
     rare_category_replacement_method: RareCategoryReplacementMethod,
-) -> list[BaseModel]:
+) -> Generator[BaseModel, None, None]:
     assert (seed_df is not None) ^ (size is not None), "exactly one of seed_df or size must be provided"
-    schemas = []
     if seed_df is None:
         seed_df = pd.DataFrame(index=range(size))
     unseeded_fields = [c for c in list(stats["columns"].keys()) if c not in seed_df.columns.to_list()]
@@ -74,7 +73,7 @@ def get_schemas(
     for _, seed_row in seed_df.iterrows():
         cache_key = hash(tuple(sorted([(field_name, str(seed_value)) for field_name, seed_value in seed_row.items()])))
         if cache_key in cache:
-            schemas.append(cache[cache_key])
+            yield cache[cache_key]
             continue
         model_dict = {}
         if not seed_row.empty:
@@ -107,5 +106,4 @@ def get_schemas(
                 model_dict[field_name] = (str, ...)
         schema = create_model("TargetModel", **model_dict)
         cache[cache_key] = schema
-        schemas.append(schema)
-    return schemas
+        yield schema

@@ -15,8 +15,10 @@
 from dataclasses import dataclass
 from abc import abstractmethod, ABC
 from collections.abc import Callable
+from typing import Generator
 
 from formatron.formatter import FormatterBuilder
+from pydantic import BaseModel
 
 
 @dataclass
@@ -27,9 +29,7 @@ class EngineMetrics:
 
 class LanguageEngine(ABC):
     @abstractmethod
-    def initialize_logits_processors(
-        self, formatter_builders: list[FormatterBuilder], vocab_processors: list[Callable] | None = None
-    ):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel, None, None]):
         pass
 
     @abstractmethod
