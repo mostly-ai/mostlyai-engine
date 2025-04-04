@@ -50,7 +50,7 @@ def cleanup_dist_env_and_memory():
         torch.cuda.empty_cache()
 
 
-def create_formatter_logits_processors(llm: LLM, schemas: Generator[BaseModel]) -> list[XGrammarLogitsProcessor]:
+def create_format_logits_processors(schemas: Generator[BaseModel], llm: LLM) -> list[XGrammarLogitsProcessor]:
     tokenizer = llm.get_tokenizer()
     # in general, there might be misalignment between the model's and tokenizer's vocab_size
     # the former is expected by XGrammar
@@ -202,7 +202,7 @@ class VLLMEngine(LanguageEngine):
         return True
 
     def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        self._logits_processors = create_formatter_logits_processors(schemas=schemas, llm=self.llm)
+        self._logits_processors = create_format_logits_processors(schemas=schemas, llm=self.llm)
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
