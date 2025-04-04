@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import json
 import time
 from os import PathLike
@@ -52,7 +54,7 @@ def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
 
 def create_format_logits_processors(
     schemas: Generator[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
-) -> list[transformers.LogitsProcessor]:
+) -> XGrammarLogitsProcessor:
     # in general, there might be misalignment between the model's and tokenizer's vocab_size
     # the former is expected by XGrammar
     make_tokenizer_info = xgr.TokenizerInfo.from_huggingface if is_peft_adapter else get_tokenizer_info_for_lstm
