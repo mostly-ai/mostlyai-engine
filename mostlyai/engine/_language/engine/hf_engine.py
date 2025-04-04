@@ -43,13 +43,13 @@ class XGrammarLogitsProcessor(transformers.LogitsProcessor):
         self.vocab_size = self.compiled_grammars[0].tokenizer_info.vocab_size
         self.batch_size = len(compiled_grammars)
 
-        self.matchers: list[xgr.GrammarMatcher] = []
-        self.token_bitmask = None
+        self.matchers: list[xgr.GrammarMatcher] | None = None
+        self.token_bitmask: torch.Tensor | None = None
         self.prefilled = False
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # lazily initialize GrammarMatchers and bitmask
-        if len(self.matchers) == 0:
+        if self.matchers is None:
             self.matchers = [xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)]
             self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.vocab_size)
 

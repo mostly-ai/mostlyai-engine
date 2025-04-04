@@ -59,13 +59,13 @@ class XGrammarLogitsProcessor:
         self.tokenizer_info = compiled_grammar.tokenizer_info
         self.batch_size = 1
 
-        self.matchers: list[xgr.GrammarMatcher] = []
-        self.token_bitmask = None
+        self.matchers: list[xgr.GrammarMatcher] | None = None
+        self.token_bitmask: torch.Tensor | None = None
         self.prefilled = False
 
     def __call__(self, input_ids: tuple[int], scores: torch.Tensor) -> torch.Tensor:
         # lazily initialize GrammarMatchers and bitmask
-        if len(self.matchers) == 0:
+        if self.matchers is None:
             self.matchers = [xgr.GrammarMatcher(self.compiled_grammar) for _ in range(self.batch_size)]
             self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.tokenizer_info.vocab_size)
 
@@ -104,7 +104,7 @@ class XGrammarLogitsProcessor:
         new_processor = XGrammarLogitsProcessor(self.compiled_grammar)
 
         # create fresh matchers for the new sequence
-        if len(self.matchers) > 0:
+        if self.matchers is not None:
             new_processor.matchers = [xgr.GrammarMatcher(self.compiled_grammar) for _ in range(self.batch_size)]
 
         # create a new token bitmask with the same size
