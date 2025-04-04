@@ -24,7 +24,7 @@ import torch
 import xgrammar as xgr
 from peft import PeftConfig
 from pydantic import BaseModel
-from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizerBase
+from transformers import AutoConfig, AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.config import _get_and_verify_max_len
 from vllm.distributed import destroy_distributed_environment, destroy_model_parallel
@@ -119,26 +119,6 @@ class XGrammarLogitsProcessor:
         return new_processor
 
 
-class MaskInvalidIndicesLogitsProcessor:
-    """
-    Certain models have output size greater than their vocabulary size.
-    This logits processor masks the output indices that do not correspond
-    to a token id.
-    """
-
-    def __init__(self, tokenizer: PreTrainedTokenizerBase):  # : PretrainedTokenizer
-        self.mask: torch.Tensor | None = None
-        self.valid_token_ids = torch.tensor(list(tokenizer.vocab.values()))
-
-    def __call__(self, input_ids: list[int], scores: torch.Tensor) -> torch.Tensor:
-        if self.mask is None:
-            ninf = float("-inf")
-            self.mask = torch.full_like(scores, ninf)
-            self.mask[..., self.valid_token_ids] = 0
-        scores = scores + self.mask
-        return scores
-
-
 class VLLMEngine(LanguageEngine):
     def __init__(
         self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int
@@ -166,7 +146,6 @@ class VLLMEngine(LanguageEngine):
             swap_space=0,
             disable_log_stats=True,
         )
-        self._base_logits_processors = [MaskInvalidIndicesLogitsProcessor(self.llm.get_tokenizer())]
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
             padding_side="left",
@@ -210,23 +189,15 @@ class VLLMEngine(LanguageEngine):
         tokenize_time = time.time() - t_tokenize
 
         actual_batch_size = len(inputs["input_ids"])
-        if self._logits_processors is not None:
-            sampling_params = [
-                SamplingParams(
-                    max_tokens=self.max_new_tokens,
-                    temperature=sampling_temperature,
-                    top_p=sampling_top_p,
-                    logits_processors=[lp, *self._base_logits_processors],
-                )
-                for lp in self._logits_processors[:actual_batch_size]
-            ]
-        else:
-            sampling_params = SamplingParams(
+        sampling_params = [
+            SamplingParams(
                 max_tokens=self.max_new_tokens,
                 temperature=sampling_temperature,
                 top_p=sampling_top_p,
-                logits_processors=self._base_logits_processors,
+                logits_processors=[lp],
             )
+            for lp in self._logits_processors[:actual_batch_size]
+        ]
         t_generate = time.time()
         outputs = self.llm.generate(
             prompts=None,
