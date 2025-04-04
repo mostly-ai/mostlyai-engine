@@ -27,7 +27,7 @@ class EngineMetrics:
 
 class LanguageEngine(ABC):
     @abstractmethod
-    def initialize_logits_processors(self, schemas: Generator[BaseModel, None, None]):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
         pass
 
     @abstractmethod

@@ -51,7 +51,7 @@ def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
 
 
 def create_formatter_logits_processors(
-    schemas: Generator[BaseModel, None, None], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
+    schemas: Generator[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
 ) -> list[transformers.LogitsProcessor]:
     # in general, there might be misalignment between the model's and tokenizer's vocab_size
     # the former is expected by XGrammar
@@ -159,7 +159,7 @@ class HuggingFaceEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return self._json_enforcing_possible
 
-    def initialize_logits_processors(self, schemas: Generator[BaseModel, None, None]):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
         self._logits_processors = create_formatter_logits_processors(
             schemas=schemas,
             tokenizer=self.tokenizer,
