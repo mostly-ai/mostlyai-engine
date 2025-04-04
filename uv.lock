@@ -2088,7 +2088,7 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.21.0" },
     { name = "transformers", specifier = ">=4.45.2,<5" },
     { name = "vllm", marker = "sys_platform == 'darwin' and extra == 'gpu'", specifier = ">=0.7.3,<0.9" },
-    { name = "vllm", marker = "sys_platform == 'linux' and extra == 'gpu'", specifier = ">=0.8.1,<0.9" },
+    { name = "vllm", marker = "sys_platform == 'linux' and extra == 'gpu'", specifier = ">=0.8.2,<0.9" },
 ]
 provides-extras = ["gpu", "cpu"]
 
