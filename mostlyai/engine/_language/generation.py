@@ -40,7 +40,7 @@ from mostlyai.engine._encoding_types.language.numeric import decode_language_num
 from mostlyai.engine._encoding_types.language.text import decode_text
 from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
-from mostlyai.engine._language.xgrammar_utils import get_schemas
+from mostlyai.engine._language.xgrammar_utils import create_schemas
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._language.xgrammar_utils import ensure_seed_can_be_tokenized
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
@@ -284,7 +284,7 @@ def generate(
         initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine"
         if enforce_json_output and initialize_logits_processors_once:
             t0 = time.time()
-            schemas = get_schemas(
+            schemas = create_schemas(
                 size=batch_size,
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
@@ -305,7 +305,7 @@ def generate(
 
             if enforce_json_output and not initialize_logits_processors_once:
                 t0 = time.time()
-                schemas = get_schemas(
+                schemas = create_schemas(
                     seed_df=sample_seed_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,

@@ -55,7 +55,7 @@ def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTraine
     return sample_seed.astype("string[pyarrow]").map(transform)
 
 
-def get_schemas(
+def create_schemas(
     *,
     seed_df: pd.DataFrame | None = None,
     size: int | None = None,
