@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import contextlib
 import gc
-import json
 import time
-from os import PathLike
 from collections.abc import Generator
+from os import PathLike
 
 import torch
 import xgrammar as xgr
@@ -31,12 +30,11 @@ from vllm.config import _get_and_verify_max_len
 from vllm.distributed import destroy_distributed_environment, destroy_model_parallel
 from vllm.lora.request import LoRARequest
 from vllm.platforms import current_platform
-from xgrammar.testing import _json_schema_to_ebnf
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.xgrammar_utils import prepend_grammar_root_with_space
+from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
 
 
 def cleanup_dist_env_and_memory():
@@ -48,21 +46,6 @@ def cleanup_dist_env_and_memory():
     gc.collect()
     if not current_platform.is_cpu():
         torch.cuda.empty_cache()
-
-
-def create_format_logits_processors(schemas: Generator[BaseModel], llm: LLM) -> list[XGrammarLogitsProcessor]:
-    tokenizer = llm.get_tokenizer()
-    # in general, there might be misalignment between the model's and tokenizer's vocab_size
-    # the former is expected by XGrammar
-    vocab_size = llm.llm_engine.get_model_config().get_vocab_size()
-    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)
-    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    schemas = (json.dumps(schema.model_json_schema()) for schema in schemas)
-    grammars = (_json_schema_to_ebnf(schema) for schema in schemas)
-    grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
-    compiled_grammars = (grammar_compiler.compile_grammar(grammar) for grammar in grammars)
-    logits_processors = [XGrammarLogitsProcessor(compiled_grammar) for compiled_grammar in compiled_grammars]
-    return logits_processors
 
 
 class XGrammarLogitsProcessor:
@@ -202,7 +185,13 @@ class VLLMEngine(LanguageEngine):
         return True
 
     def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        self._logits_processors = create_format_logits_processors(schemas=schemas, llm=self.llm)
+        compiled_grammars = create_compiled_grammars(
+            schemas=schemas,
+            tokenizer=self.llm.get_tokenizer(),
+            vocab_size=self.llm.llm_engine.get_model_config().get_vocab_size(),
+            is_peft_adapter=True,
+        )
+        self._logits_processors = [XGrammarLogitsProcessor(compiled_grammar) for compiled_grammar in compiled_grammars]
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float

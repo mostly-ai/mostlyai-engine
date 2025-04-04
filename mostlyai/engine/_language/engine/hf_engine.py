@@ -14,11 +14,10 @@
 
 from __future__ import annotations
 
-import json
 import time
+from collections.abc import Generator
 from os import PathLike
 from pathlib import Path
-from collections.abc import Generator
 
 import torch
 import transformers
@@ -26,46 +25,11 @@ import xgrammar as xgr
 from peft import PeftModel
 from pydantic import BaseModel
 from transformers import AutoTokenizer
-from xgrammar.testing import _json_schema_to_ebnf
 
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.xgrammar_utils import prepend_grammar_root_with_space
-
-
-def get_tokenizer_info_for_lstm(tokenizer: AutoTokenizer, vocab_size: int):
-    # trimmed down version of xgr.TokenizerInfo.from_huggingface
-    # the original function sets vocab_type to VocabType.RAW,
-    # but LSTM tokenizer needs VocabType.BYTE_FALLBACK, because of the usage of metaspace ("▁")
-    encoded_vocab = [""] * vocab_size
-    for token, idx in tokenizer.get_vocab().items():
-        if idx < vocab_size:
-            encoded_vocab[idx] = token
-    tokenizer_info = xgr.TokenizerInfo(
-        encoded_vocab,
-        vocab_type=xgr.VocabType.BYTE_FALLBACK,
-        vocab_size=vocab_size,
-        stop_token_ids=[tokenizer.eos_token_id],
-        add_prefix_space=True,
-    )
-    return tokenizer_info
-
-
-def create_format_logits_processors(
-    schemas: Generator[BaseModel], tokenizer: AutoTokenizer, is_peft_adapter: bool, vocab_size: int
-) -> XGrammarLogitsProcessor:
-    # in general, there might be misalignment between the model's and tokenizer's vocab_size
-    # the former is expected by XGrammar
-    make_tokenizer_info = xgr.TokenizerInfo.from_huggingface if is_peft_adapter else get_tokenizer_info_for_lstm
-    tokenizer_info = make_tokenizer_info(tokenizer, vocab_size=vocab_size)
-    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    schemas = (json.dumps(schema.model_json_schema()) for schema in schemas)
-    grammars = (_json_schema_to_ebnf(schema) for schema in schemas)
-    grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
-    compiled_grammars = (grammar_compiler.compile_grammar(grammar) for grammar in grammars)
-    logits_processors = [XGrammarLogitsProcessor(list(compiled_grammars))]
-    return logits_processors
+from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
 
 
 class XGrammarLogitsProcessor(transformers.LogitsProcessor):
@@ -162,12 +126,13 @@ class HuggingFaceEngine(LanguageEngine):
         return self._json_enforcing_possible
 
     def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        self._logits_processors = create_format_logits_processors(
+        compiled_grammars = create_compiled_grammars(
             schemas=schemas,
             tokenizer=self.tokenizer,
-            is_peft_adapter=self.is_peft_adapter,
             vocab_size=self._model_config.vocab_size,
+            is_peft_adapter=self.is_peft_adapter,
         )
+        self._logits_processors = [XGrammarLogitsProcessor(list(compiled_grammars))]
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float

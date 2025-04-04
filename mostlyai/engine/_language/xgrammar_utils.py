@@ -14,12 +14,15 @@
 
 from __future__ import annotations
 
-from typing import Literal
+import json
 from collections.abc import Generator
+from typing import Literal
 
 import pandas as pd
+import xgrammar as xgr
 from pydantic import BaseModel, Field, SkipValidation, create_model
 from transformers import PreTrainedTokenizerBase
+from xgrammar.testing import _json_schema_to_ebnf
 
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
@@ -108,3 +111,36 @@ def get_schemas(
         schema = create_model("TargetModel", **model_dict)
         cache[cache_key] = schema
         yield schema
+
+
+def _get_tokenizer_info_for_lstm(tokenizer: PreTrainedTokenizerBase, vocab_size: int):
+    # trimmed down version of xgr.TokenizerInfo.from_huggingface
+    # the original function sets vocab_type to VocabType.RAW,
+    # but LSTM tokenizer needs VocabType.BYTE_FALLBACK, because of the usage of metaspace ("▁")
+    encoded_vocab = [""] * vocab_size
+    for token, idx in tokenizer.get_vocab().items():
+        if idx < vocab_size:
+            encoded_vocab[idx] = token
+    tokenizer_info = xgr.TokenizerInfo(
+        encoded_vocab,
+        vocab_type=xgr.VocabType.BYTE_FALLBACK,
+        vocab_size=vocab_size,
+        stop_token_ids=[tokenizer.eos_token_id],
+        add_prefix_space=True,
+    )
+    return tokenizer_info
+
+
+def create_compiled_grammars(
+    schemas: Generator[BaseModel], tokenizer: PreTrainedTokenizerBase, vocab_size: int, is_peft_adapter: bool
+) -> Generator[xgr.CompiledGrammar]:
+    # in general, there might be misalignment between the model's and tokenizer's vocab_size
+    # the former is expected by XGrammar
+    make_tokenizer_info = xgr.TokenizerInfo.from_huggingface if is_peft_adapter else _get_tokenizer_info_for_lstm
+    tokenizer_info = make_tokenizer_info(tokenizer, vocab_size=vocab_size)
+    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+    schemas = (json.dumps(schema.model_json_schema()) for schema in schemas)
+    grammars = (_json_schema_to_ebnf(schema) for schema in schemas)
+    grammars = (prepend_grammar_root_with_space(grammar) for grammar in grammars)
+    compiled_grammars = (grammar_compiler.compile_grammar(grammar) for grammar in grammars)
+    return compiled_grammars

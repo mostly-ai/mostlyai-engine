@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from collections.abc import Generator
+from dataclasses import dataclass
 
 from pydantic import BaseModel
 
