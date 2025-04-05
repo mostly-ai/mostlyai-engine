@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import ABC, abstractmethod
+from collections.abc import Generator
 from dataclasses import dataclass
-from abc import abstractmethod, ABC
-from collections.abc import Callable
 
-from formatron.formatter import FormatterBuilder
+from pydantic import BaseModel
 
 
 @dataclass
@@ -27,9 +27,7 @@ class EngineMetrics:
 
 class LanguageEngine(ABC):
     @abstractmethod
-    def initialize_logits_processors(
-        self, formatter_builders: list[FormatterBuilder], vocab_processors: list[Callable] | None = None
-    ):
+    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
         pass
 
     @abstractmethod

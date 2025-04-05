@@ -40,12 +40,9 @@ from mostlyai.engine._encoding_types.language.numeric import decode_language_num
 from mostlyai.engine._encoding_types.language.text import decode_text
 from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
+from mostlyai.engine._language.xgrammar_utils import create_schemas
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
-from mostlyai.engine._language.formatron_utils import (
-    get_formatter_builders,
-    prepare_seed_for_formatron,
-    get_vocab_processors,
-)
+from mostlyai.engine._language.xgrammar_utils import ensure_seed_can_be_tokenized
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
@@ -274,8 +271,7 @@ def generate(
             batch_size = sample_size
         _LOG.info(f"{batch_size=}")
 
-        # prepare seed data for clean consumption by formatron
-        seed_data = prepare_seed_for_formatron(seed_data, engine.tokenizer)
+        seed_data = ensure_seed_can_be_tokenized(seed_data, engine.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
 
         total_tokenize_fn_time = 0
@@ -284,14 +280,16 @@ def generate(
 
         enforce_json_output = engine.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
-        formatron_vocab_processors = get_vocab_processors(is_peft_adapter)
 
-        if enforce_json_output and len(seeded_tgt_columns) == 0:
+        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine"
+        if enforce_json_output and initialize_logits_processors_once:
             t0 = time.time()
-            formatter_builders = get_formatter_builders(
-                size=batch_size, stats=tgt_stats, rare_category_replacement_method=rare_category_replacement_method
+            schemas = create_schemas(
+                size=batch_size,
+                stats=tgt_stats,
+                rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+            engine.initialize_logits_processors(schemas=schemas)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -305,15 +303,14 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            if enforce_json_output and len(seeded_tgt_columns) > 0:
+            if enforce_json_output and not initialize_logits_processors_once:
                 t0 = time.time()
-                # some columns are seeded, so we need to create a new logits processor for each batch
-                formatter_builders = get_formatter_builders(
+                schemas = create_schemas(
                     seed_df=sample_seed_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+                engine.initialize_logits_processors(schemas=schemas)
                 total_logits_processor_build_time += time.time() - t0
 
             outputs, metrics = engine.generate(
