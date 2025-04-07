@@ -42,7 +42,7 @@ def prepend_grammar_root_with_space(grammar: str) -> str:
 
 
 def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:
-    def transform(x: str | None) -> str:
+    def transform(x: str | pd._libs.missing.NAType) -> str:
         if pd.isna(x):
             null = tokenizer.decode(tokenizer.encode(JSON_NULL), skip_special_tokens=True)
             # xgrammar needs to be able to express JSON_NULL with available vocabulary
