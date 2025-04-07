@@ -40,7 +40,6 @@ dependencies = [
     "opacus @ git+https://github.com/pytorch/opacus.git@8cbf8e0733eadcc77ecfa4e90f6c195683fa89cf",
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0",
-    "rich>=13.9.4",
     "torch>=2.6.0; sys_platform == 'darwin'",
     "torch==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
     "torchaudio==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
