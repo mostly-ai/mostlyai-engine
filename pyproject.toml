@@ -119,7 +119,7 @@ include = ["mostlyai/engine"]
 include = ["mostlyai/engine"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.ruff]
