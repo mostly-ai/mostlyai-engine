@@ -26,21 +26,21 @@ classifiers = [
 
 dependencies = [
     "setuptools>=75.0.0,<76",
-    "numpy>=1.26.3,<2",
+    "numpy>=1.26.3",
     "pandas~=2.2.0",
     "pyarrow>=16.0.0",
-    "joblib>=1.4.2,<2",
+    "joblib>=1.4.2",
     "psutil>=5.9.5,<6",  # upgrade when colab psutil is updated
-    "tokenizers>=0.21.0,<0.22",
-    "transformers>=4.45.2,<5",
-    "datasets>=3.0.0,<4",
-    "accelerate>=0.31.0",
+    "tokenizers>=0.21.0",
+    "transformers>=4.51.0",
+    "datasets>=3.0.0",
+    "accelerate>=1.5.0",
     "peft>=0.12.0",
-    "huggingface-hub>=0.28.0,<0.29",
-    "opacus>=1.5.2,<2",
+    "huggingface-hub>=0.30.0",
+    "opacus @ git+https://github.com/pytorch/opacus.git@8cbf8e0733eadcc77ecfa4e90f6c195683fa89cf",
     "formatron>=0.4.11,<0.5",
     "json-repair>=0.30.0",
-    "rich>=13.9.4,<14",
+    "rich>=13.9.4",
     "torch>=2.6.0; sys_platform == 'darwin'",
     "torch==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
     "torchaudio==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
