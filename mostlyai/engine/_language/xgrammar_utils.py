@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, SkipValidation, create_model
 from transformers import PreTrainedTokenizerBase
 from xgrammar.testing import _json_schema_to_ebnf
 
+from mostlyai.engine._common import STRING
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
@@ -52,7 +53,7 @@ def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTraine
         # skip tokens unseen during training
         return tokenizer.decode(tokenizer.encode(x), skip_special_tokens=True)
 
-    return sample_seed.astype("string[pyarrow]").map(transform)
+    return sample_seed.astype(STRING).map(transform)
 
 
 def create_schemas(
