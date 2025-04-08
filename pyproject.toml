@@ -52,9 +52,9 @@ gpu = [
     "torchaudio==2.6.0",  # for vllm 0.8.2 compatibility
     "torchvision==0.21.0",  # for vllm 0.8.2 compatibility
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
-    "vllm>=0.7.3,<0.9; sys_platform == 'darwin'",
+    "vllm==0.8.2; sys_platform == 'darwin'",
     "bitsandbytes>=0.43.3,<0.46; sys_platform == 'linux'",
-    "vllm>=0.8.2,<0.9; sys_platform == 'linux'",
+    "vllm==0.8.2; sys_platform == 'linux'",
 ]
 cpu = [
     "torch==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
