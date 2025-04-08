@@ -33,3 +33,10 @@ jobs:
       contains(github.event.head_commit.message, '[win]')
     uses: ./.github/workflows/run-tests-windows.yaml
     secrets: inherit
+  run-tests-macos:
+    if: |
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/') ||
+      contains(github.event.head_commit.message, '[mac]')
+    uses: ./.github/workflows/run-tests-macos.yaml
+    secrets: inherit
