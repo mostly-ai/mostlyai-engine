@@ -127,22 +127,20 @@ def test_tgt_only(tgt_only_text_dataset):
 
 
 @pytest.mark.parametrize(
-    ("model_name", "sampling_temperature"),
+    "model_name",
     [
-        ("amd/AMD-Llama-135m", 1.0),
-        ("HuggingFaceTB/SmolLM-135M", 1.0),
-        ("HuggingFaceTB/SmolLM-135M", 0.0),
-        (LSTMFromScratchConfig.model_id, 1.0),
+        "amd/AMD-Llama-135m",
+        "HuggingFaceTB/SmolLM-135M",
+        LSTMFromScratchConfig.model_id,
     ],
 )
-def test_language_with_context(encoded_text_dataset, model_name, sampling_temperature):
+def test_language_with_context(encoded_text_dataset, model_name):
     workspace_dir = encoded_text_dataset
     ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
     train(workspace_dir=workspace_dir, model=model_name)
     generate(
         workspace_dir=workspace_dir,
         ctx_data=ctx_data,
-        sampling_temperature=sampling_temperature,
     )
 
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
