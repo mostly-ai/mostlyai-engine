@@ -228,7 +228,7 @@ class TestConditionalGeneration:
                 "bio": ["Joe", "Anna"] * int(no_of_records / 2),
             }
         )
-        seed_size = 100
+        seed_size = 500
         # re-balance towards the females, test non-existing column and token, test nulls
         sample_seed = pd.DataFrame(
             {
@@ -244,7 +244,7 @@ class TestConditionalGeneration:
         }
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5, batch_size=32)
+        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5, batch_size=128)
         generate(
             workspace_dir=workspace_dir,
             ctx_data=ctx_data,
