@@ -2013,7 +2013,7 @@ requires-dist = [
     { name = "torchvision", marker = "sys_platform == 'linux' and extra == 'cpu'", specifier = "==0.21.0+cpu", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "mostlyai-engine", extra = "cpu" } },
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.21.0" },
     { name = "transformers", specifier = ">=4.51.0" },
-    { name = "vllm", marker = "sys_platform == 'darwin' and extra == 'gpu'", specifier = "==0.8.2" },
+    { name = "vllm", marker = "sys_platform == 'darwin' and extra == 'gpu'", specifier = ">=0.7.3,<=0.8.2" },
     { name = "vllm", marker = "sys_platform == 'linux' and extra == 'gpu'", specifier = "==0.8.2" },
     { name = "xgrammar", specifier = ">=0.1.16" },
 ]
