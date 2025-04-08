@@ -168,7 +168,7 @@ class TestSafeConvertDigit:
         ]
         expect = pd.Series(
             [
-                np.array([100, 3, np.NaN], dtype=np.float64),
+                np.array([100, 3, np.nan], dtype=np.float64),
                 np.array([], dtype=np.float64),
                 np.array([0], dtype=np.float64),
                 np.array([1.3, 0.32], dtype=np.float64),

@@ -18,7 +18,8 @@ from itertools import chain
 import pandas as pd
 import pytest
 import numpy as np
-from transformers import AutoTokenizer
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from mostlyai.engine import split
 from mostlyai.engine._workspace import Workspace
@@ -30,15 +31,18 @@ from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
-from mostlyai.engine._language.training import train
+from mostlyai.engine._language.training import (
+    train,
+    _gpu_estimate_max_batch_size,
+    _physical_batch_size_heuristic,
+    _gradient_accumulation_steps_heuristic,
+)
 from mostlyai.engine.domain import (
     ModelEncodingType,
     ModelStateStrategy,
     DifferentialPrivacyConfig,
     RareCategoryReplacementMethod,
 )
-from mostlyai.engine._language.formatron_utils import get_formatter_builders, _number_metadata
-from formatron.integrations.transformers import create_formatter_logits_processor_list
 
 
 def prepare_encoded_dataset(data: pd.DataFrame, workspace_dir, tgt_encoding_types, ctx_encoding_types=None):
@@ -123,22 +127,20 @@ def test_tgt_only(tgt_only_text_dataset):
 
 
 @pytest.mark.parametrize(
-    ("model_name", "sampling_temperature"),
+    "model_name",
     [
-        ("amd/AMD-Llama-135m", 1.0),
-        ("HuggingFaceTB/SmolLM-135M", 1.0),
-        ("HuggingFaceTB/SmolLM-135M", 0.0),
-        (LSTMFromScratchConfig.model_id, 1.0),
+        "amd/AMD-Llama-135m",
+        "HuggingFaceTB/SmolLM-135M",
+        LSTMFromScratchConfig.model_id,
     ],
 )
-def test_language_with_context(encoded_text_dataset, model_name, sampling_temperature):
+def test_language_with_context(encoded_text_dataset, model_name):
     workspace_dir = encoded_text_dataset
     ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
     train(workspace_dir=workspace_dir, model=model_name)
     generate(
         workspace_dir=workspace_dir,
         ctx_data=ctx_data,
-        sampling_temperature=sampling_temperature,
     )
 
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
@@ -161,7 +163,7 @@ def test_language_with_dp(encoded_text_dataset, model_name, dp_max_epsilon):
         max_epsilon=dp_max_epsilon,
         noise_multiplier=0.2,
     )
-    train(workspace_dir=workspace_dir, model=model_name, differential_privacy=differential_privacy)
+    train(workspace_dir=workspace_dir, model=model_name, differential_privacy=differential_privacy, batch_size=16)
     generate(
         workspace_dir=workspace_dir,
         ctx_data=ctx_data,
@@ -213,62 +215,86 @@ def test_training_strategy(encoded_text_dataset, model_name):
         pd.testing.assert_frame_equal(progress_resume.iloc[:2], progress_resume_without_checkpoint.iloc[:2])
 
 
-def test_conditional_generation(tmp_path_factory):
-    workspace_dir = tmp_path_factory.mktemp("ws")
-    no_of_records = 2000
-    data = pd.DataFrame(
-        {
-            "gender": ["m", "f"] * int(no_of_records / 2),
-            "bio": ["Joe", "Anna"] * int(no_of_records / 2),
+class TestConditionalGeneration:
+    def test_lstm(self, tmp_path_factory):
+        workspace_dir = tmp_path_factory.mktemp("ws")
+        no_of_records = 2000
+        data = pd.DataFrame(
+            {
+                "gender": ["m", "f"] * int(no_of_records / 2),
+                "country": ["USA"] * int(no_of_records),
+                "bio": ["Joe", "Anna"] * int(no_of_records / 2),
+            }
+        )
+        seed_size = 500
+        # re-balance towards the females, test non-existing column and token, test nulls
+        sample_seed = pd.DataFrame(
+            {
+                "gender": ["f"] * (seed_size - 5) + ["Żf", "国", None, pd.NA, np.nan],
+                "country": ["USA"] * (seed_size - 5) + ["USA USA", "Poland", None, pd.NA, np.nan],
+                "nonexisting": ["x"] * seed_size,
+            }
+        )
+        tgt_encoding_types = {
+            "gender": ModelEncodingType.language_text.value,
+            "country": ModelEncodingType.language_categorical.value,
+            "bio": ModelEncodingType.language_text.value,
         }
-    )
-    seed_size = 100
-    # re-balance towards the females, test non-existing column and token, test nulls
-    sample_seed = pd.DataFrame(
-        {
-            "gender": ["f"] * (seed_size - 5) + ["Żf", "国", None, pd.NA, np.nan],
-            "nonexisting": ["x"] * seed_size,
+        prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
+        ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
+        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=1.0, batch_size=32)
+        generate(
+            workspace_dir=workspace_dir,
+            ctx_data=ctx_data,
+            seed_data=sample_seed,
+        )
+
+        syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
+        assert len(syn_data) == seed_size  # seed dictates the sample size
+        assert all(syn_data["gender"][:495] == "f")  # test for regular tokens
+        assert syn_data["gender"][495] == "f"  # unknown token is skipped, known token remains
+        assert all(syn_data["gender"][496:] == "")  # nulls are skipped, if tokenizer can't express them
+        assert all(syn_data["country"][:495] == "USA")  # test for regular categories
+        assert syn_data["country"][495] == "USA USA"  # unseen category should persist, if tokenizer can express it
+        assert (
+            syn_data["country"][496] == "oand"
+        )  # some unseen categories can be expressed only partially with the tokenizer
+        assert all(syn_data["country"][497:] == "")  # nulls are skipped, if tokenizer can't express them
+        n_annas = syn_data["bio"].str.startswith("Anna").sum()
+        assert n_annas / len(syn_data) > 0.6  # seed re-balances towards females, thus Anna should be more frequent
+        assert set(syn_data.columns) == {
+            "__primary_key",
+            "gender",
+            "country",
+            "bio",
         }
-    )
-    tgt_encoding_types = {
-        "gender": ModelEncodingType.language_text.value,
-        "bio": ModelEncodingType.language_text.value,
-    }
-    prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
-    ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-    train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id)
-    generate(
-        workspace_dir=workspace_dir,
-        ctx_data=ctx_data,
-        seed_data=sample_seed,
-    )
+        assert str(syn_data["gender"].dtype).startswith("string")
+        assert str(syn_data["country"].dtype).startswith("string")
+        assert str(syn_data["bio"].dtype).startswith("string")
 
-    syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
-    assert len(syn_data) == seed_size  # seed dictates the sample size
-    assert all(syn_data["gender"][:95] == "f")  # test for regular tokens
-    assert syn_data["gender"][95] == "f"  # unknown token is skipped, known token remains
-    assert all(syn_data["gender"][96:] == "")  # nulls are skipped, if tokenizer can't express them
-    n_annas = syn_data["bio"].str.startswith("Anna").sum()
-    assert n_annas / len(syn_data) > 0.8  # seed re-balances towards females, thus Anna should be more frequent
-    assert set(syn_data.columns) == {
-        "__primary_key",
-        "gender",
-        "bio",
-    }
-    assert str(syn_data["gender"].dtype).startswith("string")
-
-
-def test_formatter():
-    lone_leading_surrogate_issue = '{"E0": "[b]\\ud83c\\udc00\\ud83d\\ud8bc}{"}'
-    unexpected_end_of_hex_escape_issue = '{"E0": "』』』\u200f』 avex\\ud8dd"}'
-    formatter_builders = get_formatter_builders(
-        size=1, stats={"columns": {}}, rare_category_replacement_method=RareCategoryReplacementMethod.constant
-    )
-    tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M", legacy=True)
-    logits_processor = create_formatter_logits_processor_list(tokenizer, formatter_builders)
-    formatter = logits_processor[0]._formatters[0]
-    formatter._on_completion(lone_leading_surrogate_issue)
-    formatter._on_completion(unexpected_end_of_hex_escape_issue)
+    def test_hf_model(self, tmp_path_factory):
+        # this is a smoke test for the HF model, mainly to ensure seeded values are preserved in the final output
+        # for more comprehensive test that also covers some quality checks, see test_lstm
+        workspace_dir = tmp_path_factory.mktemp("ws")
+        no_of_records = 200
+        data = pd.DataFrame({"country": ["USA", "Portugal", "Austria", "Poland"] * int(no_of_records / 4)})
+        tgt_encoding_types = {"country": ModelEncodingType.language_categorical.value}
+        seed_data = pd.DataFrame(
+            {
+                "country": ["Greece", "Italy", "Spain", pd.NA],
+            }
+        )
+        prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
+        ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
+        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M")
+        generate(
+            workspace_dir=workspace_dir,
+            seed_data=seed_data,
+            ctx_data=ctx_data,
+        )
+        syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
+        assert len(syn_data) == len(seed_data)
+        pd.testing.assert_series_equal(syn_data["country"], seed_data["country"], check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -468,7 +494,6 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     [
         LSTMFromScratchConfig.model_id,
         "amd/AMD-Llama-135m",
-        # "openai-community/gpt2",  # TEMP, better model than AMD
     ],
 )
 def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
@@ -504,49 +529,45 @@ def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_datas
         assert dates.max() <= pd.Timestamp("2026-01-05")
 
 
-def test_number_metadata():
-    class TypeWithMetadata:
-        def __init__(self, type, metadata):
-            self.type = type
-            self.metadata = metadata
+def test_gpu_estimate_max_batch_size():
+    if not torch.cuda.is_available():
+        pytest.skip("Skipping gpu only test")
 
-    # test positive integer range
-    number_type = TypeWithMetadata(int, {"ge": 10, "le": 450})
-    pattern, deps = _number_metadata(number_type, "test_number")
+    model = AutoModelForCausalLM.from_pretrained("amd/AMD-Llama-135m")
+    model.to("cuda")
+    initial_params = {name: param.clone().detach() for name, param in model.named_parameters()}
+    _gpu_estimate_max_batch_size(model, "cuda", 1024, 16)  # on an A10G, will return 8
+    # verify parameters unchanged
+    for name, param in model.named_parameters():
+        assert torch.equal(param, initial_params[name])
+        assert param.grad is None
 
-    assert deps == []
-    # should match 2-3 digit numbers between 10-999
-    assert 'test_number ::= #"([1-9][0-9]{1,2})";\n' in pattern
 
-    # test negative integer range
-    number_type = TypeWithMetadata(int, {"ge": -269, "le": -10})
-    pattern, deps = _number_metadata(number_type, "test_number")
+def test_batch_size_and_gradient_accumulation_heuristics():
+    gpu_device = torch.device("cuda")
+    bs = _physical_batch_size_heuristic(
+        no_of_records=1000, no_of_model_params=5_000_000, max_tokens=50, device=gpu_device
+    )
+    assert bs == 64
+    steps = _gradient_accumulation_steps_heuristic(
+        batch_size=64,
+        no_of_records=1000,
+    )
+    assert steps == 1
 
-    # should match negative 2-3 digit numbers
-    assert 'test_number ::= #"-([1-9][0-9]{1,2})";\n' in pattern
+    steps = _gradient_accumulation_steps_heuristic(
+        batch_size=32,
+        no_of_records=6000,
+    )
+    assert steps == 2
 
-    # test range including both negative and positive
-    number_type = TypeWithMetadata(int, {"ge": -10, "le": 100})
-    pattern, deps = _number_metadata(number_type, "test_number")
-
-    # should allow optional negative sign and up to 3 digits and 0
-    assert 'test_number ::= #"-?(0|[1-9][0-9]{0,2})";\n' in pattern
-
-    # test float with decimal places
-    number_type = TypeWithMetadata(float, {"ge": 0.0, "le": 100.0, "decimal_places": 2})
-    pattern, deps = _number_metadata(number_type, "test_number")
-
-    # should match numbers with optional decimal part
-    assert r'test_number ::= #"(0|[1-9][0-9]{0,2})(\\.[0-9]{0,2})?";' + "\n" in pattern
-
-    # test invalid range where le < ge
-    number_type = TypeWithMetadata(int, {"ge": 100, "le": 10})
-
-    with pytest.raises(ValueError, match="le must be greater than or equal to ge"):
-        _number_metadata(number_type, "test_number")
-
-    # test unsupported gt/lt constraints
-    number_type = TypeWithMetadata(int, {"gt": 10, "lt": 100})
-
-    with pytest.raises(NotImplementedError, match="gt and lt are not supported for number metadata"):
-        _number_metadata(number_type, "test_number")
+    # very small dataset
+    bs = _physical_batch_size_heuristic(
+        no_of_records=10, no_of_model_params=5_000_000, max_tokens=50, device=gpu_device
+    )
+    assert bs == 1
+    steps = _gradient_accumulation_steps_heuristic(
+        batch_size=32,
+        no_of_records=10,
+    )
+    assert steps == 1

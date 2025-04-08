@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import logging
-from typing import Any
 
 from peft import PeftConfig, prepare_model_for_kbit_training
 from transformers import AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig, PreTrainedModel, PretrainedConfig
@@ -42,18 +42,6 @@ def get_attention_implementation(config: PretrainedConfig) -> str | None:
     return attn_implementation
 
 
-def estimate_max_tokens(tgt_stats: dict[str, Any]) -> int:
-    estimated_nchar = (
-        # accommodate leading space, curly brackets and eos
-        10
-        # each column is roughly like '"' + col + '": "' + value + '", '
-        + sum([(1 + len(col) + 4 + stats["nchar_max"] + 3) for col, stats in tgt_stats["columns"].items()])
-    )
-    estimated_tokens = estimated_nchar / 2  # ~2 chars per tokens
-    max_tokens = int(estimated_tokens * 1.4)  # add some safety buffer
-    return max_tokens
-
-
 def load_base_model_and_config(
     model_id_or_path: str | Path, device: torch.device, is_peft_adapter: bool, is_training: bool
 ) -> tuple[PreTrainedModel, PretrainedConfig]:
@@ -75,6 +63,11 @@ def load_base_model_and_config(
     # Load pretrained base model
     use_cache = not is_training  # KV cache is not needed during training
     is_gpu_training = is_training and device.type == "cuda"
+    is_bitsandbytes_available = importlib.util.find_spec("bitsandbytes") is not None
+    if is_gpu_training and not is_bitsandbytes_available:
+        _LOG.warning(
+            "CUDA device was found but bitsandbytes is not available. Please use extra [gpu] to install bitsandbytes for quantization."
+        )
     bf16_supported = is_bf16_supported(device)
     if bf16_supported:
         attn_implementation = get_attention_implementation(config)
@@ -82,7 +75,7 @@ def load_base_model_and_config(
     else:
         attn_implementation = None
         torch_dtype = torch.float32
-    if is_gpu_training:
+    if is_gpu_training and is_bitsandbytes_available:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",

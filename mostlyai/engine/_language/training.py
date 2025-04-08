@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import time
+import gc
 from contextlib import nullcontext
 from functools import partial
 from pathlib import Path
@@ -45,7 +46,6 @@ from mostlyai.engine._common import (
 from mostlyai.engine._language.common import (
     is_bf16_supported,
     load_base_model_and_config,
-    estimate_max_tokens,
     MAX_LENGTH,
 )
 from mostlyai.engine._language.encoding import row_to_json
@@ -78,31 +78,52 @@ _LOG = logging.getLogger(__name__)
 #####################
 
 
-def _training_batch_size_heuristic(no_of_records: int, no_of_model_params: int, max_tokens: int) -> tuple[int, int]:
+def _physical_batch_size_heuristic(
+    no_of_records: int, no_of_model_params: int, max_tokens: int, device: torch.device
+) -> int:
     """
-    Calculate the physical batch size and gradient accumulation steps.
+    Calculate the physical batch size that fits in memory.
 
     Args:
         no_of_records (int): Number of records in the training dataset.
         no_of_model_params (int): Number of model parameters.
         max_tokens (int): Maximum number of tokens that are in the training dataset.
+        device (torch.device): Device to run training on.
 
     Returns:
-        Tuple[int, int]: A tuple containing:
-            - Batch size (int)
-            - Gradient accumulation steps (int)
+        Batch size (int)
     """
+    min_batches = 8
+    max_batch_size = max(1, no_of_records // min_batches)
 
-    if no_of_model_params < 10_000_000:
-        batch_size = 32
-    elif no_of_model_params < 2_000_000_000:
-        batch_size = 16 if max_tokens < 100 else 8
+    if device.type == "cuda":
+        batch_size = 2**10  # 1024, max 10 reductions
     else:
-        batch_size = 8 if max_tokens < 100 else 4
-    gradient_accumulation_steps = 2
-    max_batch_size = no_of_records // gradient_accumulation_steps
-    batch_size = int(np.clip(a=batch_size, a_min=1, a_max=max_batch_size))
-    return batch_size, gradient_accumulation_steps
+        if no_of_model_params < 10_000_000:
+            batch_size = 32
+        elif no_of_model_params < 2_000_000_000:
+            batch_size = 16 if max_tokens < 100 else 8
+        else:
+            batch_size = 8 if max_tokens < 100 else 4
+    batch_size = 2 ** int(np.log2(no_of_records / min_batches)) if no_of_records > 0 else 1
+    return int(np.clip(a=batch_size, a_min=1, a_max=max_batch_size))
+
+
+def _gradient_accumulation_steps_heuristic(batch_size: int, no_of_records: int) -> int:
+    """
+    Calculate gradient accumulation steps based on batch size and number of records.
+
+    Args:
+        batch_size (int): Physical batch size.
+        no_of_records (int): Number of records in the training dataset.
+    Returns:
+        int: Number of gradient accumulation steps
+    """
+    min_logical_batch_size = 64
+    steps = max(1, min_logical_batch_size // batch_size)
+    min_batches = 8
+    steps = max(1, min(steps, no_of_records // (min_batches * batch_size)))
+    return steps
 
 
 def _learn_rate_heuristic(no_of_model_params: int) -> float:
@@ -191,6 +212,63 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     model.train()
     val_loss_avg = total_loss / total_num_labels
     return val_loss_avg.item()
+
+
+def _calculate_max_tokens(tokenized_trn_dataset: Dataset) -> int:
+    max_tokens = 0
+    for example in tokenized_trn_dataset:
+        max_tokens = max(len(example["input_ids"]), max_tokens)
+    max_tokens = max(max_tokens, 1)  # ensure max_tokens is greater than 0
+    _LOG.info(f"{max_tokens=}")
+    return max_tokens
+
+
+def _gpu_estimate_max_batch_size(
+    model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens: int, initial_batch_size: int
+) -> int:
+    batch_size = 2 ** int(np.log2(initial_batch_size))
+    optimizer = torch.optim.AdamW(params=model.parameters())
+
+    # create test batch of zeros with estimated max sequence length
+    def create_test_batch(batch_size: int):
+        return {
+            "input_ids": torch.zeros((batch_size, max_tokens), dtype=torch.long, device=device),
+            "labels": torch.zeros((batch_size, max_tokens), dtype=torch.long, device=device),
+            "attention_mask": torch.ones((batch_size, max_tokens), dtype=torch.long, device=device),
+        }
+
+    outputs = model(**create_test_batch(1))
+    loss = outputs.loss
+    loss.backward()
+
+    # initialise optimizer state before forward+backward pass to reach peak memory
+    optimizer.zero_grad()  # ensure no change to model and gradients initialised
+    optimizer.step()  # initialise optimizer state
+    batch_size_found = False
+
+    # essential to be in function, otherwise part of memory is not released
+    def forward_and_backward_pass(batch_size: int):
+        outputs = model(**create_test_batch(batch_size))
+        loss = outputs.loss
+        loss.backward()
+
+    while batch_size >= 1:
+        try:
+            forward_and_backward_pass(batch_size)
+            batch_size_found = True
+        except torch.cuda.OutOfMemoryError:
+            batch_size //= 2
+            if batch_size < 1:
+                raise RuntimeError("Could not find a batch size that fits in GPU memory")
+        # clean up memory and gradients after each attempt
+        model.zero_grad(set_to_none=True)
+        gc.collect()
+        torch.cuda.empty_cache()
+        if batch_size_found:
+            break
+    if batch_size > 1:  # for extra safety, halve the batch size once more
+        batch_size //= 2
+    return batch_size
 
 
 def train(
@@ -418,18 +496,26 @@ def train(
             remove_columns=content_dataset["train"].column_names,
         )
         data_collator = MostlyDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-        max_tokens_estimate = estimate_max_tokens(tgt_stats)
-        default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-            no_of_records=trn_cnt, no_of_model_params=no_of_model_params, max_tokens=max_tokens_estimate
-        )
-        if batch_size is None:
-            batch_size = default_batch_size
-        if gradient_accumulation_steps is None:
-            gradient_accumulation_steps = default_gradient_accumulation_steps
-
-        # setup params for input pipeline
+        max_tokens = _calculate_max_tokens(tokenized_datasets["train"])
+        batch_size_provided = batch_size is not None
+        if not batch_size_provided:
+            batch_size = _physical_batch_size_heuristic(
+                no_of_records=trn_cnt,
+                no_of_model_params=no_of_model_params,
+                max_tokens=max_tokens,
+                device=device,
+            )
         batch_size = max(1, min(batch_size, trn_cnt))
+        if device.type == "cuda" and not batch_size_provided:
+            # find largest batch size that fits in GPU memory during training
+            batch_size = _gpu_estimate_max_batch_size(
+                model=model, device=device, max_tokens=max_tokens, initial_batch_size=batch_size
+            )
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        if gradient_accumulation_steps is None:
+            gradient_accumulation_steps = _gradient_accumulation_steps_heuristic(batch_size, trn_cnt)
         gradient_accumulation_steps = max(1, min(gradient_accumulation_steps, trn_cnt // batch_size))
         trn_batch_size = batch_size * gradient_accumulation_steps
         trn_steps = max(1, trn_cnt // trn_batch_size)
@@ -463,9 +549,8 @@ def train(
             batch_size=val_batch_size,
             collate_fn=data_collator,
         )
-
-        early_stopper = EarlyStopper(val_loss_patience=4)
         optimizer = torch.optim.AdamW(params=model.parameters(), lr=initial_lr)
+        early_stopper = EarlyStopper(val_loss_patience=4)
         lr_scheduler: LRScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer=optimizer,
             factor=0.5,
