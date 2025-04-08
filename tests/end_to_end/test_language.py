@@ -228,7 +228,7 @@ class TestConditionalGeneration:
                 "bio": ["Joe", "Anna"] * int(no_of_records / 2),
             }
         )
-        seed_size = 100
+        seed_size = 500
         # re-balance towards the females, test non-existing column and token, test nulls
         sample_seed = pd.DataFrame(
             {
@@ -244,7 +244,7 @@ class TestConditionalGeneration:
         }
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=0.5, batch_size=32)
+        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=1.0, batch_size=32)
         generate(
             workspace_dir=workspace_dir,
             ctx_data=ctx_data,
@@ -253,15 +253,15 @@ class TestConditionalGeneration:
 
         syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
         assert len(syn_data) == seed_size  # seed dictates the sample size
-        assert all(syn_data["gender"][:95] == "f")  # test for regular tokens
-        assert syn_data["gender"][95] == "f"  # unknown token is skipped, known token remains
-        assert all(syn_data["gender"][96:] == "")  # nulls are skipped, if tokenizer can't express them
-        assert all(syn_data["country"][:95] == "USA")  # test for regular categories
-        assert syn_data["country"][95] == "USA USA"  # unseen category should persist, if tokenizer can express it
+        assert all(syn_data["gender"][:495] == "f")  # test for regular tokens
+        assert syn_data["gender"][495] == "f"  # unknown token is skipped, known token remains
+        assert all(syn_data["gender"][496:] == "")  # nulls are skipped, if tokenizer can't express them
+        assert all(syn_data["country"][:495] == "USA")  # test for regular categories
+        assert syn_data["country"][495] == "USA USA"  # unseen category should persist, if tokenizer can express it
         assert (
-            syn_data["country"][96] == "oand"
+            syn_data["country"][496] == "oand"
         )  # some unseen categories can be expressed only partially with the tokenizer
-        assert all(syn_data["country"][97:] == "")  # nulls are skipped, if tokenizer can't express them
+        assert all(syn_data["country"][497:] == "")  # nulls are skipped, if tokenizer can't express them
         n_annas = syn_data["bio"].str.startswith("Anna").sum()
         assert n_annas / len(syn_data) > 0.6  # seed re-balances towards females, thus Anna should be more frequent
         assert set(syn_data.columns) == {
