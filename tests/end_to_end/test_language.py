@@ -130,7 +130,7 @@ def test_tgt_only(tgt_only_text_dataset):
     "model_name",
     [
         "amd/AMD-Llama-135m",
-        "HuggingFaceTB/SmolLM-135M",
+        "HuggingFaceTB/SmolLM2-135M",
         LSTMFromScratchConfig.model_id,
     ],
 )
@@ -286,7 +286,7 @@ class TestConditionalGeneration:
         )
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M")
+        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM2-135M")
         generate(
             workspace_dir=workspace_dir,
             seed_data=seed_data,
@@ -300,7 +300,7 @@ class TestConditionalGeneration:
 @pytest.mark.parametrize(
     "model_name",
     [
-        "HuggingFaceTB/SmolLM-135M",
+        "HuggingFaceTB/SmolLM2-135M",
         LSTMFromScratchConfig.model_id,
     ],
 )
@@ -365,7 +365,7 @@ class TestTokenizerAndDataCollator:
         "model_name",
         [
             "amd/AMD-Llama-135m",  # LllmaTokenizerFast
-            "HuggingFaceTB/SmolLM-135M",  # GPT2TokenizerFast
+            "HuggingFaceTB/SmolLM2-135M",  # GPT2TokenizerFast
             "Qwen/Qwen2-0.5B",  # Qwen2TokenizerFast
         ],
     )
@@ -397,7 +397,7 @@ class TestTokenizerAndDataCollator:
         "model_name",
         [
             "amd/AMD-Llama-135m",  # LllmaTokenizerFast
-            "HuggingFaceTB/SmolLM-135M",  # GPT2TokenizerFast
+            "HuggingFaceTB/SmolLM2-135M",  # GPT2TokenizerFast
             "Qwen/Qwen2-0.5B",  # Qwen2TokenizerFast
         ],
     )
@@ -437,7 +437,7 @@ def test_special_character_column_name(tmp_path_factory):
         "hello国": ModelEncodingType.language_text.value,
     }
     prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
-    train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM-135M")
+    train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM2-135M")
     generate(workspace_dir=workspace_dir, sample_size=50)
 
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
