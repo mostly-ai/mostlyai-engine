@@ -1948,7 +1948,7 @@ wheels = [
 
 [[package]]
 name = "mostlyai-engine"
-version = "1.2.0"
+version = "1.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
@@ -2039,7 +2039,7 @@ requires-dist = [
     { name = "transformers", specifier = ">=4.51.0" },
     { name = "vllm", marker = "sys_platform == 'darwin' and extra == 'gpu'", specifier = ">=0.7.3,<0.9" },
     { name = "vllm", marker = "sys_platform == 'linux' and extra == 'gpu'", specifier = ">=0.8.2,<0.9" },
-    { name = "xgrammar", specifier = "==0.1.17" },
+    { name = "xgrammar", specifier = ">=0.1.16" },
 ]
 provides-extras = ["gpu", "cpu"]
 
