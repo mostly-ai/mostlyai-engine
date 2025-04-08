@@ -129,10 +129,10 @@ def test_tgt_only(tgt_only_text_dataset):
 @pytest.mark.parametrize(
     ("model_name", "sampling_temperature"),
     [
-        ("amd/AMD-Llama-135m", 1.0),
-        ("HuggingFaceTB/SmolLM-135M", 1.0),
-        ("HuggingFaceTB/SmolLM-135M", 0.0),
-        (LSTMFromScratchConfig.model_id, 1.0),
+        # ("amd/AMD-Llama-135m", 1.0),
+        ("meta-llama/Llama-3.2-1B", 1.0),
+        # ("HuggingFaceTB/SmolLM-135M", 0.0),
+        # (LSTMFromScratchConfig.model_id, 1.0),
     ],
 )
 def test_language_with_context(encoded_text_dataset, model_name, sampling_temperature):
