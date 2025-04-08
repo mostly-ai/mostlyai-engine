@@ -253,15 +253,15 @@ class TestConditionalGeneration:
 
         syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
         assert len(syn_data) == seed_size  # seed dictates the sample size
-        assert all(syn_data["gender"][:95] == "f")  # test for regular tokens
-        assert syn_data["gender"][95] == "f"  # unknown token is skipped, known token remains
-        assert all(syn_data["gender"][96:] == "")  # nulls are skipped, if tokenizer can't express them
-        assert all(syn_data["country"][:95] == "USA")  # test for regular categories
-        assert syn_data["country"][95] == "USA USA"  # unseen category should persist, if tokenizer can express it
+        assert all(syn_data["gender"][:495] == "f")  # test for regular tokens
+        assert syn_data["gender"][495] == "f"  # unknown token is skipped, known token remains
+        assert all(syn_data["gender"][496:] == "")  # nulls are skipped, if tokenizer can't express them
+        assert all(syn_data["country"][:495] == "USA")  # test for regular categories
+        assert syn_data["country"][495] == "USA USA"  # unseen category should persist, if tokenizer can express it
         assert (
-            syn_data["country"][96] == "oand"
+            syn_data["country"][496] == "oand"
         )  # some unseen categories can be expressed only partially with the tokenizer
-        assert all(syn_data["country"][97:] == "")  # nulls are skipped, if tokenizer can't express them
+        assert all(syn_data["country"][497:] == "")  # nulls are skipped, if tokenizer can't express them
         n_annas = syn_data["bio"].str.startswith("Anna").sum()
         assert n_annas / len(syn_data) > 0.6  # seed re-balances towards females, thus Anna should be more frequent
         assert set(syn_data.columns) == {
