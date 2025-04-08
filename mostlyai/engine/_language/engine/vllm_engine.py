@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import os
 import time
 from collections.abc import Generator
 from os import PathLike
@@ -35,6 +36,11 @@ from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
+
+# Per-Request Logits Processors are not supported in V1 (https://docs.vllm.ai/en/latest/getting_started/v1_user_guide.html#feature-model)
+# Global Logits Processors will be new mechanism to use, but it is not yet released
+# Here is PR for it: https://github.com/vllm-project/vllm/pull/13360
+os.environ["VLLM_USE_V1"] = "0"
 
 
 def cleanup_dist_env_and_memory():
