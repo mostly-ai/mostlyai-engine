@@ -31,12 +31,16 @@ jobs:
       github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/') ||
       contains(github.event.head_commit.message, '[win]')
-    uses: ./.github/workflows/run-tests-windows.yaml
+    uses: ./.github/workflows/run-tests-cpus.yaml
+    with:
+        runner: 'windows-latest'
     secrets: inherit
   run-tests-macos:
     if: |
       github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/') ||
       contains(github.event.head_commit.message, '[mac]')
-    uses: ./.github/workflows/run-tests-macos.yaml
+    uses: ./.github/workflows/run-tests-cpu.yaml
+    with:
+        runner: 'macos-latest'
     secrets: inherit

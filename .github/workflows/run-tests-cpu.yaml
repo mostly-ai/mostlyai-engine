@@ -2,6 +2,11 @@ name: "[CPU] mostlyai-engine Tests"
 
 on:
     workflow_call:
+        inputs:
+          runner_type:
+            type: string
+            required: true
+            default: 'ubuntu-latest'
 
 
 env:
@@ -10,7 +15,7 @@ env:
 
 jobs:
     run-tests-cpu-unit-sequential:
-        runs-on: ubuntu-latest
+        runs-on: ${{ inputs.runner_type }}
         permissions:
             contents: read
             packages: write
@@ -44,7 +49,7 @@ jobs:
             run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential_context.py
 
     run-tests-cpu-end-to-end-nonsequential:
-        runs-on: ubuntu-latest
+        runs-on: ${{ inputs.runner_type }}
         permissions:
             contents: read
             packages: write
