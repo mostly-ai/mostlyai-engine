@@ -33,7 +33,7 @@ jobs:
       contains(github.event.head_commit.message, '[win]')
     uses: ./.github/workflows/run-tests-cpu.yaml
     with:
-        runner: 'windows-latest'
+        runner_type: 'windows-latest'
     secrets: inherit
   run-tests-macos:
     if: |
@@ -42,5 +42,5 @@ jobs:
       contains(github.event.head_commit.message, '[mac]')
     uses: ./.github/workflows/run-tests-cpu.yaml
     with:
-        runner: 'macos-latest'
+        runner_type: 'macos-latest'
     secrets: inherit
