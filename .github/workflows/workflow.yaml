@@ -31,7 +31,7 @@ jobs:
       github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/') ||
       contains(github.event.head_commit.message, '[win]')
-    uses: ./.github/workflows/run-tests-cpus.yaml
+    uses: ./.github/workflows/run-tests-cpu.yaml
     with:
         runner: 'windows-latest'
     secrets: inherit
