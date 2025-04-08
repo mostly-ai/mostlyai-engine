@@ -14,6 +14,13 @@
 
 from __future__ import annotations
 
+import os
+
+# Per-Request Logits Processors are not supported in V1 (https://docs.vllm.ai/en/latest/getting_started/v1_user_guide.html#feature-model)
+# Global Logits Processors will be new mechanism to use, but it is not yet released
+# Here is PR for it: https://github.com/vllm-project/vllm/pull/13360
+os.environ["VLLM_USE_V1"] = "0"
+
 import contextlib
 import gc
 import time

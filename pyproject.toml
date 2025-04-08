@@ -38,28 +38,28 @@ dependencies = [
     "peft>=0.12.0",
     "huggingface-hub[hf-xet]>=0.30.2",
     "opacus>=1.5.2",  # switch to 1.5.4 (once released) to allow numpy 2
-    "xgrammar>=0.1.16",  # for vllm 0.8.2 compatibility
+    "xgrammar>=0.1.16",  # for vllm 0.8.3 compatibility
     "json-repair>=0.30.0",
     "torch>=2.6.0; sys_platform == 'darwin'",
-    "torch==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
-    "torchaudio==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
-    "torchvision==0.21.0; sys_platform == 'linux'"  # for vllm 0.8.2 compatibility
+    "torch==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
+    "torchaudio==2.6.0; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
+    "torchvision==0.21.0; sys_platform == 'linux'"  # for vllm 0.8.3 compatibility
 ]
 
 [project.optional-dependencies]
 gpu = [
-    "torch==2.6.0",  # for vllm 0.8.2 compatibility
-    "torchaudio==2.6.0",  # for vllm 0.8.2 compatibility
-    "torchvision==0.21.0",  # for vllm 0.8.2 compatibility
+    "torch==2.6.0",  # for vllm 0.8.3 compatibility
+    "torchaudio==2.6.0",  # for vllm 0.8.3 compatibility
+    "torchvision==0.21.0",  # for vllm 0.8.3 compatibility
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
-    "vllm>=0.7.3,<=0.8.2; sys_platform == 'darwin'",
+    "vllm>=0.7.3,<=0.9; sys_platform == 'darwin'",
     "bitsandbytes>=0.43.3,<0.46; sys_platform == 'linux'",
-    "vllm==0.8.2; sys_platform == 'linux'",
+    "vllm==0.8.3; sys_platform == 'linux'",
 ]
 cpu = [
-    "torch==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
-    "torchaudio==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
-    "torchvision==0.21.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.2 compatibility
+    "torch==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
+    "torchaudio==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
+    "torchvision==0.21.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
     "torch==2.6.0; sys_platform != 'linux'",
 ]
 
