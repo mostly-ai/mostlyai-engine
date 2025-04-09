@@ -617,3 +617,117 @@ def _analyze_reduce_seq_len(stats_list: list[dict], value_protection: bool = Tru
         "value_protection": value_protection,
     }
     return stats
+
+
+def _dp_quantiles(values: np.ndarray, quantiles: list[float], eps: float, delta: float) -> list[float]:
+    """
+    Returns differentially private estimates of multiple quantiles using smooth sensitivity.
+
+    Args:
+        values (np.ndarray): Numeric data
+        quantiles (list of float): Quantiles to compute (each between 0 and 1)
+        eps (float): Total epsilon budget for DP
+        delta (float): Delta for approximate DP (must be > 0)
+
+    Returns:
+        list[float]: Differentially private estimates of the quantiles.
+    """
+    assert eps > 0, "Epsilon must be positive"
+    assert delta > 0, "Delta must be positive"
+    assert all(0 <= q <= 1 for q in quantiles), "All quantiles must be between 0 and 1"
+
+    # if less than 10 values provided, assume all values are zero
+    if len(values) < 10:
+        values = np.zeros(10)
+
+    def local_sensitivity(sorted_vals: np.ndarray, percentile_index: int, k: int) -> float:
+        n = len(sorted_vals)
+        lower = max(0, percentile_index - k)
+        upper = min(n - 1, percentile_index + k)
+        return (sorted_vals[upper] - sorted_vals[lower]) / max(1, upper - lower)
+
+    def smooth_sensitivity(sorted_vals: np.ndarray, percentile_index: int, beta: float) -> float:
+        n = len(sorted_vals)
+        max_sens = 0.0
+        for k in range(n):
+            local_sens = local_sensitivity(sorted_vals, percentile_index, k)
+            smooth_sens = local_sens * np.exp(-beta * k)
+            max_sens = max(max_sens, smooth_sens)
+        return max_sens
+
+    values = np.sort(values)
+    n = len(values)
+    m = len(quantiles)
+
+    # split budget evenly
+    eps_i = eps / m
+    delta_i = delta / m
+
+    # calculate noisy quantiles
+    results: list[float] = []
+    quantile_indices = [(q, i) for i, q in enumerate(quantiles)]
+
+    for q, _ in quantile_indices:
+        idx = int(np.floor(q * (n - 1)))
+        true_quantile = float(values[idx])
+
+        beta = eps_i / (2 * np.log(2 / delta_i))
+        ss = smooth_sensitivity(values, idx, beta)
+
+        sigma = (2 * ss * np.sqrt(2 * np.log(1.25 / delta_i))) / eps_i
+        noise = float(np.random.normal(0, sigma))
+
+        dp_q = true_quantile + noise
+        results.append(dp_q)
+
+    # ensure monotonicity of quantiles
+    sorted_results = results.copy()
+    sorted_results.sort()
+
+    # map sorted values back to original quantile order
+    final_results = []
+    for i, (q, _) in enumerate(sorted(quantile_indices)):
+        final_results.append(sorted_results[i])
+
+    return final_results
+
+
+def _dp_non_rare(value_counts: dict[str, int], eps: float, delta: float, threshold: int = 5) -> list[str]:
+    """
+    Returns non-rare categorical values using approximate Differential Privacy via
+    Approximative Sparse Vector Technique with Gaussian noise.
+
+    Args:
+        value_counts (dict): Mapping from category to its count.
+        eps (float): Privacy budget epsilon.
+        delta (float): Privacy slack (must be > 0).
+        threshold (int): Threshold for non-rare values.
+
+    Returns:
+        list[str]: Categories with noisy counts above the noisy threshold.
+    """
+    assert eps > 0, "Epsilon must be positive"
+    assert delta > 0, "Delta must be positive"
+    assert all(count >= 0 for count in value_counts.values()), "Value counts must be non-negative"
+
+    # split privacy budget
+    eps_t = eps / 2
+    eps_q = eps / 2
+    delta_t = delta / 2
+    delta_q = delta / 2
+
+    # noisy_threshold = threshold + |noise|
+    sigma_t = np.sqrt(2 * np.log(1.25 / delta_t)) / eps_t
+    noise = np.random.normal(0, sigma_t)
+    noisy_threshold = threshold + abs(noise)
+
+    # noisy counts & filtering
+    sigma_q = np.sqrt(2 * np.log(1.25 / delta_q)) / eps_q
+    selected = []
+
+    for cat, count in value_counts.items():
+        noisy_count = count + np.random.normal(0, sigma_q)
+        if noisy_count >= noisy_threshold:
+            selected.append((cat, noisy_count))
+
+    return [cat for cat, _ in selected]

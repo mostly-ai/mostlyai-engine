@@ -144,7 +144,7 @@ class DifferentialPrivacyConfig(CustomBaseModel):
     """
 
     max_epsilon: float | None = Field(
-        default=None,
+        default=10.0,
         alias="maxEpsilon",
         description="Specifies the maximum allowable epsilon value. If the training process exceeds this threshold, "
         "it will be terminated early. Only model checkpoints with epsilon values below this limit will be "
@@ -153,25 +153,35 @@ class DifferentialPrivacyConfig(CustomBaseModel):
         ge=0.0,
         le=10000.0,
     )
+    delta: float = Field(
+        default=1e-5,
+        description="The delta value for differential privacy. It is the probability of the privacy guarantee not "
+        "holding. The smaller the delta, the more confident you can be that the privacy guarantee holds. This delta "
+        "will be equally distributed between the analysis and the training phase.",
+        ge=0.0,
+        le=1.0,
+    )
     noise_multiplier: float = Field(
         default=1.5,
         alias="noiseMultiplier",
-        description="The ratio of the standard deviation of the Gaussian noise to the L2-sensitivity of the function "
-        "to which the noise is added (How much noise to add).\n",
+        description="Determines how much noise while training the model with differential privacy. This is the ratio of "
+        "the standard deviation of the Gaussian noise to the L2-sensitivity of the function to which the noise is added.",
         ge=0.0,
         le=10000.0,
     )
     max_grad_norm: float = Field(
         default=1.0,
         alias="maxGradNorm",
-        description="The maximum norm of the per-sample gradients for training the model with differential privacy.\n",
+        description="Determines the maximum impact of a single sample on updating the model weights during training with "
+        "differential privacy. This is the maximum norm of the per-sample gradients.",
         ge=0.0,
         le=10000.0,
     )
-    delta: float = Field(
-        default=1e-5,
-        description="The delta value for differential privacy. It is the probability of the privacy guarantee not "
-        "holding. The smaller the delta, the more confident you can be that the privacy guarantee holds.",
+    value_range_epsilon: float = Field(
+        default=1.0,
+        alias="valueRangeEpsilon",
+        description="The DP epsilon of the privacy budget for determining the value ranges, which are gathered prior to "
+        "the model training during the analysis step. Only applicable if value protection is True.",
         ge=0.0,
         le=1.0,
     )
