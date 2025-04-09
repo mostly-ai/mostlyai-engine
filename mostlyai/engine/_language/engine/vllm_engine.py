@@ -148,6 +148,7 @@ class VLLMEngine(LanguageEngine):
             device=device.type,
             max_model_len=min(config_max_model_len, self.tokenizer_max_length + max_new_tokens),
             enable_lora=True,
+            quantization="bitsandbytes",
             dtype=torch.bfloat16 if is_bf16_supported(device) else torch.float16,
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
             swap_space=0,
