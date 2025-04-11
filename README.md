@@ -33,16 +33,16 @@ The latest release of `mostlyai-engine` can be installed via pip:
 pip install -U mostlyai-engine
 ```
 
-or alternatively for a CPU-only setup:
-```bash
-pip install -U 'mostlyai-engine[cpu]' --extra-index-url https://download.pytorch.org/whl/cpu
-```
-
-or alternatively for a GPU setup (needed for LLM finetuning):
+or alternatively for a GPU setup (needed for LLM finetuning and inference):
 ```bash
 pip install -U 'mostlyai-engine[gpu]'
 ```
 
+On Linux, one can explicitly install the CPU-only varient of torch together with `mostlyai-engine` with:
+
+```bash
+pip install -U torch==2.6.0+cpu torchvision==0.21.0+cpu mostlyai-engine --extra-index-url https://download.pytorch.org/whl/cpu
+```
 
 ## Quick start
 
