@@ -47,20 +47,11 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = [
-    # "torch==2.6.0",  # for vllm 0.8.3 compatibility
-    # "torchaudio==2.6.0",  # for vllm 0.8.3 compatibility
-    # "torchvision==0.21.0",  # for vllm 0.8.3 compatibility
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
     "vllm>=0.7.3,<=0.9; sys_platform == 'darwin'",
     "bitsandbytes>=0.43.3,<0.46; sys_platform == 'linux'",
     "vllm==0.8.3; sys_platform == 'linux'",
 ]
-# cpu = [
-#     "torch==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
-#     "torchaudio==2.6.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
-#     "torchvision==0.21.0+cpu; sys_platform == 'linux'",  # for vllm 0.8.3 compatibility
-#     "torch==2.6.0; sys_platform != 'linux'",
-# ]
 
 [dependency-groups]
 dev = [
@@ -87,28 +78,6 @@ documentation = "https://mostly-ai.github.io/mostlyai-engine/"
 
 [tool.uv]
 default-groups = ["dev", "docs"]
-# conflicts = [
-#   [
-#     { extra = "cpu" },
-#     { extra = "gpu" },
-#   ],
-# ]
-#
-# [[tool.uv.index]]
-# name = "pytorch-cpu"
-# url = "https://download.pytorch.org/whl/cpu"
-# explicit = true
-#
-# [tool.uv.sources]
-# torch = [
-#   { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'"},
-# ]
-# torchaudio = [
-#   { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'"},
-# ]
-# torchvision = [
-#   { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'"},
-# ]
 
 [tool.hatch.build.targets.sdist]
 include = ["mostlyai/engine"]
