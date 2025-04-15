@@ -25,7 +25,12 @@ def analyze_text(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = 
     return stats
 
 
-def analyze_reduce_text(stats_list: list[dict], _: bool = True) -> dict:
+def analyze_reduce_text(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     nchar_max = 0
     nchar_sum = 0
     count = 0

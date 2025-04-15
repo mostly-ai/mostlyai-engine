@@ -33,7 +33,12 @@ def analyze_language_categorical(values: pd.Series, root_keys: pd.Series, _: pd.
     return stats
 
 
-def analyze_reduce_language_categorical(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_language_categorical(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     # sum up all counts for each categorical value
     cnt_values: dict[str, int] = {}
     for item in stats_list:

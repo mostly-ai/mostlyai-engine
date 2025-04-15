@@ -71,7 +71,12 @@ def analyze_datetime(values: pd.Series, root_keys: pd.Series, _: pd.Series | Non
     return stats
 
 
-def analyze_reduce_datetime(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_datetime(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
     # determine min/max values for each part
