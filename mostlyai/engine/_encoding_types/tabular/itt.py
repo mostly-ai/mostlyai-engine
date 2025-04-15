@@ -85,7 +85,12 @@ def analyze_itt(
     return stats
 
 
-def analyze_reduce_itt(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_itt(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
     # check if there are negative values

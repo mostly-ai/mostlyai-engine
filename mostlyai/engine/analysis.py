@@ -75,7 +75,7 @@ from mostlyai.engine._encoding_types.language.categorical import (
     analyze_language_categorical,
     analyze_reduce_language_categorical,
 )
-from mostlyai.engine.domain import ModelEncodingType
+from mostlyai.engine.domain import ModelEncodingType, DifferentialPrivacyConfig
 
 from mostlyai.engine._workspace import (
     PathDesc,
@@ -102,6 +102,7 @@ _VALUE_PROTECTION_ENCODING_TYPES = (
 def analyze(
     *,
     value_protection: bool = True,
+    differential_privacy: DifferentialPrivacyConfig | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ) -> None:
@@ -168,12 +169,15 @@ def analyze(
 
         # combine partition statistics
         _LOG.info("combine partition statistics")
+        if value_protection and not differential_privacy:
+            differential_privacy = DifferentialPrivacyConfig()
         _analyze_reduce(
             all_stats=workspace.tgt_all_stats,
             out_stats=workspace.tgt_stats,
             keys=tgt_keys,
             mode="tgt",
             value_protection=value_protection,
+            differential_privacy=differential_privacy,
         )
         if has_context:
             _analyze_reduce(
@@ -182,6 +186,7 @@ def analyze(
                 keys=ctx_keys,
                 mode="ctx",
                 value_protection=True,  # always protect context values
+                differential_privacy=differential_privacy,
             )
 
         # clean up partition-wise stats files, as they contain non-protected values
@@ -302,6 +307,8 @@ def _analyze_reduce(
     keys: dict[str, str],
     mode: Literal["tgt", "ctx"],
     value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
 ) -> None:
     """
     Reduces partial statistics.
@@ -316,7 +323,6 @@ def _analyze_reduce(
     recorded such as training / validation records number, sequence lengths
     summary and others.
     """
-
     stats_files = all_stats.fetch_all()
     stats_list = [read_json(file) for file in stats_files]
     stats: dict[str, Any] = {"columns": {}}
@@ -339,60 +345,47 @@ def _analyze_reduce(
             stats["columns"][column] = {"encoding_type": encoding_type}
             continue
 
-        if encoding_type == ModelEncodingType.tabular_categorical:
-            stats_col = analyze_reduce_categorical(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type in [
-            ModelEncodingType.tabular_numeric_auto,
-            ModelEncodingType.tabular_numeric_digit,
-            ModelEncodingType.tabular_numeric_discrete,
-            ModelEncodingType.tabular_numeric_binned,
-        ]:
-            stats_col = analyze_reduce_numeric(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-                encoding_type=encoding_type,
-            )
-        elif encoding_type == ModelEncodingType.tabular_datetime:
-            stats_col = analyze_reduce_datetime(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.tabular_datetime_relative:
-            stats_col = analyze_reduce_itt(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.tabular_character:
-            stats_col = analyze_reduce_character(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.tabular_lat_long:
-            stats_col = analyze_reduce_latlong(
-                stats_list=column_stats_list,
-            )
-        elif encoding_type == ModelEncodingType.language_text:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list)
-        elif encoding_type == ModelEncodingType.language_categorical:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_categorical(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.language_numeric:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_numeric(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.language_datetime:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_datetime(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        else:
-            raise RuntimeError(f"unknown encoding type {encoding_type}")
+        analyze_reduce_column_args = {
+            "stats_list": column_stats_list,
+            "value_protection": value_protection,
+            "value_protection_epsilon": value_protection_epsilon,
+            "value_protection_delta": value_protection_delta,
+        }
+
+        match encoding_type:
+            case ModelEncodingType.tabular_categorical:
+                stats_col = analyze_reduce_categorical(**analyze_reduce_column_args)
+            case (
+                ModelEncodingType.tabular_numeric_auto
+                | ModelEncodingType.tabular_numeric_digit
+                | ModelEncodingType.tabular_numeric_discrete
+                | ModelEncodingType.tabular_numeric_binned
+            ):
+                stats_col = analyze_reduce_numeric(**analyze_reduce_column_args, encoding_type=encoding_type)
+            case ModelEncodingType.tabular_datetime:
+                stats_col = analyze_reduce_datetime(**analyze_reduce_column_args)
+            case ModelEncodingType.tabular_datetime_relative:
+                stats_col = analyze_reduce_itt(**analyze_reduce_column_args)
+            case ModelEncodingType.tabular_character:
+                stats_col = analyze_reduce_character(**analyze_reduce_column_args)
+            case ModelEncodingType.tabular_lat_long:
+                stats_col = analyze_reduce_latlong(**analyze_reduce_column_args)
+            case ModelEncodingType.language_text:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args)
+            case ModelEncodingType.language_categorical:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_categorical(
+                    **analyze_reduce_column_args
+                )
+            case ModelEncodingType.language_numeric:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_numeric(
+                    **analyze_reduce_column_args
+                )
+            case ModelEncodingType.language_datetime:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_datetime(
+                    **analyze_reduce_column_args
+                )
+            case _:
+                raise RuntimeError(f"unknown encoding type {encoding_type}")
 
         # store encoding type, if it's not present yet
         stats_col = {"encoding_type": encoding_type} | stats_col

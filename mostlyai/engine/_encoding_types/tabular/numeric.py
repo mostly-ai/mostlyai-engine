@@ -203,6 +203,8 @@ def analyze_numeric(
 def analyze_reduce_numeric(
     stats_list: list[dict],
     value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
     encoding_type: ModelEncodingType | None = ModelEncodingType.tabular_numeric_auto,
 ) -> dict:
     # check for occurrence of NaN values

@@ -44,7 +44,12 @@ def analyze_character(values: pd.Series, root_keys: pd.Series, _: pd.Series | No
     return stats
 
 
-def analyze_reduce_character(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_character(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     # gather maximum string length across partitions
     max_string_length = max(stats["max_string_length"] for stats in stats_list)
     positions = [f"P{idx}" for idx in range(max_string_length)]

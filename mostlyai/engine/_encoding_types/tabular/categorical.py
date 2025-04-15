@@ -57,7 +57,15 @@ def analyze_categorical(values: pd.Series, root_keys: pd.Series, _: pd.Series | 
     return stats
 
 
-def analyze_reduce_categorical(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_categorical(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
+    assert (value_protection_epsilon is not None) is (value_protection_delta is not None), (
+        "value_protection_epsilon and value_protection_delta must be both set or both unset"
+    )
     # sum up all counts for each categorical value
     cnt_values: dict[str, int] = {}
     for item in stats_list:

@@ -53,7 +53,12 @@ def analyze_language_numeric(values: pd.Series, root_keys: pd.Series, _: pd.Seri
     return stats
 
 
-def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_language_numeric(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     # check for occurrence of NaN values
     has_nan = any([j["has_nan"] for j in stats_list])
 
