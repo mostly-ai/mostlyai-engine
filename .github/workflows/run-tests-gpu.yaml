@@ -21,7 +21,7 @@ jobs:
           - name: Setup | Install Git
             run: |
               apt-get update -qq
-              apt-get install -y --no-install-recommends git gcc~12
+              apt-get install -y --no-install-recommends git gcc-12
 
           - name: Setup | Checkout
             uses: actions/checkout@v4
