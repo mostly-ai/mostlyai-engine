@@ -48,9 +48,8 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
     "bitsandbytes>=0.42.0,<0.43; sys_platform == 'darwin'",
-    "vllm>=0.7.3,<=0.9; sys_platform == 'darwin'",
     "bitsandbytes>=0.43.3,<0.46; sys_platform == 'linux'",
-    "vllm==0.8.3; sys_platform == 'linux'",
+    "vllm==0.8.3; sys_platform == 'linux' or sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
