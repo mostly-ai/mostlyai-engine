@@ -169,15 +169,17 @@ def analyze(
 
         # combine partition statistics
         _LOG.info("combine partition statistics")
-        if value_protection and not differential_privacy:
-            differential_privacy = DifferentialPrivacyConfig()
+        value_protection_epsilon = differential_privacy.value_protection_epsilon if differential_privacy else None
+        # FIXME: split delta
+        value_protection_delta = differential_privacy.delta if differential_privacy else None
         _analyze_reduce(
             all_stats=workspace.tgt_all_stats,
             out_stats=workspace.tgt_stats,
             keys=tgt_keys,
             mode="tgt",
             value_protection=value_protection,
-            differential_privacy=differential_privacy,
+            value_protection_epsilon=value_protection_epsilon,
+            value_protection_delta=value_protection_delta,
         )
         if has_context:
             _analyze_reduce(
@@ -185,8 +187,9 @@ def analyze(
                 out_stats=workspace.ctx_stats,
                 keys=ctx_keys,
                 mode="ctx",
-                value_protection=True,  # always protect context values
-                differential_privacy=differential_privacy,
+                value_protection=value_protection,
+                value_protection_epsilon=value_protection_epsilon,
+                value_protection_delta=value_protection_delta,
             )
 
         # clean up partition-wise stats files, as they contain non-protected values
@@ -462,7 +465,9 @@ def _analyze_reduce(
         # gather sequence length statistics
         stats["seq_len"] = _analyze_reduce_seq_len(
             stats_list=[item["seq_len"] for item in stats_list],
-            value_protection=True,  # always protect sequence lengths
+            value_protection=value_protection,
+            value_protection_epsilon=value_protection_epsilon,
+            value_protection_delta=value_protection_delta,
         )
         seq_len_min = stats["seq_len"]["min"]
         seq_len_max = stats["seq_len"]["max"]
