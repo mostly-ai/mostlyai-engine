@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from mostlyai.engine._common import safe_convert_string
+from mostlyai.engine._common import dp_non_rare, safe_convert_string
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_UNKNOWN_TOKEN,
     encode_categorical,
@@ -281,16 +281,24 @@ def analyze_reduce_latlong(
     quad_codes = {}
 
     for quad in quads:
-        keys = list(
-            set(chain.from_iterable([stats["quad_codes"][quad].keys() for stats in stats_list]))
-        )  # all the possible values for a given quad
-        totals = {
-            key: sum([stats["quad_codes"][quad].get(key, 0) for stats in stats_list]) for key in keys if key
-        }  # mapped to total counts per each value
-        totals = {
-            val: cnt for val, cnt in totals.items() if cnt >= RARE_CATEGORY_THRESHOLD
-        }  # keep only those, which appear at least {rare_category_threshold} times
-        categories = ([CATEGORICAL_UNKNOWN_TOKEN] + [cat for cat in totals.keys() if cat not in unk_cat_aliases])[
+        # all the possible values for a given quad
+        possible_keys = list(set(chain.from_iterable([stats["quad_codes"][quad].keys() for stats in stats_list])))
+        # counts of all possible values
+        cnt_values: dict[str, int] = {}
+        for stats in stats_list:
+            for key in possible_keys:
+                if key:  # FIXME: is this if statement necessary?
+                    cnt_values[key] = cnt_values.get(key, 0) + stats["quad_codes"][quad].get(key, 0)
+        # NOTE: latlong always has value protection
+        if value_protection_delta is not None and value_protection_epsilon is not None:
+            categories = dp_non_rare(
+                cnt_values, value_protection_epsilon, value_protection_delta, threshold=RARE_CATEGORY_THRESHOLD
+            )
+        else:
+            # stochastic threshold for rare categories
+            rare_min = RARE_CATEGORY_THRESHOLD + int(3 * np.random.uniform())  # FIXME: should this be 20 + noise?
+            categories = [k for k in cnt_values.keys() if cnt_values[k] >= rare_min]
+        categories = ([CATEGORICAL_UNKNOWN_TOKEN] + [cat for cat in categories if cat not in unk_cat_aliases])[
             :MAX_UNIQUE_VALUES_PER_QUAD
         ]  # UNK + remaining possible values
         if len(categories) - 1 < MIN_UNIQUE_QUAD_VALUES:  # excluding unknown category
