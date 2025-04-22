@@ -16,10 +16,9 @@
 Categorical encoding maps each categorical value to its own integer code.
 """
 
-import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string, dp_non_rare
+from mostlyai.engine._common import get_stochastic_rare_threshold, safe_convert_string, dp_non_rare
 
 CATEGORICAL_UNKNOWN_TOKEN = "_RARE_"
 CATEGORICAL_NULL_TOKEN = "<<NULL>>"
@@ -81,8 +80,7 @@ def analyze_reduce_categorical(
         if value_protection_delta is not None and value_protection_epsilon is not None:
             categories = dp_non_rare(cnt_values, value_protection_epsilon, value_protection_delta, threshold=5)
         else:
-            # stochastic threshold for rare categories
-            rare_min = 5 + int(3 * np.random.uniform())
+            rare_min = get_stochastic_rare_threshold(min_threshold=5)
             categories = [k for k in known_categories if cnt_values[k] >= rare_min]
     else:
         categories = known_categories

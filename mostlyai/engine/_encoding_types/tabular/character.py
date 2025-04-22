@@ -19,7 +19,7 @@ Character encoding splits any value into its characters, and encodes each positi
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import dp_non_rare, safe_convert_string
+from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
 
 UNKNOWN_TOKEN = "\0"
 MAX_LENGTH_CHARS = 50
@@ -67,8 +67,7 @@ def analyze_reduce_character(
             if value_protection_delta is not None and value_protection_epsilon is not None:
                 categories = dp_non_rare(cnt_values, value_protection_epsilon, value_protection_delta, threshold=5)
             else:
-                # stochastic threshold for rare categories
-                rare_min = 5 + int(3 * np.random.uniform())
+                rare_min = get_stochastic_rare_threshold(min_threshold=5)
                 categories = [k for k in known_categories if cnt_values[k] >= rare_min]
         else:
             categories = known_categories

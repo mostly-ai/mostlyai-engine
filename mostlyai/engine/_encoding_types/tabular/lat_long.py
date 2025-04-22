@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from mostlyai.engine._common import dp_non_rare, safe_convert_string
+from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_UNKNOWN_TOKEN,
     encode_categorical,
@@ -295,8 +295,9 @@ def analyze_reduce_latlong(
                 cnt_values, value_protection_epsilon, value_protection_delta, threshold=RARE_CATEGORY_THRESHOLD
             )
         else:
-            # stochastic threshold for rare categories
-            rare_min = RARE_CATEGORY_THRESHOLD + int(3 * np.random.uniform())  # FIXME: should this be 20 + noise?
+            rare_min = get_stochastic_rare_threshold(
+                min_threshold=RARE_CATEGORY_THRESHOLD
+            )  # FIXME: should this be 20 + noise?
             categories = [k for k in cnt_values.keys() if cnt_values[k] >= rare_min]
         categories = ([CATEGORICAL_UNKNOWN_TOKEN] + [cat for cat in categories if cat not in unk_cat_aliases])[
             :MAX_UNIQUE_VALUES_PER_QUAD
