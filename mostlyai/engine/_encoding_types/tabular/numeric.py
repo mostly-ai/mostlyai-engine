@@ -28,7 +28,7 @@ import typing
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import find_distinct_bins, safe_convert_numeric
+from mostlyai.engine._common import find_distinct_bins, get_stochastic_rare_threshold, safe_convert_numeric
 from mostlyai.engine._dtypes import is_float_dtype, is_integer_dtype
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
@@ -229,8 +229,9 @@ def analyze_reduce_numeric(
             min5 = []
             max5 = []
         else:
-            min5 = min11[5:10]  # drop 1 to 5th lowest; keep 6th to 10th lowest
-            max5 = max11[5:10]  # drop 1 to 5th highest; keep 6th to 10th highest
+            rare_threshold = get_stochastic_rare_threshold(min_threshold=5)
+            min5 = min11[rare_threshold : rare_threshold + 5]  # drop 1 to 5th lowest; keep 6th to 10th lowest
+            max5 = max11[rare_threshold : rare_threshold + 5]  # drop 1 to 5th highest; keep 6th to 10th highest
     else:
         min5 = min11[0:5]
         max5 = max11[0:5]
@@ -256,7 +257,7 @@ def analyze_reduce_numeric(
         cnt_total = sum(cnt_values.values())
         # apply rare value protection
         if value_protection:
-            rare_min = 5 + int(3 * np.random.uniform())
+            rare_min = get_stochastic_rare_threshold(min_threshold=5)
             cnt_values = {c: v for c, v in cnt_values.items() if v > rare_min}
         non_rare_ratio = sum(cnt_values.values()) / cnt_total
     else:

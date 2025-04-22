@@ -724,3 +724,7 @@ def dp_non_rare(value_counts: dict[str, int], eps: float, delta: float, threshol
             selected.append((cat, noisy_count))
 
     return [cat for cat, _ in selected]
+
+
+def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
+    return min_threshold + int(noise_multiplier * np.random.uniform())
