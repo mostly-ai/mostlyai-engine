@@ -241,12 +241,11 @@ def analyze_reduce_numeric(
                     values, quantiles, value_protection_epsilon, value_protection_delta
                 )
             else:
-                rare_threshold = get_stochastic_rare_threshold(min_threshold=5)
-                reduced_min = reduced_mins[rare_threshold]
-                reduced_max = reduced_maxs[rare_threshold]
+                reduced_min = reduced_mins[get_stochastic_rare_threshold(min_threshold=5)]
+                reduced_max = reduced_maxs[get_stochastic_rare_threshold(min_threshold=5)]
     else:
-        reduced_min = reduced_mins[0]
-        reduced_max = reduced_maxs[0]
+        reduced_min = reduced_mins[0] if len(reduced_mins) > 0 else None
+        reduced_max = reduced_maxs[0] if len(reduced_maxs) > 0 else None
 
     if reduced_min is not None or reduced_max is not None:
         max_abs = np.max(np.abs(np.array([reduced_min, reduced_max])))
@@ -332,12 +331,12 @@ def analyze_reduce_numeric(
     elif encoding_type == ModelEncodingType.tabular_numeric_binned:
         # binned numeric encoding
         quantiles = np.concatenate([j["quantiles"] for j in stats_list if j["quantiles"]])
-        if len(reduced_min) == 0 or len(reduced_max) == 0:
+        if reduced_min is None or reduced_max is None:
             # handle edge case where all values are privacy protected
             bins = [0]
             min_decimal = 0
         else:
-            quantiles = list(np.clip(quantiles, min(reduced_min), max(reduced_max)))
+            quantiles = list(np.clip(quantiles, reduced_min, reduced_max))
             bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
         # add unknown/rare token
         categories = [NUMERIC_BINNED_UNKNOWN_TOKEN]
@@ -346,9 +345,10 @@ def analyze_reduce_numeric(
             categories += [NUMERIC_BINNED_NULL_TOKEN]
 
         # add min/max tokens if min/max are not rare
-        if len(set(reduced_min)) == 1:
+        # FIXME: what should the new behavior be?
+        if reduced_min is not None:
             categories += [NUMERIC_BINNED_MIN_TOKEN]
-        if len(set(reduced_max)) == 1:
+        if reduced_max is not None:
             categories += [NUMERIC_BINNED_MAX_TOKEN]
         stats = {
             "encoding_type": ModelEncodingType.tabular_numeric_binned.value,
@@ -394,19 +394,13 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
             values = values.astype(dtype)
     # reset index, as `values.mask` can throw errors for misaligned indices
     values.reset_index(drop=True, inplace=True)
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    min5 = _type_safe_numeric_series(stats["min5"] or [0], dtype)
-    max5 = _type_safe_numeric_series(stats["max5"] or [0], dtype)
-    values.mask(
-        values < min5[0],
-        min5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
-    values.mask(
-        values > max5[0],
-        max5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
+    # replace extreme values with min/max
+    if stats["min"] is not None:
+        reduced_min = _type_safe_numeric_series([stats["min"]], dtype).iloc[0]
+        values.loc[values < reduced_min] = reduced_min
+    if stats["max"] is not None:
+        reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
+        values.loc[values > reduced_max] = reduced_max
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
     is_not_nan = df["nan"] == 0
@@ -551,18 +545,13 @@ def _decode_numeric_digit(df_encoded: pd.DataFrame, stats: dict) -> pd.Series:
         values[df_encoded["nan"] == 1] = pd.NA
     if "neg" in df_encoded.columns:
         values[df_encoded["neg"] == 1] = -1 * values[df_encoded["neg"] == 1]
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    if len(stats["min5"]) > 0 and len(stats["max5"]) > 0:
-        min5 = _type_safe_numeric_series(stats["min5"], dtype).values
-        max5 = _type_safe_numeric_series(stats["max5"], dtype).values
-        is_too_low = values.notna() & (values < min5[0])
-        is_too_high = values.notna() & (values > max5[0])
-        values.loc[is_too_low] = _type_safe_numeric_series(
-            np.random.uniform(min(min5), max(min5), size=sum(is_too_low)), dtype
-        ).values
-        values.loc[is_too_high] = _type_safe_numeric_series(
-            np.random.uniform(min(max5), max(max5), size=sum(is_too_high)), dtype
-        ).values
+    # replace extreme values with min/max
+    # TODO: check if this is the expected behavior
+    if stats["min"] is not None and stats["max"] is not None:
+        is_too_low = values.notna() & (values < stats["min"])
+        is_too_high = values.notna() & (values > stats["max"])
+        values.loc[is_too_low] = _type_safe_numeric_series(np.ones(sum(is_too_low)) * stats["min"], dtype).values
+        values.loc[is_too_high] = _type_safe_numeric_series(np.ones(sum(is_too_high)) * stats["max"], dtype).values
     elif "nan" in df_encoded.columns:
         # set all values to NaN if no valid values were present
         values[df_encoded["nan"] == 0] = pd.NA

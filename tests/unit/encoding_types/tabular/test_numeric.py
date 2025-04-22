@@ -258,8 +258,8 @@ class TestDigitAnalyzeReduce:
         assert result["max_decimal"] == 1
         assert result["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000039" + "90000000")
-        assert result["min5"] == [2.2, 3.3000000000000003, 3.3000000000000003, 4.4, 4.4]
-        assert result["max5"] == [27.8, 26.7, 26.7, 25.6, 25.6]
+        assert result["min"] in [2.2, 3.3000000000000003, 3.3000000000000003, 4.4]
+        assert result["max"] in [27.8, 26.7, 26.7, 25.6]
 
     def test_negatives_only(self, stats_negatives):
         result = analyze_reduce_numeric([stats_negatives] * 2, encoding_type=ModelEncodingType.tabular_numeric_digit)
@@ -270,8 +270,8 @@ class TestDigitAnalyzeReduce:
         assert result["max_decimal"] == 1
         assert result["min_digits"] == _digit_to_int("0000000000000000010" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000099" + "90000000")
-        assert result["min5"] == [-87.8, -86.7, -86.7, -85.6, -85.6]
-        assert result["max5"] == [-12.2, -13.3, -13.3, -14.4, -14.4]
+        assert result["min"] in [-87.8, -86.7, -86.7, -85.6]
+        assert result["max"] in [-12.2, -13.3, -13.3, -14.4]
 
     def test_positives_and_negatives(self, stats_positives, stats_negatives):
         result = analyze_reduce_numeric(
@@ -284,8 +284,8 @@ class TestDigitAnalyzeReduce:
         assert result["max_decimal"] == 1
         assert result["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000099" + "90000000")
-        assert result["min5"] == [-84.5, -83.4, -82.3, -81.2, -80.1]
-        assert result["max5"] == [24.5, 23.4, 22.299999999999997, 21.2, 20.1]
+        assert result["min"] in [-84.5, -83.4, -82.3, -81.2]
+        assert result["max"] in [24.5, 23.4, 22.299999999999997, 21.2]
 
     def test_positives_and_nulls(self, stats_positives, stats_nulls):
         result = analyze_reduce_numeric(
@@ -311,15 +311,8 @@ class TestDigitAnalyzeReduce:
         assert result["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000039" + "90000000")
         # most extreme values are included
-        assert result["min5"] == [
-            0.0,
-            1.1,
-            2.2,
-            3.3000000000000003,
-            4.4,
-        ]
-        # most extreme values are included
-        assert result["max5"] == [30.0, 28.9, 27.8, 26.7, 25.6]
+        assert result["min"] in [0.0, 1.1, 2.2, 3.3000000000000003]
+        assert result["max"] in [30.0, 28.9, 27.8, 26.7]
 
 
 class TestDigitEncode:
@@ -334,8 +327,8 @@ class TestDigitEncode:
             "max_digits": _digit_to_int("0000000000000000099" + "90000000"),
             "max_decimal": 1,
             "min_decimal": -1,
-            "min5": [-99.0] * 5,
-            "max5": [+99.9] * 5,
+            "min": -99.0,
+            "max": 99.9,
         }
 
     def test_known_positives_negatives_nulls(self, stats):
@@ -390,8 +383,8 @@ class TestDigitEncode:
             "max_digits": _digit_to_int("9999999999999999999" + "99999999"),
             "max_decimal": 18,
             "min_decimal": -8,
-            "min5": [-9999999999999999999.99999999] * 5,
-            "max5": [+9999999999999999999.99999999] * 5,
+            "min": -9999999999999999999.99999999,
+            "max": +9999999999999999999.99999999,
         }
         min_int64_val = np.iinfo(np.int64).min
         max_int64_val = np.iinfo(np.int64).max
@@ -427,8 +420,8 @@ class TestDigitDecode:
             "max_digits": _digit_to_int("0000000000000000099" + "90000000"),
             "max_decimal": 1,
             "min_decimal": -1,
-            "min5": [-90.0] * 5,
-            "max5": [+90.0] * 5,
+            "min": -90.0,
+            "max": +90.0,
         }
 
     def test_known_positives_negatives_nulls(self, stats):
@@ -460,8 +453,8 @@ class TestDigitDecode:
             "max_digits": _digit_to_int("9999999999999999999" + "99999999"),
             "max_decimal": 18,
             "min_decimal": -8,
-            "min5": [-9999999999999999999.99999999] * 5,
-            "max5": [+9999999999999999999.99999999] * 5,
+            "min": -9999999999999999999.99999999,
+            "max": +9999999999999999999.99999999,
         }
         min_int64_val = np.iinfo(np.int64).min
         max_int64_val = np.iinfo(np.int64).max
