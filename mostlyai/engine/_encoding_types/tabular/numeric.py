@@ -28,7 +28,7 @@ import typing
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import find_distinct_bins, get_stochastic_rare_threshold, safe_convert_numeric
+from mostlyai.engine._common import dp_non_rare, find_distinct_bins, get_stochastic_rare_threshold, safe_convert_numeric
 from mostlyai.engine._dtypes import is_float_dtype, is_integer_dtype
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
@@ -257,12 +257,21 @@ def analyze_reduce_numeric(
         cnt_total = sum(cnt_values.values())
         # apply rare value protection
         if value_protection:
-            rare_min = get_stochastic_rare_threshold(min_threshold=5)
-            cnt_values = {c: v for c, v in cnt_values.items() if v > rare_min}
-        non_rare_ratio = sum(cnt_values.values()) / cnt_total
+            if value_protection_delta is not None and value_protection_epsilon is not None:
+                categories, non_rare_ratio = dp_non_rare(
+                    cnt_values, value_protection_epsilon, value_protection_delta, threshold=5
+                )
+            else:
+                rare_min = get_stochastic_rare_threshold(min_threshold=5)
+                cnt_values = {c: v for c, v in cnt_values.items() if v >= rare_min}
+                categories = list(cnt_values.keys())
+                non_rare_ratio = sum(cnt_values.values()) / cnt_total
+        else:
+            categories = list(cnt_values.keys())
+            non_rare_ratio = 1.0
     else:
-        cnt_values = {}
-        non_rare_ratio = 0
+        categories = []
+        non_rare_ratio = 0.0
 
     # auto heuristic
     if encoding_type == ModelEncodingType.tabular_numeric_auto:
@@ -274,12 +283,11 @@ def analyze_reduce_numeric(
             encoding_type = ModelEncodingType.tabular_numeric_binned
 
     if encoding_type == ModelEncodingType.tabular_numeric_discrete:
-        # add unknown/rare token
-        categories = [NUMERIC_DISCRETE_UNKNOWN_TOKEN]
         # add NULL token if NaN values exist
         if has_nan:
-            categories += [NUMERIC_DISCRETE_NULL_TOKEN]
-        categories += [k for k in cnt_values.keys()]
+            categories = [NUMERIC_DISCRETE_NULL_TOKEN] + categories
+        # add unknown/rare token
+        categories = [NUMERIC_DISCRETE_UNKNOWN_TOKEN] + categories
         stats = {
             "encoding_type": ModelEncodingType.tabular_numeric_discrete.value,
             "cardinalities": {CATEGORICAL_SUB_COL_SUFFIX: len(categories)},

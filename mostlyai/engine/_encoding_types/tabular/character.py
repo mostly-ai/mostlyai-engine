@@ -65,7 +65,7 @@ def analyze_reduce_character(
         known_categories = [k for k in sorted(cnt_values.keys())]
         if value_protection:
             if value_protection_delta is not None and value_protection_epsilon is not None:
-                categories = dp_non_rare(cnt_values, value_protection_epsilon, value_protection_delta, threshold=5)
+                categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, value_protection_delta, threshold=5)
             else:
                 rare_min = get_stochastic_rare_threshold(min_threshold=5)
                 categories = [k for k in known_categories if cnt_values[k] >= rare_min]

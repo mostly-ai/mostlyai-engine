@@ -291,7 +291,7 @@ def analyze_reduce_latlong(
                     cnt_values[key] = cnt_values.get(key, 0) + stats["quad_codes"][quad].get(key, 0)
         # NOTE: latlong always has value protection
         if value_protection_delta is not None and value_protection_epsilon is not None:
-            categories = dp_non_rare(
+            categories, _ = dp_non_rare(
                 cnt_values, value_protection_epsilon, value_protection_delta, threshold=RARE_CATEGORY_THRESHOLD
             )
         else:

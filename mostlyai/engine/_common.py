@@ -685,7 +685,7 @@ def dp_quantiles(values: np.ndarray, quantiles: list[float], eps: float, delta: 
     return final_results
 
 
-def dp_non_rare(value_counts: dict[str, int], eps: float, delta: float, threshold: int = 5) -> list[str]:
+def dp_non_rare(value_counts: dict[str, int], eps: float, delta: float, threshold: int = 5) -> tuple[list[str], float]:
     """
     Returns non-rare categorical values using approximate Differential Privacy via
     Approximative Sparse Vector Technique with Gaussian noise.
@@ -698,11 +698,13 @@ def dp_non_rare(value_counts: dict[str, int], eps: float, delta: float, threshol
 
     Returns:
         list[str]: Categories with noisy counts above the noisy threshold.
+        float: Non-rare ratio.
     """
     assert eps > 0, "Epsilon must be positive"
     assert delta > 0, "Delta must be positive"
     assert all(count >= 0 for count in value_counts.values()), "Value counts must be non-negative"
 
+    total_counts = sum(value_counts.values())
     # split privacy budget
     eps_t = eps / 2
     eps_q = eps / 2
@@ -723,7 +725,10 @@ def dp_non_rare(value_counts: dict[str, int], eps: float, delta: float, threshol
         if noisy_count >= noisy_threshold:
             selected.append((cat, noisy_count))
 
-    return [cat for cat, _ in selected]
+    noisy_total_counts = sum([count for _, count in selected])
+    non_rare_ratio = noisy_total_counts / total_counts
+
+    return [cat for cat, _ in selected], non_rare_ratio
 
 
 def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
