@@ -119,9 +119,9 @@ def test_itt_empty(tmp_path):
         "has_nan": False,
         "has_neg": False,
         "has_time": False,
-        "max5": [],
+        "max": None,
         "max_values": min_max_values,
-        "min5": [],
+        "min": None,
         "min_values": min_max_values,
     }
     assert df_encoded.empty, df_encoded.columns.tolist() == (True, [])
