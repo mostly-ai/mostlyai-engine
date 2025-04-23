@@ -16,7 +16,7 @@ import calendar
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_datetime
+from mostlyai.engine._common import dp_quantiles, get_stochastic_rare_threshold, safe_convert_datetime
 
 
 def analyze_language_datetime(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:
@@ -47,26 +47,43 @@ def analyze_reduce_language_datetime(
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
     # determine min / max 5 values to map too low / too high values to
-    min11 = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)[:11]
-    max11 = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)[:11]
+    reduced_mins = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)
+    reduced_maxs = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(min11) < 11 or len(max11) < 11:
-            # less than 11 subjects with non-NULL values; we need to protect all
-            min5 = []
-            max5 = []
+        if len(reduced_mins) < 11 or len(reduced_maxs) < 11:  # FIXME: what should the new threshold be?
+            reduced_min = None
+            reduced_max = None
         else:
-            min5 = [str(v) for v in min11[5:10]]  # drop 1 to 5th lowest; keep 6th to 10th lowest
-            max5 = [str(v) for v in max11[5:10]]  # drop 1 to 5th highest; keep 6th to 10th highest
+            if value_protection_delta is not None and value_protection_epsilon is not None:
+                values = sorted(reduced_mins + reduced_maxs)
+                quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
+                reduced_min, reduced_max = dp_quantiles(
+                    values, quantiles, value_protection_epsilon, value_protection_delta
+                )
+                reduced_min = str(reduced_min)
+                reduced_max = str(reduced_max)
+            else:
+                reduced_min = str(reduced_mins[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_max = str(reduced_maxs[get_stochastic_rare_threshold(min_threshold=5)])
     else:
-        min5 = min11[0:4]
-        max5 = max11[0:4]
+        reduced_min = str(reduced_mins[0]) if len(reduced_mins) > 0 else None
+        reduced_max = str(reduced_maxs[0]) if len(reduced_maxs) > 0 else None
     stats = {
         "has_nan": has_nan,
-        "min5": min5,
-        "max5": max5,
+        "min": reduced_min,
+        "max": reduced_max,
     }
     return stats
+
+
+def _clip_datetime(values: pd.Series, stats: dict) -> pd.Series:
+    if stats["min"] is not None:
+        reduced_min = np.datetime64(stats["min"], "ns")
+        values.loc[values < reduced_min] = reduced_min
+    if stats["max"] is not None:
+        reduced_max = np.datetime64(stats["max"], "ns")
+        values.loc[values > reduced_max] = reduced_max
+    return values
 
 
 def encode_language_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.Series:
@@ -75,36 +92,12 @@ def encode_language_datetime(values: pd.Series, stats: dict, _: pd.Series | None
     values = values.copy()
     # reset index, as `values.mask` can throw errors for misaligned indices
     values.reset_index(drop=True, inplace=True)
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    min5 = stats["min5"] if len(stats["min5"]) > 0 else [0]
-    max5 = stats["max5"] if len(stats["max5"]) > 0 else [0]
-    min5 = pd.Series(min5, dtype=values.dtype)
-    max5 = pd.Series(max5, dtype=values.dtype)
-    values.mask(
-        values < min5[0],
-        min5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
-    values.mask(
-        values > max5[0],
-        max5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
+    # replace extreme values with min/max
+    values = _clip_datetime(values, stats)
     return values
 
 
-def _clip_datetime(x: pd.Series, min5: list, max5: list) -> pd.Series:
-    x_dt = pd.to_datetime(x, errors="coerce")
-    min_arr = pd.to_datetime(min5).to_numpy(dtype="datetime64[ns]")
-    max_arr = pd.to_datetime(max5).to_numpy(dtype="datetime64[ns]")
-    n = len(x_dt)
-    random_mins = np.random.choice(min_arr, size=n)
-    random_maxs = np.random.choice(max_arr, size=n)
-    clipped = np.minimum(np.maximum(x_dt.to_numpy(dtype="datetime64[ns]"), random_mins), random_maxs)
-    return pd.Series(clipped, index=x.index)
-
-
-def decode_language_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+def decode_language_datetime(x: pd.Series, stats: dict[str, str]) -> pd.Series:
     x = x.where(~x.isin(["", "_INVALID_"]), np.nan)
 
     valid_mask = (
@@ -144,5 +137,5 @@ def decode_language_datetime(x: pd.Series, col_stats: dict[str, str]) -> pd.Seri
         x.loc[valid_mask] = new_date
 
     x = pd.to_datetime(x, errors="coerce")
-    x = _clip_datetime(x, col_stats["min5"], col_stats["max5"])
+    x = _clip_datetime(x, stats)
     return x.astype("datetime64[ns]")

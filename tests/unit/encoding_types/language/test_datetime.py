@@ -61,8 +61,8 @@ class TestLanguageDatetimeAnalyzeReduce:
         }
         reduced = analyze_reduce_language_datetime([stats1, stats2])
         assert reduced["has_nan"] is True
-        assert reduced["min5"] == ["1910-01-01"] * 5
-        assert reduced["max5"] == ["2024-12-31"] * 5
+        assert reduced["min"] == "1910-01-01"
+        assert reduced["max"] == "2024-12-31"
 
 
 class TestLanguageDatetimeEncode:
@@ -82,8 +82,8 @@ class TestLanguageDatetimeEncode:
         )
         stats = {
             "has_nan": True,
-            "min5": ["1930-01-31"] * 5,
-            "max5": ["2024-12-31"] * 5,
+            "min": "1930-01-31",
+            "max": "2024-12-31",
         }
         encoded = encode_language_datetime(values, stats)
         assert encoded.dtype == "datetime64[us]"
@@ -103,8 +103,8 @@ class TestLanguageDatetimeDecode:
         return {
             "encoding_type": ModelEncodingType.language_datetime,
             "has_nan": True,
-            "min5": ["2000-01-01"] * 5,
-            "max5": ["2024-12-31"] * 5,
+            "min": "2000-01-01",
+            "max": "2024-12-31",
         }
 
     @pytest.fixture
@@ -112,8 +112,8 @@ class TestLanguageDatetimeDecode:
         return {
             "encoding_type": ModelEncodingType.language_datetime,
             "has_nan": True,
-            "min5": ["1900-01-01"] * 5,
-            "max5": ["2100-01-01"] * 5,
+            "min": "1900-01-01",
+            "max": "2100-01-01",
         }
 
     @pytest.fixture
@@ -135,8 +135,8 @@ class TestLanguageDatetimeDecode:
         decoded = decode_language_datetime(sample_dates, datetime_stats)
         assert decoded.dtype == "datetime64[ns]"
         non_null = decoded.dropna()
-        min_bound = pd.to_datetime(datetime_stats["min5"][0])
-        max_bound = pd.to_datetime(datetime_stats["max5"][0])
+        min_bound = pd.to_datetime(datetime_stats["min"])
+        max_bound = pd.to_datetime(datetime_stats["max"])
         for dt in non_null:
             assert dt >= min_bound
             assert dt <= max_bound
