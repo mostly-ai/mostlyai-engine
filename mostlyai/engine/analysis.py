@@ -33,6 +33,8 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     TGT,
+    dp_quantiles,
+    get_stochastic_rare_threshold,
     is_a_list,
     is_sequential,
     read_json,
@@ -583,7 +585,12 @@ def _analyze_seq_len(
     return stats
 
 
-def _analyze_reduce_seq_len(stats_list: list[dict], value_protection: bool = True) -> dict:
+def _analyze_reduce_seq_len(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+    value_protection_delta: float | None = None,
+) -> dict:
     # gather sequence length counts
     cnt_lengths: dict[str, int] = {}
     for item in stats_list:
@@ -595,23 +602,41 @@ def _analyze_reduce_seq_len(stats_list: list[dict], value_protection: bool = Tru
         if len(cnt_lengths) > 0
         else np.empty(0)
     )
+    min_length = max_length = median = deciles = None
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(lengths) <= 10:
+        if len(lengths) <= 10:  # FIXME: what should the new threshold be?
             # less or equal to 10 subjects; we need to protect all
             lengths = np.repeat(1, 10)
         else:
-            lengths = lengths[5:-5]
+            if value_protection_epsilon is not None and value_protection_delta is not None:
+                if len(lengths) >= 10_000:
+                    quantiles = np.linspace(0.01, 0.99, 11)
+                else:
+                    quantiles = np.linspace(0.05, 0.95, 11)
+                # TODO: check difference between inverted_cdf and linear (default)
+                dp_deciles = dp_quantiles(lengths, quantiles, value_protection_epsilon, value_protection_delta)
+                deciles = [int(v) for v in dp_deciles]
+                min_length = deciles[0]
+                max_length = deciles[-1]
+                median = deciles[5]
+            else:
+                lengths = lengths[
+                    get_stochastic_rare_threshold(min_threshold=5) : -get_stochastic_rare_threshold(min_threshold=5)
+                ]
+    if deciles is None:
+        # non-DP case
+        min_length = int(np.min(lengths))
+        max_length = int(np.max(lengths))
+        median = int(np.median(lengths))
+        deciles = [int(v) for v in np.quantile(lengths, q=np.arange(0, 1.1, 0.1), method="inverted_cdf")]
     stats = {
         # calculate min/max for GENERATE
-        "min": int(np.min(lengths)),
-        "max": int(np.max(lengths)),
+        "min": min_length,
+        "max": max_length,
         # calculate median for LSTM heuristic
-        "median": int(np.median(lengths)),
+        "median": median,
         # calculate deciles of sequence lengths for bucket_by_seq_length
-        "deciles": [int(v) for v in np.quantile(lengths, q=np.arange(0, 1.1, 0.1), method="inverted_cdf")]
-        if len(lengths) > 0
-        else [],
+        "deciles": deciles,
         "value_protection": value_protection,
     }
     return stats
