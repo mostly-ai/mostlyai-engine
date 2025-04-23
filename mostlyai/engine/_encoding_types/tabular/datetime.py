@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from dateutil import parser  # type: ignore
 
-from mostlyai.engine._common import safe_convert_datetime
+from mostlyai.engine._common import dp_quantiles, get_stochastic_rare_threshold, safe_convert_datetime
 from mostlyai.engine._dtypes import is_date_dtype, is_timestamp_dtype
 
 DATETIME_PARTS = [
@@ -87,25 +87,33 @@ def analyze_reduce_datetime(
     has_time = max_values["hour"] > 0 or max_values["minute"] > 0 or max_values["second"] > 0
     has_ms = has_time and (max_values["ms_E2"] > 0 or max_values["ms_E1"] > 0 or max_values["ms_E0"] > 0)
     # determine min / max 5 values to map too low / too high values to
-    min11 = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)[:11]
-    max11 = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)[:11]
+    reduced_mins = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)
+    reduced_maxs = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(min11) < 11 or len(max11) < 11:
+        if len(reduced_mins) < 11 or len(reduced_maxs) < 11:  # FIXME: what should the new threshold be?
             # less than 11 subjects with non-NULL values; we need to protect all
-            min5 = []
-            max5 = []
+            reduced_min = None
+            reduced_max = None
             has_time = False
             has_ms = False
         else:
-            min5 = [str(v) for v in min11[5:10]]  # drop 1 to 5th lowest; keep 6th to 10th lowest
-            max5 = [str(v) for v in max11[5:10]]  # drop 1 to 5th highest; keep 6th to 10th highest
-            # update min/max year based on first four letters of protected min/max dates
-            max_values["year"] = int(max5[0][0:4])
-            min_values["year"] = int(min5[0][0:4])
+            if value_protection_delta is not None and value_protection_epsilon is not None:
+                values = sorted(reduced_mins + reduced_maxs)
+                quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
+                reduced_min, reduced_max = dp_quantiles(
+                    values, quantiles, value_protection_epsilon, value_protection_delta
+                )
+                reduced_min = str(reduced_min)
+                reduced_max = str(reduced_max)
+            else:
+                reduced_min = str(reduced_mins[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_max = str(reduced_maxs[get_stochastic_rare_threshold(min_threshold=5)])
+                # update min/max year based on first four letters of protected min/max dates
+                max_values["year"] = int(reduced_max[0:4])
+                min_values["year"] = int(reduced_min[0:4])
     else:
-        min5 = min11[0:4]
-        max5 = max11[0:4]
+        reduced_min = str(reduced_mins[0]) if len(reduced_mins) > 0 else None
+        reduced_max = str(reduced_maxs[0]) if len(reduced_maxs) > 0 else None
     # determine cardinalities
     cardinalities = {}
     if has_nan:
@@ -128,8 +136,8 @@ def analyze_reduce_datetime(
         "has_ms": has_ms,
         "min_values": min_values,
         "max_values": max_values,
-        "min5": min5,
-        "max5": max5,
+        "min": reduced_min,
+        "max": reduced_max,
     }
     return stats
 
@@ -140,21 +148,13 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
     values = values.copy()
     # reset index, as `values.mask` can throw errors for misaligned indices
     values.reset_index(drop=True, inplace=True)
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    min5 = stats["min5"] if len(stats["min5"]) > 0 else [0]
-    max5 = stats["max5"] if len(stats["max5"]) > 0 else [0]
-    min5 = pd.Series(min5, dtype=values.dtype)
-    max5 = pd.Series(max5, dtype=values.dtype)
-    values.mask(
-        values < min5[0],
-        min5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
-    values.mask(
-        values > max5[0],
-        max5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
+    # replace extreme values with min/max
+    if stats["min"] is not None:
+        reduced_min = pd.Series([stats["min"]], dtype=values.dtype).iloc[0]
+        values.loc[values < reduced_min] = reduced_min
+    if stats["max"] is not None:
+        reduced_max = pd.Series([stats["max"]], dtype=values.dtype).iloc[0]
+        values.loc[values > reduced_max] = reduced_max
     # split to sub_columns
     df = split_sub_columns_datetime(values)
     is_not_nan = df["nan"] == 0
@@ -241,14 +241,14 @@ def decode_datetime(df_encoded: pd.DataFrame, stats: dict):
     if "nan" in df_encoded.columns:
         values[df_encoded["nan"] == 1] = pd.NA
     # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    if len(stats["min5"]) > 0 and len(stats["max5"]) > 0:
+    if stats["min"] is not None and stats["max"] is not None:
         # format datetime with accordance to the expected unified format when reading from stats
-        min5 = [parser.parse(i).strftime(dt_format) for i in stats["min5"]]
-        max5 = [parser.parse(i).strftime(dt_format) for i in stats["max5"]]
-        is_too_low = values.notna() & (values < min5[0])
-        is_too_high = values.notna() & (values > max5[0])
-        values.loc[is_too_low] = np.random.choice(min5, size=sum(is_too_low))
-        values.loc[is_too_high] = np.random.choice(max5, size=sum(is_too_high))
+        reduced_min = parser.parse(stats["min"]).strftime(dt_format)
+        reduced_max = parser.parse(stats["max"]).strftime(dt_format)
+        is_too_low = values.notna() & (values < reduced_min)
+        is_too_high = values.notna() & (values > reduced_max)
+        values.loc[is_too_low] = reduced_min
+        values.loc[is_too_high] = reduced_max
     elif "nan" in df_encoded.columns:
         # set all values to NaN if no valid values were present
         values[df_encoded["nan"] == 0] = pd.NA
