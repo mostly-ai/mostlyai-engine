@@ -755,7 +755,8 @@ def generate(
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
-        if enable_flexible_generation is False:
+        if not enable_flexible_generation:
+            # check if resolved column order is the same as the one from training
             trn_column_order = [
                 get_argn_name(
                     argn_processor=tgt_stats["columns"][col][ARGN_PROCESSOR],
