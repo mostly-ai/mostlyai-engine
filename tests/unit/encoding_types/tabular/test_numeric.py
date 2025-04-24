@@ -499,7 +499,7 @@ class TestNumericBinned:
         assert stats["bins"] == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         assert NUMERIC_BINNED_UNKNOWN_TOKEN in stats["codes"]
         assert NUMERIC_BINNED_MIN_TOKEN in stats["codes"]
-        assert NUMERIC_BINNED_MAX_TOKEN not in stats["codes"]
+        assert NUMERIC_BINNED_MAX_TOKEN in stats["codes"]
         # test case where all values are value protected
         values1 = pd.Series([1, 2, 3, 4, 5], name="x")
         rkeys1 = pd.Series(range(len(values1)), name="id")

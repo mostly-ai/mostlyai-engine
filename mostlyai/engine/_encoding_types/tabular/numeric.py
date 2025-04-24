@@ -31,7 +31,7 @@ import pandas as pd
 from mostlyai.engine._common import (
     dp_non_rare,
     dp_quantiles,
-    find_distinct_bins,
+    # find_distinct_bins,
     get_stochastic_rare_threshold,
     safe_convert_numeric,
 )
@@ -337,7 +337,15 @@ def analyze_reduce_numeric(
             min_decimal = 0
         else:
             quantiles = list(np.clip(quantiles, reduced_min, reduced_max))
-            bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
+            # bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
+
+            # TODO: check whether this is correct
+            if len(quantiles) <= NUMERIC_BINNED_MAX_BINS or len(set(quantiles)) <= NUMERIC_BINNED_MAX_BINS:
+                bins = list(sorted(set(quantiles)))
+            else:
+                # use linear interpolation between the value-protected min and max
+                # to avoid spending privacy budget on calculating all those quantiles
+                bins = list(np.linspace(reduced_min, reduced_max, NUMERIC_BINNED_MAX_BINS + 1))
         # add unknown/rare token
         categories = [NUMERIC_BINNED_UNKNOWN_TOKEN]
         # add NULL token if NaN values exist
