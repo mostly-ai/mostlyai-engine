@@ -171,17 +171,29 @@ def analyze(
 
         # combine partition statistics
         _LOG.info("combine partition statistics")
-        value_protection_epsilon = differential_privacy.value_protection_epsilon if differential_privacy else None
-        # FIXME: split delta
-        value_protection_delta = differential_privacy.delta if differential_privacy else None
+        # no need to split epsilon because training will have max_epsilon - value_protection_epsilon as the budget
+        value_protection_epsilon = (
+            differential_privacy.value_protection_epsilon if value_protection and differential_privacy else None
+        )
+        # currently, we allocate 100% of delta to training
+        # TODO: consider splitting delta between training and analysis later
+        value_protection_delta = 0 if value_protection and differential_privacy else None
+        if has_context:
+            dp_tgt_ratio = float(len(tgt_encoding_types) + 1) / (len(tgt_encoding_types) + len(ctx_encoding_types) + 1)
+            dp_ctx_ratio = float(len(ctx_encoding_types)) / (len(tgt_encoding_types) + len(ctx_encoding_types) + 1)
         _analyze_reduce(
             all_stats=workspace.tgt_all_stats,
             out_stats=workspace.tgt_stats,
             keys=tgt_keys,
             mode="tgt",
             value_protection=value_protection,
-            value_protection_epsilon=value_protection_epsilon,
-            value_protection_delta=value_protection_delta,
+            # further split epsilon and delta if context is present
+            value_protection_epsilon=value_protection_epsilon * dp_tgt_ratio
+            if value_protection_epsilon is not None and has_context
+            else value_protection_epsilon,
+            value_protection_delta=value_protection_delta * dp_tgt_ratio
+            if value_protection_delta is not None and has_context
+            else value_protection_delta,
         )
         if has_context:
             _analyze_reduce(
@@ -190,8 +202,12 @@ def analyze(
                 keys=ctx_keys,
                 mode="ctx",
                 value_protection=value_protection,
-                value_protection_epsilon=value_protection_epsilon,
-                value_protection_delta=value_protection_delta,
+                value_protection_epsilon=value_protection_epsilon * dp_ctx_ratio
+                if value_protection_epsilon is not None and has_context
+                else value_protection_epsilon,
+                value_protection_delta=value_protection_delta * dp_ctx_ratio
+                if value_protection_delta is not None and has_context
+                else value_protection_delta,
             )
 
         # clean up partition-wise stats files, as they contain non-protected values
@@ -336,6 +352,10 @@ def _analyze_reduce(
         column: column_stats.get("encoding_type") for column, column_stats in stats_list[0]["columns"].items()
     }
 
+    # ctx: distribute the privacy budget across all columns
+    # tgt: distribute the privacy budget across all columns + sequence length
+    n_dp_splits = len(encoding_types) if mode == "ctx" else len(encoding_types) + 1
+
     for column in encoding_types:
         encoding_type = encoding_types[column]
         column_stats_list = [item["columns"][column] for item in stats_list]
@@ -353,8 +373,12 @@ def _analyze_reduce(
         analyze_reduce_column_args = {
             "stats_list": column_stats_list,
             "value_protection": value_protection,
-            "value_protection_epsilon": value_protection_epsilon,
-            "value_protection_delta": value_protection_delta,
+            "value_protection_epsilon": value_protection_epsilon / n_dp_splits
+            if value_protection_epsilon is not None
+            else None,
+            "value_protection_delta": value_protection_delta / n_dp_splits
+            if value_protection_delta is not None
+            else None,
         }
 
         match encoding_type:
@@ -468,8 +492,10 @@ def _analyze_reduce(
         stats["seq_len"] = _analyze_reduce_seq_len(
             stats_list=[item["seq_len"] for item in stats_list],
             value_protection=value_protection,
-            value_protection_epsilon=value_protection_epsilon,
-            value_protection_delta=value_protection_delta,
+            value_protection_epsilon=value_protection_epsilon / n_dp_splits
+            if value_protection_epsilon is not None
+            else None,
+            value_protection_delta=value_protection_delta / n_dp_splits if value_protection_delta is not None else None,
         )
         seq_len_min = stats["seq_len"]["min"]
         seq_len_max = stats["seq_len"]["max"]

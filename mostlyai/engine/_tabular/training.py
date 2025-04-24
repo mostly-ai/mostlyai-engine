@@ -343,6 +343,7 @@ def train(
     gradient_accumulation_steps: int | None = None,
     max_sequence_window: int = 100,
     enable_flexible_generation: bool = True,
+    value_protection: bool = True,
     differential_privacy: DifferentialPrivacyConfig | dict | None = None,
     upload_model_data_callback: Callable | None = None,
     model_state_strategy: ModelStateStrategy | str = ModelStateStrategy.reset,
@@ -623,7 +624,8 @@ def train(
             else:
                 dp_config = DifferentialPrivacyConfig(**differential_privacy).model_dump()
             dp_max_epsilon = dp_config.get("max_epsilon") or float("inf")
-            dp_delta = dp_config.get("delta", 1e-5)
+            dp_total_delta = dp_config.get("delta", 1e-5)
+            dp_value_protection_epsilon = dp_config.get("value_protection_epsilon", 1.0) if value_protection else 0.0
             # the implementation of PRV accountant seems to have numerical and memory issues for small noise multiplier
             # therefore, we choose RDP instead as it is more stable and provides comparable privacy guarantees
             dp_accountant = "rdp"  # hard-coded for now
@@ -654,7 +656,7 @@ def train(
             )
         else:
             privacy_engine = None
-            dp_config, dp_delta, dp_accountant = None, None, None
+            dp_config, dp_total_delta, dp_accountant = None, None, None
 
         progress_message = None
         start_trn_time = time.time()
@@ -735,8 +737,10 @@ def train(
                         device=device,
                     )
                 trn_loss = _calculate_average_trn_loss(trn_sample_losses)
-                dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
-                has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
+                dp_total_epsilon = (
+                    privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+                )
+                has_exceeded_dp_max_epsilon = dp_total_epsilon > dp_max_epsilon if with_dp else False
                 if not has_exceeded_dp_max_epsilon:
                     # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
                     is_checkpoint = model_checkpoint.save_checkpoint_if_best(
@@ -758,8 +762,8 @@ def train(
                     val_loss=val_loss,
                     total_time=total_time_init + time.time() - start_trn_time,
                     learn_rate=current_lr,
-                    dp_eps=dp_epsilon,
-                    dp_delta=dp_delta,
+                    dp_eps=dp_total_epsilon,
+                    dp_delta=dp_total_delta,
                 )
                 # check for early stopping
                 do_stop = early_stopper(val_loss=val_loss) or has_exceeded_dp_max_epsilon
@@ -784,7 +788,9 @@ def train(
             if progress_message is None and (last_msg_elapsed > last_msg_interval or steps == 1):
                 # running mean loss of the most recent training samples
                 running_trn_loss = _calculate_average_trn_loss(trn_sample_losses, n=val_steps * val_batch_size)
-                dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
+                dp_total_epsilon = (
+                    privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+                )
                 progress_message = ProgressMessage(
                     epoch=epoch,
                     is_checkpoint=is_checkpoint,
@@ -794,8 +800,8 @@ def train(
                     val_loss=None,
                     total_time=total_time_init + time.time() - start_trn_time,
                     learn_rate=current_lr,
-                    dp_eps=dp_epsilon,
-                    dp_delta=dp_delta,
+                    dp_eps=dp_total_epsilon,
+                    dp_delta=dp_total_delta,
                 )
             if progress_message:
                 last_msg_time = time.time()
@@ -839,7 +845,9 @@ def train(
             else:
                 _LOG.info("calculate validation loss")
                 val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader)
-            dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
+            dp_total_epsilon = (
+                privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+            )
             # send a final message to inform how far we've progressed
             trn_loss = _calculate_average_trn_loss(trn_sample_losses)
             progress_message = ProgressMessage(
@@ -851,8 +859,8 @@ def train(
                 val_loss=val_loss,
                 total_time=total_training_time,
                 learn_rate=current_lr,
-                dp_eps=dp_epsilon,
-                dp_delta=dp_delta,
+                dp_eps=dp_total_epsilon,
+                dp_delta=dp_total_delta,
             )
             progress.update(completed=steps, total=steps, message=progress_message)
             # ensure everything gets uploaded
