@@ -329,15 +329,19 @@ def analyze_reduce_numeric(
         }
 
     elif encoding_type == ModelEncodingType.tabular_numeric_binned:
-        # binned numeric encoding
-        quantiles = np.concatenate([j["quantiles"] for j in stats_list if j["quantiles"]])
         if reduced_min is None or reduced_max is None:
             # handle edge case where all values are privacy protected
             bins = [0]
             min_decimal = 0
         else:
-            quantiles = list(np.clip(quantiles, reduced_min, reduced_max))
-            bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
+            if value_protection_epsilon is None:
+                quantiles = np.concatenate([j["quantiles"] for j in stats_list if j["quantiles"]])
+                quantiles = list(np.clip(quantiles, reduced_min, reduced_max))
+                bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
+            else:
+                # use linear interpolation between the value-protected min and max
+                # to avoid spending privacy budget on calculating all those quantiles
+                bins = list(np.linspace(reduced_min, reduced_max, NUMERIC_BINNED_MAX_BINS + 1))
         # add unknown/rare token
         categories = [NUMERIC_BINNED_UNKNOWN_TOKEN]
         # add NULL token if NaN values exist
