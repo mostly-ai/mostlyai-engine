@@ -49,7 +49,7 @@ def train(
     Args:
         model: The identifier of the model to train. If tabular, defaults to MOSTLY_AI/Medium. If language, defaults to MOSTLY_AI/LSTMFromScratch-3m.
         max_training_time: Maximum training time in minutes. If None, defaults to 10 days.
-        max_epochs: Maximum number of training epochs. If None, defaults to 100.
+        max_epochs: Maximum number of training epochs. If None, defaults to 100 epochs.
         batch_size: Per-device batch size for training and validation. If None, determined automatically.
         gradient_accumulation_steps: Number of steps to accumulate gradients. If None, determined automatically.
         enable_flexible_generation: Whether to enable flexible order generation. Defaults to True.
