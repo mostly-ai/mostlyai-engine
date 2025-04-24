@@ -720,7 +720,7 @@ def generate(
         # read model config
         model_units = model_configs.get("model_units") or ModelSize.M
         _LOG.debug(f"{model_units=}")
-        enable_flexible_generation = model_configs.get("enable_flexible_generation")
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
         _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve device
