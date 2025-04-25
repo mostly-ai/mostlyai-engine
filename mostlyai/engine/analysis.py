@@ -345,6 +345,9 @@ def _analyze_reduce(
     # ctx: distribute the privacy budget across all columns
     # tgt: distribute the privacy budget across all columns + sequence length
     n_dp_splits = len(encoding_types) if mode == "ctx" else len(encoding_types) + 1
+    _LOG.info(f"{value_protection = }")
+    if value_protection_epsilon is not None and n_dp_splits > 0:
+        _LOG.info(f"epsilon for analyzing each column and sequence length: {value_protection_epsilon / n_dp_splits}")
 
     for column in encoding_types:
         encoding_type = encoding_types[column]
