@@ -29,6 +29,8 @@ import numpy as np
 import pandas as pd
 
 from mostlyai.engine._common import (
+    ANALYZE_MIN_MAX_TOP_N,
+    ANALYZE_REDUCE_MIN_MAX_N,
     dp_non_rare,
     dp_quantiles,
     find_distinct_bins,
@@ -171,12 +173,12 @@ def analyze_numeric(
         # do not count values, if there are too many
         cnt_values = None
 
-    # determine lowest/highest values by root ID, and return top 11
+    # determine lowest/highest values by root ID, and return top ANALYZE_MIN_MAX_TOP_N
     df = pd.concat([root_keys, values], axis=1)
     min_values = df.groupby(root_keys.name)[values.name].min().dropna()
-    min11 = min_values.sort_values(ascending=True).head(11).astype("float").tolist()
+    min_n = min_values.sort_values(ascending=True).head(ANALYZE_MIN_MAX_TOP_N).astype("float").tolist()
     max_values = df.groupby(root_keys.name)[values.name].max().dropna()
-    max11 = max_values.sort_values(ascending=False).head(11).astype("float").tolist()
+    max_n = max_values.sort_values(ascending=False).head(ANALYZE_MIN_MAX_TOP_N).astype("float").tolist()
 
     # split values into digits; used for digit numeric encoding, plus to determine precision
     df_split = split_sub_columns_digit(values)
@@ -198,8 +200,8 @@ def analyze_numeric(
         "has_neg": has_neg,
         "min_digits": min_digits,
         "max_digits": max_digits,
-        "min11": min11,
-        "max11": max11,
+        "min_n": min_n,
+        "max_n": max_n,
         "cnt_values": cnt_values,
         "quantiles": quantiles,
     }
@@ -226,26 +228,26 @@ def analyze_reduce_numeric(
     min_decimal = min([int(k[1:]) for k in non_zero_prec]) if len(non_zero_prec) > 0 else 0
 
     # determine min / max 5 values to map too low / too high values to
-    reduced_mins = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)
-    reduced_maxs = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)
+    reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
+    reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
-        if len(reduced_mins) < 11 or len(reduced_maxs) < 11:  # FIXME: what should the new threshold be?
-            # less than 11 subjects with non-NULL values; we need to protect all
+        if len(reduced_min_n) < ANALYZE_REDUCE_MIN_MAX_N or len(reduced_max_n) < ANALYZE_REDUCE_MIN_MAX_N:
+            # protect all values if there are less than ANALYZE_REDUCE_MIN_MAX_N values
             reduced_min = None
             reduced_max = None
         else:
             if value_protection_delta is not None and value_protection_epsilon is not None:
-                values = sorted(reduced_mins + reduced_maxs)
+                values = sorted(reduced_min_n + reduced_max_n)
                 quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
                 reduced_min, reduced_max = dp_quantiles(
                     values, quantiles, value_protection_epsilon, value_protection_delta
                 )
             else:
-                reduced_min = reduced_mins[get_stochastic_rare_threshold(min_threshold=5)]
-                reduced_max = reduced_maxs[get_stochastic_rare_threshold(min_threshold=5)]
+                reduced_min = reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)]
+                reduced_max = reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)]
     else:
-        reduced_min = reduced_mins[0] if len(reduced_mins) > 0 else None
-        reduced_max = reduced_maxs[0] if len(reduced_maxs) > 0 else None
+        reduced_min = reduced_min_n[0] if len(reduced_min_n) > 0 else None
+        reduced_max = reduced_max_n[0] if len(reduced_max_n) > 0 else None
 
     if reduced_min is not None or reduced_max is not None:
         max_abs = np.max(np.abs(np.array([reduced_min, reduced_max])))

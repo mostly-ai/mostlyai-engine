@@ -103,9 +103,9 @@ def test_itt_empty(tmp_path):
     assert partition_stats == {
         "has_nan": False,
         "has_neg": False,
-        "max11": [],
+        "max_n": [],
         "max_values": min_max_values,
-        "min11": [],
+        "min_n": [],
         "min_values": min_max_values,
     }
     assert stats == {

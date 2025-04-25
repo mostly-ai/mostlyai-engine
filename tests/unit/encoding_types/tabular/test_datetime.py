@@ -102,9 +102,9 @@ def test_datetime_empty(tmp_path):
     }
     assert partition_stats == {
         "has_nan": False,
-        "max11": [],
+        "max_n": [],
         "max_values": min_max_values,
-        "min11": [],
+        "min_n": [],
         "min_values": min_max_values,
     }
     assert stats == {
@@ -132,8 +132,8 @@ def test_datetime_noempties(tmp_path):
 
 
 def test_datetime_min_max_overlapping():
-    root_keys = pd.Series(list(range(21)), name="id")
-    values = pd.Series([pd.to_datetime(f"01-01-{2000 + y}") for y in range(21)], name="value")
+    root_keys = pd.Series(list(range(100)), name="id")
+    values = pd.Series([pd.to_datetime(f"01-01-{2000 + y}") for y in range(100)], name="value")
     stats = analyze_reduce_datetime([analyze_datetime(values, root_keys)])
     for pos, card in stats["cardinalities"].items():
         assert card > 0

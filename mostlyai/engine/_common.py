@@ -57,6 +57,12 @@ SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # s
 SDEC_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
+ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
+
+# the minimal number of min/max values to trigger the reduction; if less, the min/max will be reduced to None
+# this should be at least greater than the non-DP stochastic threshold for rare value protection (5 + noise)
+ANALYZE_REDUCE_MIN_MAX_N = 100
+
 TEMPORARY_PRIMARY_KEY = "__primary_key"
 
 STRING = "string[pyarrow]"  # This utilizes pyarrow's large string type since pandas 2.2

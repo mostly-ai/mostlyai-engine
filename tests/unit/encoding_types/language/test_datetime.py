@@ -15,6 +15,7 @@
 import pandas as pd
 import pytest
 
+from mostlyai.engine._common import ANALYZE_MIN_MAX_TOP_N
 from mostlyai.engine._encoding_types.language.datetime import (
     analyze_language_datetime,
     analyze_reduce_language_datetime,
@@ -37,27 +38,27 @@ class TestLanguageDatetimeAnalyze:
                 "1983-05-19",
                 "1998-05-24",
             ]
-            * 11,
+            * ANALYZE_MIN_MAX_TOP_N,
             name="birth_date",
         )
         keys = pd.Series(range(len(birth_dates)), name="id")
         stats = analyze_language_datetime(birth_dates, keys)
         assert stats["has_nan"] is True
-        assert stats["min11"] == ["1910-01-01"] * 11
-        assert stats["max11"] == ["1998-05-24"] * 11
+        assert stats["min_n"] == ["1910-01-01"] * ANALYZE_MIN_MAX_TOP_N
+        assert stats["max_n"] == ["1998-05-24"] * ANALYZE_MIN_MAX_TOP_N
 
 
 class TestLanguageDatetimeAnalyzeReduce:
     def test_analyze_reduce_language_datetime(self):
         stats1 = {
             "has_nan": True,
-            "min11": ["1910-01-01"] * 11,
-            "max11": ["1998-05-24"] * 11,
+            "min_n": ["1910-01-01"] * ANALYZE_MIN_MAX_TOP_N,
+            "max_n": ["1998-05-24"] * ANALYZE_MIN_MAX_TOP_N,
         }
         stats2 = {
             "has_nan": False,
-            "min11": ["2000-01-01"] * 11,
-            "max11": ["2024-12-31"] * 11,
+            "min_n": ["2000-01-01"] * ANALYZE_MIN_MAX_TOP_N,
+            "max_n": ["2024-12-31"] * ANALYZE_MIN_MAX_TOP_N,
         }
         reduced = analyze_reduce_language_datetime([stats1, stats2])
         assert reduced["has_nan"] is True

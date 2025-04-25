@@ -24,7 +24,13 @@ import numpy as np
 import pandas as pd
 from dateutil import parser  # type: ignore
 
-from mostlyai.engine._common import dp_quantiles, get_stochastic_rare_threshold, safe_convert_datetime
+from mostlyai.engine._common import (
+    ANALYZE_MIN_MAX_TOP_N,
+    ANALYZE_REDUCE_MIN_MAX_N,
+    dp_quantiles,
+    get_stochastic_rare_threshold,
+    safe_convert_datetime,
+)
 from mostlyai.engine._dtypes import is_date_dtype, is_timestamp_dtype
 
 DATETIME_PARTS = [
@@ -45,9 +51,9 @@ def analyze_datetime(values: pd.Series, root_keys: pd.Series, _: pd.Series | Non
     df = pd.concat([root_keys, values], axis=1)
     # determine lowest/highest values by root ID, and return Top 10
     min_dates = df.groupby(root_keys.name)[values.name].min().dropna()
-    min11 = min_dates.sort_values(ascending=True).head(11).astype(str).tolist()
+    min_n = min_dates.sort_values(ascending=True).head(ANALYZE_MIN_MAX_TOP_N).astype(str).tolist()
     max_dates = df.groupby(root_keys.name)[values.name].max().dropna()
-    max11 = max_dates.sort_values(ascending=False).head(11).astype(str).tolist()
+    max_n = max_dates.sort_values(ascending=False).head(ANALYZE_MIN_MAX_TOP_N).astype(str).tolist()
     # split into datetime parts
     df_split = split_sub_columns_datetime(values)
     is_not_nan = df_split["nan"] == 0
@@ -65,8 +71,8 @@ def analyze_datetime(values: pd.Series, root_keys: pd.Series, _: pd.Series | Non
         "has_nan": has_nan,
         "min_values": min_values,
         "max_values": max_values,
-        "min11": min11,
-        "max11": max11,
+        "min_n": min_n,
+        "max_n": max_n,
     }
     return stats
 
@@ -87,18 +93,18 @@ def analyze_reduce_datetime(
     has_time = max_values["hour"] > 0 or max_values["minute"] > 0 or max_values["second"] > 0
     has_ms = has_time and (max_values["ms_E2"] > 0 or max_values["ms_E1"] > 0 or max_values["ms_E0"] > 0)
     # determine min / max 5 values to map too low / too high values to
-    reduced_mins = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)
-    reduced_maxs = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)
+    reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
+    reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
-        if len(reduced_mins) < 11 or len(reduced_maxs) < 11:  # FIXME: what should the new threshold be?
-            # less than 11 subjects with non-NULL values; we need to protect all
+        if len(reduced_min_n) < ANALYZE_REDUCE_MIN_MAX_N or len(reduced_max_n) < ANALYZE_REDUCE_MIN_MAX_N:
+            # protect all values if there are less than ANALYZE_REDUCE_MIN_MAX_N values
             reduced_min = None
             reduced_max = None
             has_time = False
             has_ms = False
         else:
             if value_protection_delta is not None and value_protection_epsilon is not None:
-                values = sorted(reduced_mins + reduced_maxs)
+                values = sorted(reduced_min_n + reduced_max_n)
                 quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
                 reduced_min, reduced_max = dp_quantiles(
                     values, quantiles, value_protection_epsilon, value_protection_delta
@@ -106,14 +112,14 @@ def analyze_reduce_datetime(
                 reduced_min = str(reduced_min)
                 reduced_max = str(reduced_max)
             else:
-                reduced_min = str(reduced_mins[get_stochastic_rare_threshold(min_threshold=5)])
-                reduced_max = str(reduced_maxs[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_min = str(reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_max = str(reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)])
                 # update min/max year based on first four letters of protected min/max dates
                 max_values["year"] = int(reduced_max[0:4])
                 min_values["year"] = int(reduced_min[0:4])
     else:
-        reduced_min = str(reduced_mins[0]) if len(reduced_mins) > 0 else None
-        reduced_max = str(reduced_maxs[0]) if len(reduced_maxs) > 0 else None
+        reduced_min = str(reduced_min_n[0]) if len(reduced_min_n) > 0 else None
+        reduced_max = str(reduced_max_n[0]) if len(reduced_max_n) > 0 else None
     # determine cardinalities
     cardinalities = {}
     if has_nan:

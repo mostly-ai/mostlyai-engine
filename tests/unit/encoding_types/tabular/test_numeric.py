@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mostlyai.engine._common import ANALYZE_MIN_MAX_TOP_N
 from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_BINNED_MAX_QUANTILES,
@@ -87,7 +88,7 @@ class TestSplitSubColumnsDigit:
 
 class TestDigitAnalyze:
     def test_positive_integers_and_fractions(self):
-        fractions = pd.Series(np.repeat(np.linspace(0, 0.9999, 10), 10))
+        fractions = pd.Series(np.repeat(np.linspace(0, 0.9999, 100), 10))
         integers = pd.Series(np.repeat(np.linspace(1, 10, 10), 10))
         values = pd.concat([fractions, integers]).reset_index(drop=True).rename("vals")
         values = values.round(4)
@@ -97,11 +98,11 @@ class TestDigitAnalyze:
         assert stats["has_neg"] is False
         assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")  # E18...E0 + E-1...E-8
         assert stats["max_digits"] == _digit_to_int("0000000000000000019" + "99990000")  # E18...E0 + E-1...E-8
-        assert stats["min11"] == [0.0] * 10 + [0.1111]
-        assert stats["max11"] == [10.0] * 10 + [9.0]
+        assert len(stats["min_n"]) == ANALYZE_MIN_MAX_TOP_N and stats["min_n"][:11] == [0.0] * 10 + [0.0101]
+        assert len(stats["max_n"]) == ANALYZE_MIN_MAX_TOP_N and stats["max_n"][:11] == [10.0] * 10 + [9.0]
 
     def test_negative_integers_and_fractions(self):
-        fractions = pd.Series(np.repeat(np.linspace(-0.9999, 0, 10), 10))
+        fractions = pd.Series(np.repeat(np.linspace(-0.9999, 0, 100), 10))
         integers = pd.Series(np.repeat(np.linspace(-1, -10, 10), 10))
         values = pd.concat([fractions, integers]).reset_index(drop=True).rename("vals")
         values = values.round(4)
@@ -111,8 +112,8 @@ class TestDigitAnalyze:
         assert stats["has_neg"] is True
         assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")  # E18...E0 + E-1...E-8
         assert stats["max_digits"] == _digit_to_int("0000000000000000019" + "99990000")  # E18...E0 + E-1...E-8
-        assert stats["min11"] == [-10.0] * 10 + [-9.0]
-        assert stats["max11"] == [0.0] * 10 + [-0.1111]
+        assert len(stats["min_n"]) == ANALYZE_MIN_MAX_TOP_N and stats["min_n"][:11] == [-10.0] * 10 + [-9.0]
+        assert len(stats["max_n"]) == ANALYZE_MIN_MAX_TOP_N and stats["max_n"][:11] == [0.0] * 10 + [-0.0101]
 
     def test_integers_and_nulls(self):
         values = pd.Series([1, 2, 3, None, pd.NA], name="vals")
@@ -122,8 +123,8 @@ class TestDigitAnalyze:
         assert stats["has_neg"] is False
         assert stats["min_digits"] == _digit_to_int("0000000000000000001" + "00000000")  # E18...E0 + E-1...E-8
         assert stats["max_digits"] == _digit_to_int("0000000000000000003" + "00000000")  # E18...E0 + E-1...E-8
-        assert stats["min11"] == [1.0, 2.0, 3.0]
-        assert stats["max11"] == [3.0, 2.0, 1.0]
+        assert stats["min_n"] == [1.0, 2.0, 3.0]
+        assert stats["max_n"] == [3.0, 2.0, 1.0]
 
     def test_nulls_only(self):
         values = pd.Series([None, np.nan, pd.NA], name="vals")
@@ -133,8 +134,8 @@ class TestDigitAnalyze:
         assert stats["has_neg"] is False
         assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")  # E18...E0 + E-1...E-8
         assert stats["max_digits"] == _digit_to_int("0000000000000000000" + "00000000")  # E18...E0 + E-1...E-8
-        assert stats["min11"] == []
-        assert stats["max11"] == []
+        assert stats["min_n"] == []
+        assert stats["max_n"] == []
 
     def test_empty(self):
         values = pd.Series([], name="vals")
@@ -144,57 +145,57 @@ class TestDigitAnalyze:
         assert stats["has_neg"] is False
         assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")  # E18...E0 + E-1...E-8
         assert stats["max_digits"] == _digit_to_int("0000000000000000000" + "00000000")  # E18...E0 + E-1...E-8
-        assert stats["min11"] == []
-        assert stats["max11"] == []
+        assert stats["min_n"] == []
+        assert stats["max_n"] == []
 
     def test_min_max_int_value(self):
         min_int64_val = np.iinfo(np.int64).min
         max_int64_val = np.iinfo(np.int64).max
-        values = pd.Series(np.repeat([min_int64_val, max_int64_val], 100), name="vals")
+        values = pd.Series(np.repeat([min_int64_val, max_int64_val], 2000), name="vals")
         ids = pd.Series(range(len(values)), name="subject_id")
         stats = analyze_numeric(values, ids)
         assert stats["has_nan"] is False
         assert stats["has_neg"] is True
         assert stats["min_digits"] == _digit_to_int("9223372036854776000" + "00000000")  # E18...E0 + E-1...E-8
         assert stats["max_digits"] == _digit_to_int("9223372036854776000" + "00000000")  # E18...E0 + E-1...E-8
-        assert stats["min11"] == [-9.223372036854776e18] * 11
-        assert stats["max11"] == [+9.223372036854776e18] * 11
+        assert stats["min_n"] == [-9.223372036854776e18] * ANALYZE_MIN_MAX_TOP_N
+        assert stats["max_n"] == [+9.223372036854776e18] * ANALYZE_MIN_MAX_TOP_N
         assert stats["cnt_values"] == {
-            -9223372036854775808: 100,
-            9223372036854775807: 100,
+            -9223372036854775808: 2000,
+            9223372036854775807: 2000,
         }
 
     def test_precision_higher_than_limit(self):
-        values = pd.Series([0.111111112222] * 50 + [0.999999998888] * 50, name="vals")
+        values = pd.Series([0.111111112222] * 5000 + [0.999999998888] * 5000, name="vals")
         ids = pd.Series(range(len(values)), name="subject_id")
         stats = analyze_numeric(values, ids)
         assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "11111111")
         assert stats["max_digits"] == _digit_to_int("0000000000000000000" + "99999999")
-        assert stats["min11"] == [0.111111112222] * 11
-        assert stats["max11"] == [0.999999998888] * 11
+        assert stats["min_n"] == [0.111111112222] * ANALYZE_MIN_MAX_TOP_N
+        assert stats["max_n"] == [0.999999998888] * ANALYZE_MIN_MAX_TOP_N
 
     def test_decimals_above_limit(self):
-        values = pd.Series([9e30] * 50 + [1e30] * 50, name="vals")
+        values = pd.Series([9e30] * 5000 + [1e30] * 5000, name="vals")
         ids = pd.Series(range(len(values)), name="subject_id")
         stats = analyze_numeric(values, ids)
         assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert stats["max_digits"] == _digit_to_int("0000000000000000000" + "00000000")
-        assert stats["min11"] == [1e30] * 11
-        assert stats["max11"] == [9e30] * 11
+        assert stats["min_n"] == [1e30] * ANALYZE_MIN_MAX_TOP_N
+        assert stats["max_n"] == [9e30] * ANALYZE_MIN_MAX_TOP_N
 
-    def test_min11_max11_overlapping(self):
-        values = pd.Series(list(range(11)), name="vals")
+    def test_min_n_max_n_overlapping(self):
+        values = pd.Series(list(range(ANALYZE_MIN_MAX_TOP_N)), name="vals")
         ids = pd.Series(range(len(values)), name="subject_id")
         stats = analyze_numeric(values, ids)
-        assert stats["min11"] == list(np.linspace(0, 10, 11))
-        assert stats["max11"] == list(np.linspace(10, 0, 11))
+        assert stats["min_n"] == list(np.linspace(0, ANALYZE_MIN_MAX_TOP_N - 1, ANALYZE_MIN_MAX_TOP_N))
+        assert stats["max_n"] == list(np.linspace(ANALYZE_MIN_MAX_TOP_N - 1, 0, ANALYZE_MIN_MAX_TOP_N))
 
     def test_rare_digits(self):
         values = pd.Series(np.repeat([0.1, 0.2, 0.3, 0.4, 0.5], 10), name="vals")
-        ids = pd.Series([0] * 40 + list(range(1, 11)), name="subject_id")
+        ids = pd.Series([0] * 40 + list(range(1, ANALYZE_MIN_MAX_TOP_N)), name="subject_id")
         stats = analyze_numeric(values, ids)
-        assert stats["min11"] == [0.1] + [0.5] * 10
-        assert stats["max11"] == [0.5] * 10 + [0.4]
+        assert stats["min_n"] == [0.1] + [0.5] * 10
+        assert stats["max_n"] == [0.5] * 10 + [0.4]
 
 
 class TestDigitAnalyzeReduce:
@@ -202,8 +203,8 @@ class TestDigitAnalyzeReduce:
     def stats_template(
         min_digits=None,
         max_digits=None,
-        min11=None,
-        max11=None,
+        min_n=None,
+        max_n=None,
         has_nan=False,
         has_neg=False,
         cnt_values=None,
@@ -212,17 +213,17 @@ class TestDigitAnalyzeReduce:
             min_digits = _digit_to_int("0000000000000000000" + "00000000")
         if max_digits is None:
             max_digits = _digit_to_int("0000000000000000999" + "00000000")
-        if min11 is None:
-            min11 = np.linspace(0, 10, 11)
-        if max11 is None:
-            max11 = np.linspace(999, 989, 11)
+        if min_n is None:
+            min_n = np.linspace(0, 10, ANALYZE_MIN_MAX_TOP_N)
+        if max_n is None:
+            max_n = np.linspace(999, 989, ANALYZE_MIN_MAX_TOP_N)
         return {
             "has_nan": has_nan,
             "has_neg": has_neg,
             "min_digits": min_digits,
             "max_digits": max_digits,
-            "min11": min11,
-            "max11": max11,
+            "min_n": min_n,
+            "max_n": max_n,
             "cnt_values": cnt_values,
         }
 
@@ -231,8 +232,8 @@ class TestDigitAnalyzeReduce:
         return self.stats_template(
             min_digits=_digit_to_int("0000000000000000000" + "00000000"),
             max_digits=_digit_to_int("0000000000000000039" + "90000000"),
-            min11=np.linspace(0, 11, 11),
-            max11=np.linspace(30, 19, 11),
+            min_n=np.linspace(0, 11, ANALYZE_MIN_MAX_TOP_N),
+            max_n=np.linspace(30, 19, ANALYZE_MIN_MAX_TOP_N),
         )
 
     @pytest.fixture
@@ -240,8 +241,8 @@ class TestDigitAnalyzeReduce:
         return self.stats_template(
             min_digits=_digit_to_int("0000000000000000010" + "00000000"),
             max_digits=_digit_to_int("0000000000000000099" + "90000000"),
-            min11=np.linspace(-90, -79, 11),
-            max11=np.linspace(-10, -21, 11),
+            min_n=np.linspace(-90, -79, ANALYZE_MIN_MAX_TOP_N),
+            max_n=np.linspace(-10, -21, ANALYZE_MIN_MAX_TOP_N),
             has_neg=True,
         )
 
@@ -251,6 +252,10 @@ class TestDigitAnalyzeReduce:
 
     def test_positives_only(self, stats_positives):
         result = analyze_reduce_numeric([stats_positives] * 2, encoding_type=ModelEncodingType.tabular_numeric_digit)
+        expected_min_range = list(np.sort(np.concatenate((stats_positives["min_n"], stats_positives["min_n"])))[5:9])
+        expected_max_range = list(
+            np.sort(np.concatenate((stats_positives["max_n"], stats_positives["max_n"])))[::-1][5:9]
+        )
         assert result["cardinalities"] == {"E1": 4, "E0": 10, "E-1": 10}
         assert result["has_nan"] is False
         assert result["has_neg"] is False
@@ -258,11 +263,15 @@ class TestDigitAnalyzeReduce:
         assert result["max_decimal"] == 1
         assert result["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000039" + "90000000")
-        assert result["min"] in [2.2, 3.3000000000000003, 3.3000000000000003, 4.4]
-        assert result["max"] in [27.8, 26.7, 26.7, 25.6]
+        assert result["min"] in expected_min_range
+        assert result["max"] in expected_max_range
 
     def test_negatives_only(self, stats_negatives):
         result = analyze_reduce_numeric([stats_negatives] * 2, encoding_type=ModelEncodingType.tabular_numeric_digit)
+        expected_min_range = list(np.sort(np.concatenate((stats_negatives["min_n"], stats_negatives["min_n"])))[5:9])
+        expected_max_range = list(
+            np.sort(np.concatenate((stats_negatives["max_n"], stats_negatives["max_n"])))[::-1][5:9]
+        )
         assert result["cardinalities"] == {"E-1": 10, "E0": 10, "E1": 9, "neg": 2}
         assert result["has_nan"] is False
         assert result["has_neg"] is True
@@ -270,12 +279,16 @@ class TestDigitAnalyzeReduce:
         assert result["max_decimal"] == 1
         assert result["min_digits"] == _digit_to_int("0000000000000000010" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000099" + "90000000")
-        assert result["min"] in [-87.8, -86.7, -86.7, -85.6]
-        assert result["max"] in [-12.2, -13.3, -13.3, -14.4]
+        assert result["min"] in expected_min_range
+        assert result["max"] in expected_max_range
 
     def test_positives_and_negatives(self, stats_positives, stats_negatives):
         result = analyze_reduce_numeric(
             [stats_positives, stats_negatives], encoding_type=ModelEncodingType.tabular_numeric_digit
+        )
+        expected_min_range = list(np.sort(np.concatenate((stats_negatives["min_n"], stats_positives["min_n"])))[5:9])
+        expected_max_range = list(
+            np.sort(np.concatenate((stats_negatives["max_n"], stats_positives["max_n"])))[::-1][5:9]
         )
         assert result["cardinalities"] == {"E-1": 10, "E0": 10, "E1": 10, "neg": 2}
         assert result["has_nan"] is False
@@ -284,8 +297,8 @@ class TestDigitAnalyzeReduce:
         assert result["max_decimal"] == 1
         assert result["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000099" + "90000000")
-        assert result["min"] in [-84.5, -83.4, -82.3, -81.2]
-        assert result["max"] in [24.5, 23.4, 22.299999999999997, 21.2]
+        assert result["min"] in expected_min_range
+        assert result["max"] in expected_max_range
 
     def test_positives_and_nulls(self, stats_positives, stats_nulls):
         result = analyze_reduce_numeric(
@@ -311,8 +324,8 @@ class TestDigitAnalyzeReduce:
         assert result["min_digits"] == _digit_to_int("0000000000000000000" + "00000000")
         assert result["max_digits"] == _digit_to_int("0000000000000000039" + "90000000")
         # most extreme values are included
-        assert result["min"] in [0.0, 1.1, 2.2, 3.3000000000000003]
-        assert result["max"] in [30.0, 28.9, 27.8, 26.7]
+        assert result["min"] == 0.0
+        assert result["max"] == 30.0
 
 
 class TestDigitEncode:
