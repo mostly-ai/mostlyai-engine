@@ -22,7 +22,7 @@ from mostlyai.engine.analysis import (
     _analyze_reduce_seq_len,
     _analyze_seq_len,
 )
-from mostlyai.engine._common import read_json, write_json
+from mostlyai.engine._common import ANALYZE_N_MIN_MAX, read_json, write_json
 
 
 def test_analyze_cnt(tmp_path):
@@ -102,8 +102,8 @@ def test_analyze_root_key(tmp_path):
         ctx_root_key=ctx_root_keys.name,
     )
     ctx_stats = read_json(ctx_stats_path / "part.000000-trn.json")
-    assert ctx_stats["columns"][ctx_values.name]["max11"] == list(range(40))[::-2][:11]
-    assert ctx_stats["columns"][ctx_values.name]["min11"] == list(range(40))[::2][:11]
+    assert ctx_stats["columns"][ctx_values.name]["max_n"] == list(range(40))[::-2][:ANALYZE_N_MIN_MAX]
+    assert ctx_stats["columns"][ctx_values.name]["min_n"] == list(range(40))[::2][:ANALYZE_N_MIN_MAX]
 
     # root key column is in ctx table
     _analyze_partition(
@@ -118,11 +118,11 @@ def test_analyze_root_key(tmp_path):
         ctx_root_key=ctx_root_keys.name,
     )
     tgt_stats = read_json(tgt_stats_path / "part.000000-trn.json")
-    assert tgt_stats["columns"][tgt_values.name]["max11"] == list(range(80))[::-1][:11]
-    assert tgt_stats["columns"][tgt_values.name]["min11"] == list(range(80))[::1][:11]
+    assert tgt_stats["columns"][tgt_values.name]["max_n"] == list(range(80))[::-1][:ANALYZE_N_MIN_MAX]
+    assert tgt_stats["columns"][tgt_values.name]["min_n"] == list(range(80))[::1][:ANALYZE_N_MIN_MAX]
     ctx_stats = read_json(ctx_stats_path / "part.000000-trn.json")
-    assert ctx_stats["columns"][ctx_values.name]["max11"] == list(range(40))[::-2][:11]
-    assert ctx_stats["columns"][ctx_values.name]["min11"] == list(range(40))[::2][:11]
+    assert ctx_stats["columns"][ctx_values.name]["max_n"] == list(range(40))[::-2][:ANALYZE_N_MIN_MAX]
+    assert ctx_stats["columns"][ctx_values.name]["min_n"] == list(range(40))[::2][:ANALYZE_N_MIN_MAX]
 
 
 class TestAnalyzeCol:

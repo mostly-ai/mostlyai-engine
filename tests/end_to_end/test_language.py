@@ -469,7 +469,7 @@ def test_special_character_column_name(tmp_path_factory):
 @pytest.fixture(scope="session")
 def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws")
-    no_of_records = 40
+    no_of_records = 120
     data = pd.DataFrame(
         {
             "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),

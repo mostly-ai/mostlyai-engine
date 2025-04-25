@@ -57,6 +57,8 @@ SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # s
 SDEC_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
+ANALYZE_N_MIN_MAX = 101
+
 TEMPORARY_PRIMARY_KEY = "__primary_key"
 
 STRING = "string[pyarrow]"  # This utilizes pyarrow's large string type since pandas 2.2

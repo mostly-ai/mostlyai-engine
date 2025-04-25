@@ -14,7 +14,7 @@
 
 import pandas as pd
 
-from mostlyai.engine._common import read_json, write_json
+from mostlyai.engine._common import ANALYZE_N_MIN_MAX, read_json, write_json
 from mostlyai.engine._encoding_types.tabular.datetime import (
     analyze_datetime,
     analyze_reduce_datetime,
@@ -102,9 +102,9 @@ def test_datetime_empty(tmp_path):
     }
     assert partition_stats == {
         "has_nan": False,
-        "max11": [],
+        "max_n": [],
         "max_values": min_max_values,
-        "min11": [],
+        "min_n": [],
         "min_values": min_max_values,
     }
     assert stats == {
@@ -132,8 +132,8 @@ def test_datetime_noempties(tmp_path):
 
 
 def test_datetime_min_max_overlapping():
-    root_keys = pd.Series(list(range(21)), name="id")
-    values = pd.Series([pd.to_datetime(f"01-01-{2000 + y}") for y in range(21)], name="value")
+    root_keys = pd.Series(list(range(ANALYZE_N_MIN_MAX)), name="id")
+    values = pd.Series([pd.to_datetime(f"01-01-{2000 + y}") for y in range(ANALYZE_N_MIN_MAX)], name="value")
     stats = analyze_reduce_datetime([analyze_datetime(values, root_keys)])
     for pos, card in stats["cardinalities"].items():
         assert card > 0

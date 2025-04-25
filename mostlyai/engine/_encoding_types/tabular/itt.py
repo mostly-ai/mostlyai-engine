@@ -26,7 +26,12 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import dp_quantiles, get_stochastic_rare_threshold, safe_convert_datetime
+from mostlyai.engine._common import (
+    ANALYZE_N_MIN_MAX,
+    dp_quantiles,
+    get_stochastic_rare_threshold,
+    safe_convert_datetime,
+)
 from mostlyai.engine._dtypes import is_date_dtype, is_timestamp_dtype
 from mostlyai.engine._encoding_types.tabular.datetime import split_sub_columns_datetime
 
@@ -40,9 +45,9 @@ def analyze_itt(
     df = pd.concat([root_keys, context_keys, values], axis=1)
     # calculate min/max values for start dates
     start_dates = df.dropna().groupby(root_keys.name)[values.name].nth(0)
-    min11 = start_dates.sort_values(ascending=True).head(11).astype(str).tolist()
+    min_n = start_dates.sort_values(ascending=True).head(ANALYZE_N_MIN_MAX).astype(str).tolist()
     start_dates = df.dropna().groupby(root_keys.name)[values.name].nth(0)
-    max11 = start_dates.sort_values(ascending=False).head(11).astype(str).tolist()
+    max_n = start_dates.sort_values(ascending=False).head(ANALYZE_N_MIN_MAX).astype(str).tolist()
     # split into datetime/ITT parts
     df_split = split_sub_columns_itt(values, context_keys)
     is_not_nan = df_split["nan"] == 0
@@ -79,8 +84,8 @@ def analyze_itt(
         "has_neg": has_neg,
         "min_values": min_values,
         "max_values": max_values,
-        "min11": min11,
-        "max11": max11,
+        "min_n": min_n,
+        "max_n": max_n,
     }
     return stats
 
@@ -102,18 +107,20 @@ def analyze_reduce_itt(
     # check if any record has non-zero timestamp information
     has_time = max_values["start_hour"] > 0 or max_values["start_minute"] > 0 or max_values["start_second"] > 0
     # determine min / max 5 values to map too low / too high values to
-    reduced_mins = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)
-    reduced_maxs = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)
+    reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
+    reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
         # extreme value protection - discard lowest/highest 5 values
-        if len(reduced_mins) < 11 or len(reduced_maxs) < 11:  # FIXME: what should the new threshold be?
-            # less than 11 subjects with non-NULL values; we need to protect all
+        if (
+            len(reduced_min_n) < ANALYZE_N_MIN_MAX or len(reduced_max_n) < ANALYZE_N_MIN_MAX
+        ):  # FIXME: what should the new threshold be?
+            # less than ANALYZE_N_MIN_MAX subjects with non-NULL values; we need to protect all
             reduced_min = None
             reduced_max = None
             has_time = False
         else:
             if value_protection_delta is not None and value_protection_epsilon is not None:
-                values = sorted(reduced_mins + reduced_maxs)
+                values = sorted(reduced_min_n + reduced_max_n)
                 quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
                 reduced_min, reduced_max = dp_quantiles(
                     values, quantiles, value_protection_epsilon, value_protection_delta
@@ -121,14 +128,14 @@ def analyze_reduce_itt(
                 reduced_min = str(reduced_min)
                 reduced_max = str(reduced_max)
             else:
-                reduced_min = str(reduced_mins[get_stochastic_rare_threshold(min_threshold=5)])
-                reduced_max = str(reduced_maxs[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_min = str(reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_max = str(reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)])
                 # update min/max year based on first four letters of protected min/max dates
                 max_values["start_year"] = int(reduced_max[0:4])
                 min_values["start_year"] = int(reduced_min[0:4])
     else:
-        reduced_min = str(reduced_mins[0]) if len(reduced_mins) > 0 else None
-        reduced_max = str(reduced_maxs[0]) if len(reduced_maxs) > 0 else None
+        reduced_min = str(reduced_min_n[0]) if len(reduced_min_n) > 0 else None
+        reduced_max = str(reduced_max_n[0]) if len(reduced_max_n) > 0 else None
 
     # determine cardinalities
     cardinalities = {}
