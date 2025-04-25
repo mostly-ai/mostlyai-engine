@@ -63,7 +63,6 @@ def analyze_reduce_language_numeric(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
     # check for occurrence of NaN values
     has_nan = any([j["has_nan"] for j in stats_list])
@@ -80,12 +79,10 @@ def analyze_reduce_language_numeric(
             reduced_min = None
             reduced_max = None
         else:
-            if value_protection_delta is not None and value_protection_epsilon is not None:
+            if value_protection_epsilon is not None:
                 values = sorted(reduced_min_n + reduced_max_n)
                 quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
-                reduced_min, reduced_max = dp_quantiles(
-                    values, quantiles, value_protection_epsilon, value_protection_delta
-                )
+                reduced_min, reduced_max = dp_quantiles(values, quantiles, value_protection_epsilon)
                 if max_scale == 0:
                     reduced_min = int(reduced_min)
                     reduced_max = int(reduced_max)

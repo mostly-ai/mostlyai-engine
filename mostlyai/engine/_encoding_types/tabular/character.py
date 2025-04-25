@@ -48,7 +48,6 @@ def analyze_reduce_character(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
     # gather maximum string length across partitions
     max_string_length = max(stats["max_string_length"] for stats in stats_list)
@@ -64,8 +63,8 @@ def analyze_reduce_character(
         cnt_values = dict(sorted(cnt_values.items()))
         known_categories = list(cnt_values.keys())
         if value_protection:
-            if value_protection_delta is not None and value_protection_epsilon is not None:
-                categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, value_protection_delta, threshold=5)
+            if value_protection_epsilon is not None:
+                categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, threshold=5)
             else:
                 rare_min = get_stochastic_rare_threshold(min_threshold=5)
                 categories = [k for k in known_categories if cnt_values[k] >= rare_min]

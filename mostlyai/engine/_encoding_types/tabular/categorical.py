@@ -64,11 +64,7 @@ def analyze_reduce_categorical(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
-    assert (value_protection_epsilon is not None) is (value_protection_delta is not None), (
-        "value_protection_epsilon and value_protection_delta must be both set or both unset"
-    )
     # sum up all counts for each categorical value
     cnt_values: dict[str, int] = {}
     for item in stats_list:
@@ -77,8 +73,8 @@ def analyze_reduce_categorical(
     cnt_values = dict(sorted(cnt_values.items()))
     known_categories = list(cnt_values.keys())
     if value_protection:
-        if value_protection_delta is not None and value_protection_epsilon is not None:
-            categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, value_protection_delta, threshold=5)
+        if value_protection_epsilon is not None:
+            categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, threshold=5)
         else:
             rare_min = get_stochastic_rare_threshold(min_threshold=5)
             categories = [k for k in known_categories if cnt_values[k] >= rare_min]
