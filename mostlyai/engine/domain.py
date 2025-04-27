@@ -183,5 +183,5 @@ class DifferentialPrivacyConfig(CustomBaseModel):
         description="The DP epsilon of the privacy budget for determining the value ranges, which are gathered prior to "
         "the model training during the analysis step. Only applicable if value protection is True.",
         ge=0.0,
-        le=1.0,
+        le=10000.0,
     )
