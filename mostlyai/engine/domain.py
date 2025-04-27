@@ -177,7 +177,7 @@ class DifferentialPrivacyConfig(CustomBaseModel):
         ge=0.0,
         le=10000.0,
     )
-    value_protection_epsilon: float = Field(
+    value_protection_epsilon: float | None = Field(
         default=1.0,
         alias="valueProtectionEpsilon",
         description="The DP epsilon of the privacy budget for determining the value ranges, which are gathered prior to "
