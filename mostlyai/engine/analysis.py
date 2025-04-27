@@ -162,7 +162,7 @@ def analyze(
                 ctx_encoding_types=ctx_encoding_types,
                 ctx_primary_key=ctx_primary_key if has_context else None,
                 ctx_root_key=ctx_root_key,
-                n_jobs=min(cpu_count() - 1, 16),
+                n_jobs=min(16, max(1, cpu_count() - 1)),
             )
             progress.update(completed=i, total=len(tgt_pqt_partitions) + 1)
 

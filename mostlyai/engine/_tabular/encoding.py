@@ -81,7 +81,7 @@ def encode(
                 output_path=workspace.encoded_data_path,
                 ctx_partition_file=ctx_pqt_partitions[i] if has_context else None,
                 ctx_stats=ctx_stats if has_context else None,
-                n_jobs=min(cpu_count() - 1, 16),
+                n_jobs=min(16, max(1, cpu_count() - 1)),
             )
             progress.update(completed=i, total=len(tgt_pqt_partitions) + 1)
     _LOG.info(f"ENCODE_TABULAR finished in {time.time() - t0:.2f}s")
