@@ -614,7 +614,9 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
-def dp_quantiles(values: pd.Series, quantiles: list[float], epsilon: float, beta: float = 1.001) -> list[float]:
+def dp_quantiles(
+    values: list | np.ndarray | pd.Series, quantiles: list[float], epsilon: float, beta: float = 1.001
+) -> list[float]:
     """
     Fully unbounded differentially private quantile estimation using two AboveThreshold calls
     with Exponential noise (one-sided Laplace).
@@ -635,6 +637,7 @@ def dp_quantiles(values: pd.Series, quantiles: list[float], epsilon: float, beta
     Returns:
         list[float]: Differentially private estimates of the quantiles.
     """
+    values = pd.Series(values)
     n = len(values)
     m = len(quantiles)
     results = []
@@ -674,7 +677,7 @@ def dp_quantiles(values: pd.Series, quantiles: list[float], epsilon: float, beta
         # 3-5) Final selection
         if pos_k and pos_k > 0:
             results.append(beta**pos_k - 1)
-        if neg_k and neg_k > 0:
+        elif neg_k and neg_k > 0:
             results.append(-(beta**neg_k) + 1)
         else:
             results.append(0.0)
