@@ -720,7 +720,7 @@ def generate(
         # read model config
         model_units = model_configs.get("model_units") or ModelSize.M
         _LOG.debug(f"{model_units=}")
-        enable_flexible_generation = model_configs.get("enable_flexible_generation")
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
         _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve device
@@ -755,6 +755,22 @@ def generate(
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
+        if not enable_flexible_generation:
+            # check if resolved column order is the same as the one from training
+            trn_column_order = [
+                get_argn_name(
+                    argn_processor=tgt_stats["columns"][col][ARGN_PROCESSOR],
+                    argn_table=tgt_stats["columns"][col][ARGN_TABLE],
+                    argn_column=tgt_stats["columns"][col][ARGN_COLUMN],
+                )
+                for col in tgt_stats["columns"].keys()
+            ]
+            _LOG.info(f"{trn_column_order=}")
+            if gen_column_order != trn_column_order:
+                raise ValueError(
+                    "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
+                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+                )
 
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
