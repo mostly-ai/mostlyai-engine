@@ -32,9 +32,8 @@ def analyze_reduce_language_categorical(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
-    stats = analyze_reduce_categorical(stats_list, value_protection, value_protection_epsilon, value_protection_delta)
+    stats = analyze_reduce_categorical(stats_list, value_protection, value_protection_epsilon)
     stats["categories"] = list(stats["codes"].keys())
     if any([j["has_nan"] for j in stats_list]):
         # when has_nan, tabular stats are like [CATEGORICAL_UNKNOWN_TOKEN, CATEGORICAL_NULL_TOKEN, ...]

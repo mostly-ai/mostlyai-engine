@@ -175,9 +175,6 @@ def analyze(
         value_protection_epsilon = (
             differential_privacy.value_protection_epsilon if value_protection and differential_privacy else None
         )
-        # currently, we allocate 100% of delta to training
-        # TODO: consider splitting delta between training and analysis later
-        value_protection_delta = 0 if value_protection and differential_privacy else None
         if has_context:
             dp_tgt_ratio = float(len(tgt_encoding_types) + 1) / (len(tgt_encoding_types) + len(ctx_encoding_types) + 1)
             dp_ctx_ratio = float(len(ctx_encoding_types)) / (len(tgt_encoding_types) + len(ctx_encoding_types) + 1)
@@ -191,9 +188,6 @@ def analyze(
             value_protection_epsilon=value_protection_epsilon * dp_tgt_ratio
             if value_protection_epsilon is not None and has_context
             else value_protection_epsilon,
-            value_protection_delta=value_protection_delta * dp_tgt_ratio
-            if value_protection_delta is not None and has_context
-            else value_protection_delta,
         )
         if has_context:
             _analyze_reduce(
@@ -205,9 +199,6 @@ def analyze(
                 value_protection_epsilon=value_protection_epsilon * dp_ctx_ratio
                 if value_protection_epsilon is not None and has_context
                 else value_protection_epsilon,
-                value_protection_delta=value_protection_delta * dp_ctx_ratio
-                if value_protection_delta is not None and has_context
-                else value_protection_delta,
             )
 
         # clean up partition-wise stats files, as they contain non-protected values
@@ -329,7 +320,6 @@ def _analyze_reduce(
     mode: Literal["tgt", "ctx"],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> None:
     """
     Reduces partial statistics.
@@ -378,9 +368,6 @@ def _analyze_reduce(
             "value_protection": value_protection,
             "value_protection_epsilon": value_protection_epsilon / n_dp_splits
             if value_protection_epsilon is not None
-            else None,
-            "value_protection_delta": value_protection_delta / n_dp_splits
-            if value_protection_delta is not None
             else None,
         }
 
@@ -498,7 +485,6 @@ def _analyze_reduce(
             value_protection_epsilon=value_protection_epsilon / n_dp_splits
             if value_protection_epsilon is not None
             else None,
-            value_protection_delta=value_protection_delta / n_dp_splits if value_protection_delta is not None else None,
         )
         seq_len_min = stats["seq_len"]["min"]
         seq_len_max = stats["seq_len"]["max"]
@@ -618,7 +604,6 @@ def _analyze_reduce_seq_len(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
     # gather sequence length counts
     cnt_lengths: dict[str, int] = {}
@@ -637,13 +622,13 @@ def _analyze_reduce_seq_len(
             # less or equal to 10 subjects; we need to protect all
             lengths = np.repeat(1, 10)
         else:
-            if value_protection_epsilon is not None and value_protection_delta is not None:
+            if value_protection_epsilon is not None:
                 if len(lengths) >= 10_000:
                     quantiles = np.linspace(0.01, 0.99, 11)
                 else:
                     quantiles = np.linspace(0.05, 0.95, 11)
                 # TODO: check difference between inverted_cdf and linear (default)
-                dp_deciles = dp_quantiles(lengths, quantiles, value_protection_epsilon, value_protection_delta)
+                dp_deciles = dp_quantiles(lengths, quantiles, value_protection_epsilon)
                 deciles = [int(v) for v in dp_deciles]
                 min_length = deciles[0]
                 max_length = deciles[-1]

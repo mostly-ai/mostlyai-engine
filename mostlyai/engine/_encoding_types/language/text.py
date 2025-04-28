@@ -29,7 +29,6 @@ def analyze_reduce_text(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
     nchar_max = 0
     nchar_sum = 0

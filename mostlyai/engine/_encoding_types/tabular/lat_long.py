@@ -271,7 +271,6 @@ def analyze_reduce_latlong(
     stats_list: list[dict],
     value_protection: bool = True,
     value_protection_epsilon: float | None = None,
-    value_protection_delta: float | None = None,
 ) -> dict:
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
@@ -290,10 +289,8 @@ def analyze_reduce_latlong(
                 if key:  # FIXME: is this if statement necessary?
                     cnt_values[key] = cnt_values.get(key, 0) + stats["quad_codes"][quad].get(key, 0)
         # NOTE: latlong always has value protection
-        if value_protection_delta is not None and value_protection_epsilon is not None:
-            categories, _ = dp_non_rare(
-                cnt_values, value_protection_epsilon, value_protection_delta, threshold=RARE_CATEGORY_THRESHOLD
-            )
+        if value_protection_epsilon is not None:
+            categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, threshold=RARE_CATEGORY_THRESHOLD)
         else:
             rare_min = get_stochastic_rare_threshold(
                 min_threshold=RARE_CATEGORY_THRESHOLD
