@@ -614,105 +614,115 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
+# temp: dummy implementations that have zero DP effect
 def dp_quantiles(values: pd.Series, quantiles: list[float], epsilon: float, beta: float = 1.001) -> list[float]:
-    """
-    Fully unbounded differentially private quantile estimation using two AboveThreshold calls
-    with Exponential noise (one-sided Laplace).
-
-    Implements Algorithm 4 from Durfee (2023):
-      1) AboveThreshold on positives: T1 = q*n, f_i = |{x_j + 1 < beta^i}|
-      2) AboveThreshold on negatives: T2 = (1-q)*n, f_i = |{x_j - 1 > -beta^i}|
-      3) If first halts at k>0: return  beta^k - 1
-      4) If second halts at k>0: return -beta^k + 1
-      5) Otherwise return 0
-
-    Args:
-        values (pd.Series): Pandas Series of numeric data.
-        quantiles (list[float]): List of probabilities of the quantiles to estimate.
-        epsilon (float): Privacy budget.
-        beta (float): Multiplicative step size (default 1.001).
-
-    Returns:
-        list[float]: Differentially private estimates of the quantiles.
-    """
-    n = len(values)
-    m = len(quantiles)
-    results = []
-    for q in quantiles:
-        # Split epsilon across quantiles and the two AboveThreshold calls per quantile
-        eps_pass = epsilon / m / 2.0
-        eps1 = eps2 = eps_pass / 2.0
-
-        # 1) Positive-side AboveThreshold
-        T1 = q * n
-        noisy_T1 = T1 + np.random.exponential(scale=1 / eps1)
-        pos_k = None
-        i = 0
-        while True:
-            cand_pos = beta**i - 1
-            count_pos = int((values < cand_pos).sum())
-            noisy_count = count_pos + np.random.exponential(scale=1 / eps2)
-            if noisy_count >= noisy_T1:
-                pos_k = i
-                break
-            i += 1
-
-        # 2) Negative-side AboveThreshold
-        T2 = (1 - q) * n
-        noisy_T2 = T2 + np.random.exponential(scale=1 / eps1)
-        neg_k = None
-        i = 0
-        while True:
-            cand_neg = -(beta**i - 1)
-            count_neg = int((values > cand_neg).sum())
-            noisy_count = count_neg + np.random.exponential(scale=1 / eps2)
-            if noisy_count >= noisy_T2:
-                neg_k = i
-                break
-            i += 1
-
-        # 3-5) Final selection
-        if pos_k and pos_k > 0:
-            results.append(beta**pos_k - 1)
-        if neg_k and neg_k > 0:
-            results.append(-(beta**neg_k) + 1)
-        else:
-            results.append(0.0)
-    return results
+    return np.quantile(values, quantiles, method="closest_observation").tolist()
 
 
+# temp: dummy implementations that have zero DP effect
 def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5) -> tuple[list[str], float]:
-    """
-    Differentially private selection of all categories whose true count >= threshold,
-    via the Laplace vector mechanism + post-processing.
+    return list(value_counts.keys()), 1.0
 
-    Args:
-        value_counts (dict): Mapping from category to its count.
-        epsilon (float): Privacy budget.
-        threshold (int): Threshold for non-rare values.
 
-    Returns:
-        list[str]: Categories whose noisy counts are above the threshold (DP guarantee: ε-DP).
-        float: Non-rare ratio (DP guarantee: ε-DP).
-    """
+# def dp_quantiles(values: pd.Series, quantiles: list[float], epsilon: float, beta: float = 1.001) -> list[float]:
+#     """
+#     Fully unbounded differentially private quantile estimation using two AboveThreshold calls
+#     with Exponential noise (one-sided Laplace).
 
-    # Note: Sensitivity of the count vector is 1 in L1 norm
-    total_counts = sum(value_counts.values())
+#     Implements Algorithm 4 from Durfee (2023):
+#       1) AboveThreshold on positives: T1 = q*n, f_i = |{x_j + 1 < beta^i}|
+#       2) AboveThreshold on negatives: T2 = (1-q)*n, f_i = |{x_j - 1 > -beta^i}|
+#       3) If first halts at k>0: return  beta^k - 1
+#       4) If second halts at k>0: return -beta^k + 1
+#       5) Otherwise return 0
 
-    # 1. Add independent Laplace(1/ε) noise to each count (vector Laplace mechanism)
-    noise = np.random.laplace(loc=0.0, scale=1 / epsilon, size=len(value_counts))
-    noisy_counts = np.array(list(value_counts.values())) + noise
-    for i, cat in enumerate(value_counts):
-        value_counts[cat] = noisy_counts[i]
+#     Args:
+#         values (pd.Series): Pandas Series of numeric data.
+#         quantiles (list[float]): List of probabilities of the quantiles to estimate.
+#         epsilon (float): Privacy budget.
+#         beta (float): Multiplicative step size (default 1.001).
 
-    # 2. Collect all categories whose noisy count >= threshold
-    selected = {cat: nc for cat, nc in value_counts.items() if nc >= threshold}
+#     Returns:
+#         list[float]: Differentially private estimates of the quantiles.
+#     """
+#     n = len(values)
+#     m = len(quantiles)
+#     results = []
+#     for q in quantiles:
+#         # Split epsilon across quantiles and the two AboveThreshold calls per quantile
+#         eps_pass = epsilon / m / 2.0
+#         eps1 = eps2 = eps_pass / 2.0
 
-    # 3. Compute the non-rare ratio
-    noisy_total_counts = sum(selected.values())
-    non_rare_ratio = noisy_total_counts / total_counts
+#         # 1) Positive-side AboveThreshold
+#         T1 = q * n
+#         noisy_T1 = T1 + np.random.exponential(scale=1 / eps1)
+#         pos_k = None
+#         i = 0
+#         while True:
+#             cand_pos = beta**i - 1
+#             count_pos = int((values < cand_pos).sum())
+#             noisy_count = count_pos + np.random.exponential(scale=1 / eps2)
+#             if noisy_count >= noisy_T1:
+#                 pos_k = i
+#                 break
+#             i += 1
 
-    return list(selected.keys()), non_rare_ratio
+#         # 2) Negative-side AboveThreshold
+#         T2 = (1 - q) * n
+#         noisy_T2 = T2 + np.random.exponential(scale=1 / eps1)
+#         neg_k = None
+#         i = 0
+#         while True:
+#             cand_neg = -(beta**i - 1)
+#             count_neg = int((values > cand_neg).sum())
+#             noisy_count = count_neg + np.random.exponential(scale=1 / eps2)
+#             if noisy_count >= noisy_T2:
+#                 neg_k = i
+#                 break
+#             i += 1
+
+#         # 3-5) Final selection
+#         if pos_k and pos_k > 0:
+#             results.append(beta**pos_k - 1)
+#         if neg_k and neg_k > 0:
+#             results.append(-(beta**neg_k) + 1)
+#         else:
+#             results.append(0.0)
+#     return results
+
+
+# def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5) -> tuple[list[str], float]:
+#     """
+#     Differentially private selection of all categories whose true count >= threshold,
+#     via the Laplace vector mechanism + post-processing.
+
+#     Args:
+#         value_counts (dict): Mapping from category to its count.
+#         epsilon (float): Privacy budget.
+#         threshold (int): Threshold for non-rare values.
+
+#     Returns:
+#         list[str]: Categories whose noisy counts are above the threshold (DP guarantee: ε-DP).
+#         float: Non-rare ratio (DP guarantee: ε-DP).
+#     """
+
+#     # Note: Sensitivity of the count vector is 1 in L1 norm
+#     total_counts = sum(value_counts.values())
+
+#     # 1. Add independent Laplace(1/ε) noise to each count (vector Laplace mechanism)
+#     noise = np.random.laplace(loc=0.0, scale=1 / epsilon, size=len(value_counts))
+#     noisy_counts = np.array(list(value_counts.values())) + noise
+#     for i, cat in enumerate(value_counts):
+#         value_counts[cat] = noisy_counts[i]
+
+#     # 2. Collect all categories whose noisy count >= threshold
+#     selected = {cat: nc for cat, nc in value_counts.items() if nc >= threshold}
+
+#     # 3. Compute the non-rare ratio
+#     noisy_total_counts = sum(selected.values())
+#     non_rare_ratio = noisy_total_counts / total_counts
+
+#     return list(selected.keys()), non_rare_ratio
 
 
 def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
