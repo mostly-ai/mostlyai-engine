@@ -622,7 +622,8 @@ def _analyze_reduce_seq_len(
             # less or equal to 10 subjects; we need to protect all
             lengths = np.repeat(1, 10)
         else:
-            if value_protection_epsilon is not None:
+            # don't use DP quantiles if all lengths are 1 (non-sequential data)
+            if value_protection_epsilon is not None and np.any(lengths != 1):
                 if len(lengths) >= 10_000:
                     quantiles = np.linspace(0.01, 0.99, 11)
                 else:
