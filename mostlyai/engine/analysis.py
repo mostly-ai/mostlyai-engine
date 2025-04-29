@@ -461,16 +461,6 @@ def _analyze_reduce(
         )
         stats["columns"][column] = stats_col
 
-    if mode == "ctx":
-        # log ctxseq sequence length statistics
-        deciles: dict[str, list[int]] = {}
-        for column in stats["columns"]:
-            if "seq_len" in stats["columns"][column]:  # ctxseq column
-                table = get_table(column)
-                if table not in deciles:  # first column in ctxseq table
-                    deciles[table] = stats["columns"][column]["seq_len"]["deciles"]
-        _LOG.info(f"ctxseq sequence length deciles: {deciles}")
-
     if mode == "tgt":
         # gather number of records and split into trn/val
         trn_cnt = sum(item["no_of_training_records"] for item in stats_list)
@@ -488,8 +478,6 @@ def _analyze_reduce(
         )
         seq_len_min = stats["seq_len"]["min"]
         seq_len_max = stats["seq_len"]["max"]
-        deciles = stats["seq_len"]["deciles"]
-        _LOG.info(f"tgt sequence length deciles: {deciles}")
         # check whether data is sequential or not
         stats["is_sequential"] = seq_len_min != 1 or seq_len_max != 1
         _LOG.info(f"is_sequential: {stats['is_sequential']}")
@@ -618,7 +606,7 @@ def _analyze_reduce_seq_len(
         if len(cnt_lengths) > 0
         else np.empty(0)
     )
-    min_length = max_length = median = deciles = None
+    min_length = max_length = median = None
     if value_protection:
         if len(lengths) <= 10:  # FIXME: what should the new threshold be?
             # less or equal to 10 subjects; we need to protect all
@@ -627,33 +615,28 @@ def _analyze_reduce_seq_len(
             # don't use DP quantiles if all lengths are 1 (non-sequential data)
             if value_protection_epsilon is not None and np.any(lengths != 1):
                 if len(lengths) >= 10_000:
-                    quantiles = np.linspace(0.01, 0.99, 11)
+                    quantiles = [0.01, 0.5, 0.99]
                 else:
-                    quantiles = np.linspace(0.05, 0.95, 11)
-                # TODO: check difference between inverted_cdf and linear (default)
-                dp_deciles = dp_quantiles(lengths, quantiles, value_protection_epsilon)
-                deciles = [int(v) for v in dp_deciles]
-                min_length = deciles[0]
-                max_length = deciles[-1]
-                median = deciles[5]
+                    quantiles = [0.05, 0.5, 0.95]
+                min_length, median, max_length = dp_quantiles(lengths, quantiles, value_protection_epsilon)
+                min_length = int(min_length)
+                max_length = int(max_length)
+                median = int(median)
             else:
                 lengths = lengths[
                     get_stochastic_rare_threshold(min_threshold=5) : -get_stochastic_rare_threshold(min_threshold=5)
                 ]
-    if deciles is None:
+    if median is None:
         # non-DP case
         min_length = int(np.min(lengths))
         max_length = int(np.max(lengths))
         median = int(np.median(lengths))
-        deciles = [int(v) for v in np.quantile(lengths, q=np.arange(0, 1.1, 0.1), method="inverted_cdf")]
     stats = {
         # calculate min/max for GENERATE
         "min": min_length,
         "max": max_length,
         # calculate median for LSTM heuristic
         "median": median,
-        # calculate deciles of sequence lengths for bucket_by_seq_length
-        "deciles": deciles,
         "value_protection": value_protection,
     }
     return stats

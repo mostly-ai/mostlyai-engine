@@ -437,14 +437,12 @@ def get_sequence_length_stats(stats: dict) -> dict:
             "min": stats["seq_len"]["min"],
             "median": stats["seq_len"]["median"],
             "max": stats["seq_len"]["max"],
-            "deciles": stats["seq_len"]["deciles"],
         }
     else:
         stats = {
             "min": 1,
             "median": 1,
             "max": 1,
-            "deciles": [1 for i in range(11)],
         }
     return stats
 

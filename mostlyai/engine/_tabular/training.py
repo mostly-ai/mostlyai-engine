@@ -426,15 +426,11 @@ def train(
 
         # gather sequence length stats for heuristics
         tgt_seq_len_stats = get_sequence_length_stats(tgt_stats)
-        tgt_seq_len_deciles = tgt_seq_len_stats["deciles"]
         tgt_seq_len_median = tgt_seq_len_stats["median"]
         tgt_seq_len_max = tgt_seq_len_stats["max"]
         max_sequence_window = np.clip(max_sequence_window, a_min=1, a_max=tgt_seq_len_max)
         _LOG.info(f"{max_sequence_window=}")
-        _LOG.info(f"{tgt_seq_len_deciles=}")
-        ctx_seq_deciles = get_ctx_sequence_length(ctx_stats, key="deciles")
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
-        _LOG.info(f"{ctx_seq_deciles=}")
 
         # the line below fixes issue with growing epoch time for later epochs
         # https://discuss.pytorch.org/t/training-time-gets-slower-and-slower-on-cpu/145483

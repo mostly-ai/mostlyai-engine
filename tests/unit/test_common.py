@@ -494,7 +494,6 @@ class TestGetCtxSequenceLength:
                 "table1.col1": {
                     ARGN_PROCESSOR: "ctxseq",
                     "seq_len": {
-                        "deciles": [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3],
                         "min": 1,
                         "max": 3,
                         "median": 2,
