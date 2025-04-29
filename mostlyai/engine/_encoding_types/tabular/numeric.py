@@ -236,7 +236,7 @@ def analyze_reduce_numeric(
             reduced_max = None
         else:
             if value_protection_epsilon is not None:
-                values = sorted(reduced_min_n + reduced_max_n)
+                values = reduced_min_n + reduced_max_n
                 quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
                 reduced_min, reduced_max = dp_quantiles(values, quantiles, value_protection_epsilon)
             else:

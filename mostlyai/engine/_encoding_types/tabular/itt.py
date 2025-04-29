@@ -117,11 +117,18 @@ def analyze_reduce_itt(
             has_time = False
         else:
             if value_protection_epsilon is not None:
-                values = sorted(reduced_min_n + reduced_max_n)
+                values = reduced_min_n + reduced_max_n
+                # convert to int64 unix timestamp so that we can apply dp_quantiles
+                if any(len(v) > 10 for v in values):
+                    dt_format = "%Y-%m-%d %H:%M:%S"
+                else:
+                    dt_format = "%Y-%m-%d"
+                values = pd.to_datetime(values).astype("int64")
                 quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
                 reduced_min, reduced_max = dp_quantiles(values, quantiles, value_protection_epsilon)
-                reduced_min = str(reduced_min)
-                reduced_max = str(reduced_max)
+                # convert back to the original string format
+                reduced_min = pd.to_datetime(int(reduced_min)).strftime(dt_format)
+                reduced_max = pd.to_datetime(int(reduced_max)).strftime(dt_format)
             else:
                 reduced_min = str(reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)])
                 reduced_max = str(reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)])
