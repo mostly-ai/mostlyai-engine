@@ -217,3 +217,20 @@ def test_split_mixed_tgt_raises(tmp_path):
             },
             model_type=ModelType.language,
         )
+
+
+@pytest.mark.parametrize("trn_val_split", [0.1, 0.5, 0.9])
+@pytest.mark.parametrize("tgt_pk", [None, "id"])
+def test_trn_val_split(tmp_path, trn_val_split, tgt_pk):
+    n = 10_000
+    tgt_df = pd.DataFrame({"id": list(range(n))})
+    split(
+        tgt_data=tgt_df,
+        tgt_primary_key=tgt_pk,
+        trn_val_split=trn_val_split,
+        workspace_dir=tmp_path,
+    )
+    trn_tgt_data = pd.read_parquet(list((tmp_path / "OriginalData" / "tgt-data").glob("*trn*")))
+    val_tgt_data = pd.read_parquet(list((tmp_path / "OriginalData" / "tgt-data").glob("*val*")))
+    assert len(trn_tgt_data) == pytest.approx(int(n * trn_val_split), rel=0.2)
+    assert len(val_tgt_data) == pytest.approx(int(n * (1 - trn_val_split)), rel=0.2)
