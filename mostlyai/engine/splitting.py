@@ -75,6 +75,7 @@ def split(
     tgt_encoding_types: dict[str, str | ModelEncodingType] | None = None,
     ctx_encoding_types: dict[str, str | ModelEncodingType] | None = None,
     n_partitions: int = 1,
+    trn_val_split: float = 0.9,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ) -> None:
@@ -100,6 +101,7 @@ def split(
         tgt_encoding_types: Encoding types for columns in the target data (excluding key columns).
         ctx_encoding_types: Encoding types for columns in the context data (excluding key columns).
         n_partitions: Number of partitions to split the data into.
+        trn_val_split: Fraction of data to use for training, with the remaining data used for validation.
         workspace_dir: Path to the workspace directory where files will be created.
         update_progress: A custom progress callback.
     """
@@ -190,9 +192,11 @@ def split(
             keys = tgt_data[tgt_context_key].drop_duplicates()
         else:
             keys = ctx_data[ctx_primary_key]
-        # shuffle keys and split
+        # shuffle keys
         keys = keys.sample(frac=1)
-        trn_cnt = round(0.9 * len(keys))
+        # split randomly into trn and val
+        assert 0 < trn_val_split < 1, f"invalid trn_val_split: {trn_val_split}"
+        trn_cnt = round(trn_val_split * len(keys))
         trn_keys = keys[:trn_cnt]
         val_keys = keys[trn_cnt:]
 
