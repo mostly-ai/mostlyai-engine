@@ -78,6 +78,7 @@ def split(
     trn_val_split: float = 0.9,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    seed: int | None = None,
 ) -> None:
     """
     Splits the provided original data into training and validation sets, and stores these as partitioned Parquet files.
@@ -105,6 +106,8 @@ def split(
         workspace_dir: Path to the workspace directory where files will be created.
         update_progress: A custom progress callback.
     """
+    if seed is not None:
+        np.random.seed(seed)
 
     _LOG.info("SPLIT started")
     t0 = time.time()
