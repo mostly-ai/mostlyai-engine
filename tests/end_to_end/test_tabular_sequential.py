@@ -528,18 +528,23 @@ class TestTabularTrainingStrategy:
         )
         return workspace_dir
 
-    @pytest.mark.parametrize("with_dp", [False, True])
-    def test_training_strategy(self, workspace_before_training, with_dp):
+    @pytest.mark.parametrize(
+        "differential_privacy",
+        [
+            None,  # DP is disabled
+            DifferentialPrivacyConfig(),  # DP is enabled with default parameters
+        ],
+    )
+    def test_training_strategy(self, workspace_before_training, differential_privacy):
         model_id = "MOSTLY_AI/Small"
         workspace = Workspace(workspace_before_training)
-        differential_privacy = DifferentialPrivacyConfig() if with_dp else None
         analyze(workspace_dir=workspace_before_training, differential_privacy=differential_privacy)
         encode(workspace_dir=workspace_before_training)
         train(
             workspace_dir=workspace_before_training,
             model=model_id,
             max_epochs=1,
-            differential_privacy=differential_privacy if with_dp else None,
+            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.reset,
         )
         progress_reset = pd.read_csv(workspace.model_progress_messages_path)
@@ -548,7 +553,7 @@ class TestTabularTrainingStrategy:
             workspace_dir=workspace_before_training,
             model=model_id,
             max_epochs=1,
-            differential_privacy=differential_privacy if with_dp else None,
+            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.reuse,
         )
         progress_reuse = pd.read_csv(workspace.model_progress_messages_path)
@@ -562,7 +567,7 @@ class TestTabularTrainingStrategy:
             workspace_dir=workspace_before_training,
             model=model_id,
             max_epochs=2,
-            differential_privacy=differential_privacy if with_dp else None,
+            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.resume,
         )
         progress_resume = pd.read_csv(workspace.model_progress_messages_path)
@@ -577,7 +582,7 @@ class TestTabularTrainingStrategy:
             workspace_dir=workspace_before_training,
             model=model_id,
             max_epochs=1,
-            differential_privacy=differential_privacy if with_dp else None,
+            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.resume,
         )
         progress_resume_without_checkpoint = pd.read_csv(workspace.model_progress_messages_path)
