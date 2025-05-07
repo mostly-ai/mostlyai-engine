@@ -820,22 +820,23 @@ def dp_quantiles(values: list | np.ndarray, quantiles: list[float], epsilon: flo
     """
     values = np.array(values)
 
-    # split epsilon in (m + 1) parts for m quantiles and 1 for the bounds
-    m = len(quantiles)
-    eps_bounds = epsilon / (m + 1)
-    eps_quantiles = epsilon - eps_bounds
+    # # split epsilon in (m + 1) parts for m quantiles and 1 for the bounds
+    # m = len(quantiles)
+    # eps_bounds = epsilon / (m + 1)
+    # eps_quantiles = epsilon - eps_bounds
 
-    # get the bounds
-    # for too small values of epsilon and/or sample size this can return None
-    lower, upper = _dp_approx_bounds(values, eps_bounds)
+    # # get the bounds
+    # # for too small values of epsilon and/or sample size this can return None
+    # lower, upper = _dp_approx_bounds(values, eps_bounds)
 
-    if lower is None or upper is None:
-        # in case the approximate bounds are None, fall back to the unbounded quantiles method
-        results = _dp_unbounded_quantiles(values=values, quantiles=quantiles, epsilon=eps_quantiles)
-    else:
-        results = _dp_bounded_quantiles(
-            values=values, quantiles=quantiles, epsilon=eps_quantiles, lower=lower, upper=upper
-        )
+    # if lower is None or upper is None:
+    #     # in case the approximate bounds are None, fall back to the unbounded quantiles method
+    #     results = _dp_unbounded_quantiles(values=values, quantiles=quantiles, epsilon=eps_quantiles)
+    # else:
+    #     results = _dp_bounded_quantiles(
+    #         values=values, quantiles=quantiles, epsilon=eps_quantiles, lower=lower, upper=upper
+    #     )
+    results = _dp_unbounded_quantiles(values=values, quantiles=quantiles, epsilon=epsilon)
     return results
 
 
