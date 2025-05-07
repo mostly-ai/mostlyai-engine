@@ -234,17 +234,3 @@ def test_trn_val_split(tmp_path, trn_val_split, tgt_pk):
     val_tgt_data = pd.read_parquet(list((tmp_path / "OriginalData" / "tgt-data").glob("*val*")))
     assert len(trn_tgt_data) == pytest.approx(int(n * trn_val_split), rel=0.2)
     assert len(val_tgt_data) == pytest.approx(int(n * (1 - trn_val_split)), rel=0.2)
-
-
-def test_split_seed(tmp_path):
-    tgt_df = pd.DataFrame({"col": list(range(100))})
-    kwargs = {"tgt_data": tgt_df, "seed": 42}
-    ws_1, ws_2 = tmp_path / "ws-1", tmp_path / "ws-2"
-    split(**kwargs | {"workspace_dir": ws_1})
-    split(**kwargs | {"workspace_dir": ws_2})
-    trn_1 = pd.read_parquet(ws_1 / "OriginalData" / "tgt-data" / "part.000000-trn.parquet")
-    trn_2 = pd.read_parquet(ws_2 / "OriginalData" / "tgt-data" / "part.000000-trn.parquet")
-    val_1 = pd.read_parquet(ws_1 / "OriginalData" / "tgt-data" / "part.000000-val.parquet")
-    val_2 = pd.read_parquet(ws_2 / "OriginalData" / "tgt-data" / "part.000000-val.parquet")
-    assert trn_1.equals(trn_2)
-    assert val_1.equals(val_2)

@@ -18,6 +18,7 @@ import time
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._encoding_types.tabular.lat_long import split_str_to_latlong
@@ -335,6 +336,48 @@ def test_max_training_time(input_data, tmp_path_factory):
     train(workspace_dir=workspace_dir, max_epochs=2, max_training_time=10)
     elapsed_time = time.time() - start_time
     assert elapsed_time < 10
+
+
+def test_reproducibility(input_data, tmp_path_factory):
+    df = input_data[0]
+    ws_1 = tmp_path_factory.mktemp("ws_1")
+    ws_2 = tmp_path_factory.mktemp("ws_2")
+
+    def run_with_fixed_seed(ws):
+        split(tgt_data=df, workspace_dir=ws, seed=42)
+        analyze(workspace_dir=ws, seed=42)
+        encode(workspace_dir=ws, seed=42)
+        train(workspace_dir=ws, max_epochs=1, seed=42)
+        generate(workspace_dir=ws, seed=42, sample_size=100)
+
+    run_with_fixed_seed(ws_1)
+    run_with_fixed_seed(ws_2)
+
+    # check reproducibility of split step
+    orig_1 = pd.read_parquet(ws_1 / "OriginalData" / "tgt-data")
+    orig_2 = pd.read_parquet(ws_2 / "OriginalData" / "tgt-data")
+    assert orig_1.equals(orig_2)
+
+    # check reproducibility of analyze step
+    stats_1 = pd.read_json(ws_1 / "ModelStore" / "tgt-stats" / "stats.json")
+    stats_2 = pd.read_json(ws_2 / "ModelStore" / "tgt-stats" / "stats.json")
+    assert stats_1.equals(stats_2)
+
+    # check reproducibility of encode step
+    encoded_1 = pd.read_parquet(ws_1 / "OriginalData" / "encoded-data")
+    encoded_2 = pd.read_parquet(ws_2 / "OriginalData" / "encoded-data")
+    assert encoded_1.equals(encoded_2)
+
+    # check reproducibility of train step
+    model_weights_1 = torch.load(f=ws_1 / "ModelStore" / "model-data" / "model-weights.pt", weights_only=True)
+    model_weights_2 = torch.load(f=ws_2 / "ModelStore" / "model-data" / "model-weights.pt", weights_only=True)
+    for key in model_weights_1.keys():
+        assert torch.equal(model_weights_1[key], model_weights_2[key])
+
+    # check reproducibility of generate step
+    syn_1 = pd.read_parquet(ws_1 / "SyntheticData")
+    syn_2 = pd.read_parquet(ws_2 / "SyntheticData")
+    assert syn_1.equals(syn_2)
 
 
 class TestTabularFlatWithContext:
