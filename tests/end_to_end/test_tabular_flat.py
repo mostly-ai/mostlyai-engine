@@ -353,31 +353,32 @@ def test_reproducibility(input_data, tmp_path_factory):
     run_with_fixed_seed(ws_1)
     run_with_fixed_seed(ws_2)
 
-    # check reproducibility of split step
-    orig_1 = pd.read_parquet(ws_1 / "OriginalData" / "tgt-data")
-    orig_2 = pd.read_parquet(ws_2 / "OriginalData" / "tgt-data")
-    assert orig_1.equals(orig_2)
+    def extract_artifacts(ws):
+        return {
+            "original_data": pd.read_parquet(ws / "OriginalData" / "tgt-data"),
+            "stats": pd.read_json(ws / "ModelStore" / "tgt-stats" / "stats.json"),
+            "encoded_data": pd.read_parquet(ws / "OriginalData" / "encoded-data"),
+            "model_weights": torch.load(f=ws / "ModelStore" / "model-data" / "model-weights.pt", weights_only=True),
+            "synthetic_data": pd.read_parquet(ws / "SyntheticData"),
+        }
 
-    # check reproducibility of analyze step
-    stats_1 = pd.read_json(ws_1 / "ModelStore" / "tgt-stats" / "stats.json")
-    stats_2 = pd.read_json(ws_2 / "ModelStore" / "tgt-stats" / "stats.json")
-    assert stats_1.equals(stats_2)
+    ws_1_artifacts = extract_artifacts(ws_1)
+    ws_2_artifacts = extract_artifacts(ws_2)
 
-    # check reproducibility of encode step
-    encoded_1 = pd.read_parquet(ws_1 / "OriginalData" / "encoded-data")
-    encoded_2 = pd.read_parquet(ws_2 / "OriginalData" / "encoded-data")
-    assert encoded_1.equals(encoded_2)
-
-    # check reproducibility of train step
-    model_weights_1 = torch.load(f=ws_1 / "ModelStore" / "model-data" / "model-weights.pt", weights_only=True)
-    model_weights_2 = torch.load(f=ws_2 / "ModelStore" / "model-data" / "model-weights.pt", weights_only=True)
-    for key in model_weights_1.keys():
-        assert torch.equal(model_weights_1[key], model_weights_2[key])
-
-    # check reproducibility of generate step
-    syn_1 = pd.read_parquet(ws_1 / "SyntheticData")
-    syn_2 = pd.read_parquet(ws_2 / "SyntheticData")
-    assert syn_1.equals(syn_2)
+    assert ws_1_artifacts["original_data"].equals(ws_2_artifacts["original_data"]), (
+        "reproducibility of split step failed"
+    )
+    assert ws_1_artifacts["stats"].equals(ws_2_artifacts["stats"]), "reproducibility of analyze step failed"
+    assert ws_1_artifacts["encoded_data"].equals(ws_2_artifacts["encoded_data"]), (
+        "reproducibility of encode step failed"
+    )
+    for key in ws_1_artifacts["model_weights"].keys():
+        assert torch.equal(ws_1_artifacts["model_weights"][key], ws_2_artifacts["model_weights"][key]), (
+            "reproducibility of train step failed"
+        )
+    assert ws_1_artifacts["synthetic_data"].equals(ws_2_artifacts["synthetic_data"]), (
+        "reproducibility of generate step failed"
+    )
 
 
 class TestTabularFlatWithContext:
