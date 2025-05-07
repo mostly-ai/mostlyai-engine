@@ -643,6 +643,7 @@ def test_dp_quantiles():
     q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
     assert abs(values[values < q5_dp].shape[0] / values.shape[0] - 0.05) < 0.005
     assert abs(values[values > q95_dp].shape[0] / values.shape[0] - 0.05) < 0.005
+    assert q5_dp <= q95_dp
 
     # edge case: uniform distribution of the same value
     values = np.random.uniform(1, 1, 10_000)
@@ -655,6 +656,7 @@ def test_dp_quantiles():
     lower, upper = _dp_approx_bounds(values, epsilon / (len(q) + 1))
     assert lower is None and upper is None
     q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
+    assert q5_dp <= q95_dp
 
 
 def test_dp_non_rare():

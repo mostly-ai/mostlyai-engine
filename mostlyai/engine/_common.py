@@ -824,6 +824,11 @@ def dp_quantiles(values: list | np.ndarray, quantiles: list[float], epsilon: flo
         results = _dp_bounded_quantiles(
             values=values, quantiles=quantiles, epsilon=eps_quantiles, lower=lower, upper=upper
         )
+
+    # ensure monotonicity of results with respect to quantiles
+    sorted_indices = [t[0] for t in sorted(enumerate(quantiles), key=lambda x: x[1])]
+    sorted_results = sorted(results)
+    results = [sorted_results[sorted_indices.index(i)] for i in range(len(quantiles))]
     return results
 
 
