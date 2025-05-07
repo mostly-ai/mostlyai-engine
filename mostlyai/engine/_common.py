@@ -616,83 +616,7 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
-def _dp_unbounded_quantiles(
-    values: np.ndarray, quantiles: list[float], epsilon: float, beta: float = 1.01
-) -> list[float]:
-    """
-    Fully unbounded differentially private quantile estimation using two AboveThreshold calls
-    with Exponential noise (one-sided Laplace).
-
-    Implements Algorithm 4 from Durfee (2023):
-      1) AboveThreshold on positives: T1 = q*n, f_i = |{x_j + 1 < beta^i}|
-      2) AboveThreshold on negatives: T2 = (1-q)*n, f_i = |{x_j - 1 > -beta^i}|
-      3) If first halts at k>0: return  beta^k - 1
-      4) If second halts at k>0: return -beta^k + 1
-      5) Otherwise return 0
-
-    Args:
-        values (np.ndarray): A 1D array of numeric values.
-        quantiles (list[float]): List of probabilities of the quantiles to estimate.
-        epsilon (float): Privacy budget.
-        beta (float): Multiplicative step size (default 1.01). Section 6.4 from Durfee (2023) suggests the range [1.01, 1.001] and 1.01 for general use, especially for more significant
-        decreases in epsilon or in the data size.
-
-    Returns:
-        list[float]: Differentially private estimates of the quantiles.
-    """
-
-    _LOG.info("compute DP unbounded quantiles")
-    n = len(values)
-    m = len(quantiles)
-    results = []
-    epsilon_spent = 0.0
-    for q in quantiles:
-        # Split epsilon across quantiles and the two AboveThreshold calls per quantile
-        eps_pass = epsilon / m / 2.0
-        eps1 = eps2 = eps_pass / 2.0
-
-        # 1) Positive-side AboveThreshold
-        T = q * n
-        noisy_T = T + np.random.exponential(scale=1 / eps1)
-        k = 0
-        i = 0
-        while True:
-            candidate = beta**i - 1
-            f_i = (values < candidate).sum()
-            noisy_f_i = f_i + np.random.exponential(scale=1 / eps2)
-            if noisy_f_i >= noisy_T:
-                k = i
-                break
-            i += 1
-        epsilon_spent += eps_pass
-        if k:
-            # Note: if the first AboveThreshold call halted at k > 0, we can save half of the budget and spend it on training later
-            results.append(candidate)
-        else:
-            # 2) Continue with negative-side AboveThreshold only if the first one did not halt at k > 0
-            T = (1 - q) * n
-            noisy_T = T + np.random.exponential(scale=1 / eps1)
-            k = 0
-            i = 0
-            while True:
-                candidate = -(beta**i - 1)
-                f_i = (values > candidate).sum()
-                noisy_f_i = f_i + np.random.exponential(scale=1 / eps2)
-                if noisy_f_i >= noisy_T:
-                    k = i
-                    break
-                i += 1
-            epsilon_spent += eps_pass
-            if k:
-                results.append(candidate)
-            else:
-                # 3) Return 0 if both AboveThreshold calls did not halt at k > 0
-                results.append(0.0)
-    # TODO: return epsilon spent
-    return results
-
-
-def _dp_approx_bounds(values: np.ndarray, epsilon: float) -> tuple[float, float]:
+def _dp_approx_bounds(values: np.ndarray, epsilon: float) -> tuple[float | None, float | None]:
     """
     Modified from OpenDP's SmartNoise SDK (MIT License)
     Source: https://github.com/opendp/smartnoise-sdk/blob/main/sql/snsql/sql/_mechanisms/approx_bounds.py
@@ -705,7 +629,7 @@ def _dp_approx_bounds(values: np.ndarray, epsilon: float) -> tuple[float, float]
         epsilon (float): The privacy budget to spend estimating the bounds.
 
     Returns:
-        tuple[float, float]: A tuple of the estimated minimum and maximum values.
+        tuple[float | None, float | None]: A tuple of the estimated minimum and maximum values.
     """
 
     bins = 64
@@ -790,10 +714,10 @@ def _dp_bounded_quantiles(
     _LOG.info(f"compute DP bounded quantiles within [{lower}, {upper}]")
     results = []
     eps_part = epsilon / len(quantiles)
+    k = len(values)
+    values = np.clip(values, lower, upper)
+    values = np.sort(values)
     for q in quantiles:
-        k = len(values)
-        values = np.clip(values, lower, upper)
-        values = np.sort(values)
         Z = np.concatenate(([lower], values, [upper]))
         Z -= lower  # shift right to be 0 bounded
         y = np.exp(-eps_part * np.abs(np.arange(len(Z) - 1) - q * k)) * (Z[1:] - Z[:-1])
@@ -802,6 +726,69 @@ def _dp_bounded_quantiles(
         idx = np.random.choice(range(k + 1), 1, False, p)[0]
         v = np.random.uniform(Z[idx], Z[idx + 1])
         results.append(v + lower)
+    return results
+
+
+def _dp_unbounded_quantiles(
+    values: np.ndarray, quantiles: list[float], epsilon: float, beta: float = 1.01
+) -> tuple[list[float], float]:
+    """
+    Fully unbounded differentially private quantile estimation using two AboveThreshold calls
+    with Exponential noise (one-sided Laplace).
+
+    Implements Algorithm 4 from Durfee (2023):
+      1) AboveThreshold on positives: T1 = q*n, f_i = |{x_j + 1 < beta^i}|
+      2) AboveThreshold on negatives: T2 = (1-q)*n, f_i = |{x_j - 1 > -beta^i}|
+      3) If first halts at k>0: return  beta^k - 1
+      4) If second halts at k>0: return -beta^k + 1
+      5) Otherwise return 0
+
+    Args:
+        values (np.ndarray): A 1D array of numeric values.
+        quantiles (list[float]): List of probabilities of the quantiles to estimate.
+        epsilon (float): Privacy budget.
+        beta (float): Multiplicative step size (default 1.01). Section 6.4 from Durfee (2023) suggests the range [1.01, 1.001] and 1.01 for general use, especially for more significant
+        decreases in epsilon or in the data size.
+
+    Returns:
+        list[float]: Differentially private estimates of the quantiles.
+    """
+
+    def above_threshold(
+        values: np.ndarray, q: float, eps: float, beta: float, is_positive_side: bool
+    ) -> tuple[int, float]:
+        n = len(values)
+        eps1 = eps2 = eps / 2.0
+        T = q * n if is_positive_side else (1 - q) * n
+        noisy_T = T + np.random.exponential(scale=1 / eps1)
+        i = 0
+        while True:
+            candidate = beta**i - 1 if is_positive_side else -(beta**i - 1)
+            f_i = (values < candidate).sum() if is_positive_side else (values > candidate).sum()
+            noisy_f_i = f_i + np.random.exponential(scale=1 / eps2)
+            if noisy_f_i >= noisy_T:
+                return i, candidate
+            i += 1
+
+    _LOG.info("compute DP unbounded quantiles")
+    # Split epsilon across quantiles and the two AboveThreshold calls per quantile
+    eps_pass = epsilon / len(quantiles) / 2.0
+
+    results = []
+    for q in quantiles:
+        # 1) Positive-side AboveThreshold
+        k, candidate = above_threshold(values, q, eps_pass, beta, is_positive_side=True)
+        if k > 0:
+            results.append(candidate)
+        else:
+            # 2) Continue with negative-side AboveThreshold only if the first one did not halt at k > 0
+            k, candidate = above_threshold(values, q, eps_pass, beta, is_positive_side=False)
+            if k > 0:
+                results.append(candidate)
+            else:
+                # 3) Return 0 if both AboveThreshold calls did not halt at k > 0
+                results.append(0.0)
+    # NOTE: consider returning the actual epsilon spent in the future, so that the unused budget can be used for training later
     return results
 
 
