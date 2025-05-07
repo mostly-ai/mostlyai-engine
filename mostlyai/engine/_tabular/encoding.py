@@ -35,6 +35,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
+    set_seed,
 )
 from mostlyai.engine._encoding_types.tabular.categorical import encode_categorical
 from mostlyai.engine._encoding_types.tabular.character import encode_character
@@ -51,9 +52,12 @@ _LOG = logging.getLogger(__name__)
 def encode(
     workspace_dir: str | Path | None = None,
     update_progress: ProgressCallback | None = None,
+    seed: int | None = None,
 ) -> None:
     _LOG.info("ENCODE_TABULAR started")
     t0 = time.time()
+    if seed is not None:
+        set_seed(seed)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)

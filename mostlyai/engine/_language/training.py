@@ -42,6 +42,7 @@ from mostlyai.engine._common import (
     ProgressCallback,
     ProgressCallbackWrapper,
     TABLE_COLUMN_INFIX,
+    set_seed,
 )
 from mostlyai.engine._language.common import (
     is_bf16_supported,
@@ -285,9 +286,12 @@ def train(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    seed: int | None = None,
 ):
     _LOG.info("TRAIN_LANGUAGE started")
     t0_ = time.time()
+    if seed is not None:
+        set_seed(seed)
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
 

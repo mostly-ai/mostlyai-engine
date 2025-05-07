@@ -22,7 +22,13 @@ import pandas as pd
 from pandas.core.dtypes.common import is_datetime64_any_dtype
 from tokenizers.pre_tokenizers import ByteLevel
 
-from mostlyai.engine._common import is_sequential, ProgressCallback, ProgressCallbackWrapper, TABLE_COLUMN_INFIX
+from mostlyai.engine._common import (
+    is_sequential,
+    ProgressCallback,
+    ProgressCallbackWrapper,
+    TABLE_COLUMN_INFIX,
+    set_seed,
+)
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._encoding_types.language.categorical import encode_language_categorical
 from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
@@ -149,9 +155,13 @@ def _encode_partition(
     _LOG.info(f"encoded partition {tgt_partition_file.name} {df.shape}")
 
 
-def encode(workspace_dir: str | Path | None = None, update_progress: ProgressCallback | None = None) -> None:
+def encode(
+    workspace_dir: str | Path | None = None, update_progress: ProgressCallback | None = None, seed: int | None = None
+) -> None:
     _LOG.info("ENCODE_LANGUAGE started")
     t0 = time.time()
+    if seed is not None:
+        set_seed(seed)
     with ProgressCallbackWrapper(update_progress) as progress:
         workspace_dir = ensure_workspace_dir(workspace_dir)
         workspace = Workspace(workspace_dir)

@@ -41,6 +41,7 @@ def generate(
     fairness: FairnessConfig | dict | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    seed: int | None = None,
 ) -> None:
     """
     Generates synthetic data from a trained model.
@@ -63,6 +64,7 @@ def generate(
         fairness: Configuration for fairness constraints. Only applicable for tabular models.
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
+        seed: Seed for the random number generators.
     """
     model_type = resolve_model_type(workspace_dir)
     if model_type == ModelType.tabular:
@@ -82,6 +84,7 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
+            seed=seed,
         )
     else:
         from mostlyai.engine._language.generation import generate as generate_language
@@ -103,4 +106,5 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
+            seed=seed,
         )

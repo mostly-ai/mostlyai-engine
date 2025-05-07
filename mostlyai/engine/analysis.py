@@ -36,6 +36,7 @@ from mostlyai.engine._common import (
     is_a_list,
     is_sequential,
     read_json,
+    set_seed,
     write_json,
     TABLE_COLUMN_INFIX,
     ProgressCallback,
@@ -104,6 +105,7 @@ def analyze(
     value_protection: bool = True,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    seed: int | None = None,
 ) -> None:
     """
     Generates (privacy-safe) column-level statistics of the original data, that has been `split` into the workspace.
@@ -118,10 +120,13 @@ def analyze(
         value_protection: Whether to enable value protection for rare values.
         workspace_dir: Path to workspace directory containing partitioned data.
         update_progress: Optional callback to update progress during analysis.
+        seed: Seed for the random number generators.
     """
 
     _LOG.info("ANALYZE started")
     t0 = time.time()
+    if seed is not None:
+        set_seed(seed)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)

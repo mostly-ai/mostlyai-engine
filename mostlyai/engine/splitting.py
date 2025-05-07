@@ -20,7 +20,7 @@ import time
 import warnings
 from pathlib import Path
 
-from mostlyai.engine._common import ProgressCallbackWrapper, ProgressCallback
+from mostlyai.engine._common import ProgressCallbackWrapper, ProgressCallback, set_seed
 from mostlyai.engine._dtypes import (
     is_date_dtype,
     is_float_dtype,
@@ -105,12 +105,12 @@ def split(
         trn_val_split: Fraction of data to use for training, with the remaining data used for validation.
         workspace_dir: Path to the workspace directory where files will be created.
         update_progress: A custom progress callback.
+        seed: Seed for the random number generators.
     """
-    if seed is not None:
-        np.random.seed(seed)
-
     _LOG.info("SPLIT started")
     t0 = time.time()
+    if seed is not None:
+        set_seed(seed)
     with ProgressCallbackWrapper(update_progress) as progress:
         # validate input
         if tgt_primary_key and tgt_primary_key not in tgt_data:
