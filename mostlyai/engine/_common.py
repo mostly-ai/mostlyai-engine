@@ -726,6 +726,12 @@ def _dp_bounded_quantiles(
         idx = np.random.choice(range(k + 1), 1, False, p)[0]
         v = np.random.uniform(Z[idx], Z[idx + 1])
         results.append(v + lower)
+
+    # ensure monotonicity of results with respect to quantiles
+    sorted_indices = [t[0] for t in sorted(enumerate(quantiles), key=lambda x: x[1])]
+    sorted_results = sorted(results)
+    results = [sorted_results[sorted_indices.index(i)] for i in range(len(quantiles))]
+
     return results
 
 
@@ -788,6 +794,12 @@ def _dp_unbounded_quantiles(
             else:
                 # 3) Return 0 if both AboveThreshold calls did not halt at k > 0
                 results.append(0.0)
+
+    # ensure monotonicity of results with respect to quantiles
+    sorted_indices = [t[0] for t in sorted(enumerate(quantiles), key=lambda x: x[1])]
+    sorted_results = sorted(results)
+    results = [sorted_results[sorted_indices.index(i)] for i in range(len(quantiles))]
+
     # NOTE: consider returning the actual epsilon spent in the future, so that the unused budget can be used for training later
     return results
 
@@ -824,11 +836,6 @@ def dp_quantiles(values: list | np.ndarray, quantiles: list[float], epsilon: flo
         results = _dp_bounded_quantiles(
             values=values, quantiles=quantiles, epsilon=eps_quantiles, lower=lower, upper=upper
         )
-
-    # ensure monotonicity of results with respect to quantiles
-    sorted_indices = [t[0] for t in sorted(enumerate(quantiles), key=lambda x: x[1])]
-    sorted_results = sorted(results)
-    results = [sorted_results[sorted_indices.index(i)] for i in range(len(quantiles))]
     return results
 
 
