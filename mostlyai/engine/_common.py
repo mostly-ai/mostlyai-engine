@@ -16,7 +16,9 @@ import inspect
 import itertools
 import json
 import logging
+import os
 import platform
+import struct
 import time
 from functools import wraps
 from pathlib import Path
@@ -610,3 +612,34 @@ class FixedSizeSampleBuffer:
         self.buffer = []
         self.current_size = 0
         self.n_clears += 1
+
+
+def set_random_state(random_state: int | None = None, worker: bool = False):
+    def get_random_int_from_os() -> int:
+        # 32-bit, cryptographically secure random int from os
+        return int(struct.unpack("I", os.urandom(4))[0])
+
+    if worker:  # worker process
+        if "MOSTLYAI_ENGINE_SEED" in os.environ:
+            random_state = int(os.environ["MOSTLYAI_ENGINE_SEED"])
+        else:
+            # normally, the seed should have been set in the main process
+            # but if not (e.g. in tests), we fallback to generating a random seed here
+            random_state = get_random_int_from_os()
+    else:  # main process
+        if random_state is not None:
+            _LOG.info(f"Global random_state set to `{random_state}`")
+
+        if random_state is None:
+            random_state = get_random_int_from_os()
+
+        os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
+
+    import random
+    import numpy as np
+    import torch
+
+    random.seed(random_state)
+    np.random.seed(random_state)
+    torch.manual_seed(random_state)
+    torch.cuda.manual_seed_all(random_state)

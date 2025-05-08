@@ -36,6 +36,7 @@ from mostlyai.engine._common import (
     is_a_list,
     is_sequential,
     read_json,
+    set_random_state,
     write_json,
     TABLE_COLUMN_INFIX,
     ProgressCallback,
@@ -104,6 +105,7 @@ def analyze(
     value_protection: bool = True,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    random_state: int | None = None,
 ) -> None:
     """
     Generates (privacy-safe) column-level statistics of the original data, that has been `split` into the workspace.
@@ -122,6 +124,7 @@ def analyze(
 
     _LOG.info("ANALYZE started")
     t0 = time.time()
+    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)
@@ -492,6 +495,8 @@ def _analyze_col(
     root_keys: pd.Series | None = None,
     context_keys: pd.Series | None = None,
 ) -> dict:
+    set_random_state(worker=True)
+
     stats: dict = {"encoding_type": encoding_type}
 
     if values.empty:

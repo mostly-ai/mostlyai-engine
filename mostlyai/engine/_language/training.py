@@ -38,11 +38,7 @@ from opacus.utils.batch_memory_manager import wrap_data_loader
 
 from torch.utils.data import DataLoader
 
-from mostlyai.engine._common import (
-    ProgressCallback,
-    ProgressCallbackWrapper,
-    TABLE_COLUMN_INFIX,
-)
+from mostlyai.engine._common import ProgressCallback, ProgressCallbackWrapper, TABLE_COLUMN_INFIX, set_random_state
 from mostlyai.engine._language.common import (
     is_bf16_supported,
     load_base_model_and_config,
@@ -285,9 +281,11 @@ def train(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    random_state: int | None = None,
 ):
     _LOG.info("TRAIN_LANGUAGE started")
     t0_ = time.time()
+    set_random_state(random_state)
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
 

@@ -33,6 +33,7 @@ from mostlyai.engine._common import (
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
+    set_random_state,
 )
 from mostlyai.engine._encoding_types.language.categorical import decode_language_categorical
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
@@ -149,9 +150,11 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    random_state: int | None = None,
 ):
     _LOG.info("GENERATE_LANGUAGE started")
     t0_ = time.time()
+    set_random_state(random_state)
     os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
     os.environ["VLLM_NO_DEPRECATION_WARNING"] = "1"
 

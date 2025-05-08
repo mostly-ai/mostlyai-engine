@@ -37,7 +37,8 @@ def train(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    upload_model_data_callback: Callable | None = None,  # TODO
+    upload_model_data_callback: Callable | None = None,
+    random_state: int | None = None,
 ) -> None:
     """
     Trains a model with optional early stopping and differential privacy.
@@ -60,6 +61,7 @@ def train(
         workspace_dir: Directory path for workspace. Training outputs are stored in ModelStore subdirectory.
         update_progress: Callback function to report training progress.
         upload_model_data_callback: Callback function to upload model data during training.
+        random_state: Seed for the random number generators.
     """
     model_type = resolve_model_type(workspace_dir)
     if model_type == ModelType.tabular:
@@ -80,6 +82,7 @@ def train(
             model_state_strategy=model_state_strategy,
             device=device,
             max_sequence_window=max_sequence_window if max_sequence_window else args["max_sequence_window"].default,
+            random_state=random_state,
         )
     else:
         from mostlyai.engine._language.training import train as train_language
@@ -101,4 +104,5 @@ def train(
             upload_model_data_callback=upload_model_data_callback,
             model_state_strategy=model_state_strategy,
             device=device,
+            random_state=random_state,
         )
