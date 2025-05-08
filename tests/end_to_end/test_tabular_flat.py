@@ -338,61 +338,17 @@ def test_max_training_time(input_data, tmp_path_factory):
     assert elapsed_time < 10
 
 
-def test_reproducibility_1(input_data, tmp_path_factory):
+def test_reproducibility(input_data, tmp_path_factory):
     df = input_data[0]
     ws_1 = tmp_path_factory.mktemp("ws_1")
     ws_2 = tmp_path_factory.mktemp("ws_2")
 
     def run_with_fixed_seed(ws):
-        split(tgt_data=df, workspace_dir=ws, seed=42)
-        analyze(workspace_dir=ws, seed=42)
-        encode(workspace_dir=ws, seed=42)
-        train(workspace_dir=ws, max_epochs=1, seed=42)
-        generate(workspace_dir=ws, seed=42, sample_size=100)
-
-    run_with_fixed_seed(ws_1)
-    run_with_fixed_seed(ws_2)
-
-    def extract_artifacts(ws):
-        return {
-            "original_data": pd.read_parquet(ws / "OriginalData" / "tgt-data"),
-            "stats": pd.read_json(ws / "ModelStore" / "tgt-stats" / "stats.json"),
-            "encoded_data": pd.read_parquet(ws / "OriginalData" / "encoded-data"),
-            "model_weights": torch.load(f=ws / "ModelStore" / "model-data" / "model-weights.pt", weights_only=True),
-            "synthetic_data": pd.read_parquet(ws / "SyntheticData"),
-        }
-
-    ws_1_artifacts = extract_artifacts(ws_1)
-    ws_2_artifacts = extract_artifacts(ws_2)
-
-    assert ws_1_artifacts["original_data"].equals(ws_2_artifacts["original_data"]), (
-        "reproducibility of split step failed"
-    )
-    assert ws_1_artifacts["stats"].equals(ws_2_artifacts["stats"]), "reproducibility of analyze step failed"
-    assert ws_1_artifacts["encoded_data"].equals(ws_2_artifacts["encoded_data"]), (
-        "reproducibility of encode step failed"
-    )
-    for key in ws_1_artifacts["model_weights"].keys():
-        assert torch.equal(ws_1_artifacts["model_weights"][key], ws_2_artifacts["model_weights"][key]), (
-            "reproducibility of train step failed"
-        )
-    assert ws_1_artifacts["synthetic_data"].equals(ws_2_artifacts["synthetic_data"]), (
-        "reproducibility of generate step failed"
-    )
-
-
-def test_reproducibility_2(tmp_path_factory):
-    url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
-    df = pd.read_csv(f"{url}/census.csv.gz")
-    ws_1 = tmp_path_factory.mktemp("ws_1")
-    ws_2 = tmp_path_factory.mktemp("ws_2")
-
-    def run_with_fixed_seed(ws):
-        split(tgt_data=df, workspace_dir=ws, seed=42)
-        analyze(workspace_dir=ws, seed=42)
-        encode(workspace_dir=ws, seed=42)
-        train(workspace_dir=ws, max_epochs=1, seed=42)
-        generate(workspace_dir=ws, seed=42, sample_size=100)
+        split(tgt_data=df, workspace_dir=ws, random_state=42)
+        analyze(workspace_dir=ws, random_state=42)
+        encode(workspace_dir=ws, random_state=42)
+        train(workspace_dir=ws, max_epochs=1, random_state=42)
+        generate(workspace_dir=ws, sample_size=100, random_state=42)
 
     run_with_fixed_seed(ws_1)
     run_with_fixed_seed(ws_2)

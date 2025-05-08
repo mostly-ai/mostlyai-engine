@@ -250,6 +250,7 @@ def _encode_col(
     column_stats: dict,
     context_keys: pd.Series | None = None,
 ) -> pd.DataFrame:
+    set_random_state()  # inherit random state from environment
     is_sequential_column = is_sequential(values)
     if is_sequential_column:
         # explode nested columns and encode the same way as flat columns

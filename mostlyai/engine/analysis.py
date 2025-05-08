@@ -495,6 +495,8 @@ def _analyze_col(
     root_keys: pd.Series | None = None,
     context_keys: pd.Series | None = None,
 ) -> dict:
+    set_random_state()  # inherit random state from environment
+
     stats: dict = {"encoding_type": encoding_type}
 
     if values.empty:

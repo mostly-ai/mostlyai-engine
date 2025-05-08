@@ -16,7 +16,9 @@ import inspect
 import itertools
 import json
 import logging
+import os
 import platform
+import struct
 import time
 from functools import wraps
 from pathlib import Path
@@ -612,12 +614,21 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
-def set_random_state(seed: int):
+def set_random_state(random_state: int | None = None):
+    if random_state is not None:
+        _LOG.info(f"Global random_state set to `{random_state}`")
+
+    if random_state is None:
+        fallback_random_state = struct.unpack("I", os.urandom(4))[0]
+        random_state = int(os.environ.get("MOSTLYAI_ENGINE_SEED", fallback_random_state))
+
+    os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
+
     import random
     import numpy as np
     import torch
 
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    random.seed(random_state)
+    np.random.seed(random_state)
+    torch.manual_seed(random_state)
+    torch.cuda.manual_seed_all(random_state)
