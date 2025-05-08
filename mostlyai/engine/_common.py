@@ -614,15 +614,18 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
-def set_random_state(random_state: int | None = None):
-    if random_state is not None:
-        _LOG.info(f"Global random_state set to `{random_state}`")
+def set_random_state(random_state: int | None = None, worker: bool = False):
+    if worker:  # worker process
+        assert "MOSTLYAI_ENGINE_SEED" in os.environ, "MOSTLYAI_ENGINE_SEED should be set in the main process"
+        random_state = int(os.environ["MOSTLYAI_ENGINE_SEED"])
+    else:  # main process
+        if random_state is not None:
+            _LOG.info(f"Global random_state set to `{random_state}`")
 
-    if random_state is None:
-        fallback_random_state = struct.unpack("I", os.urandom(4))[0]
-        random_state = int(os.environ.get("MOSTLYAI_ENGINE_SEED", fallback_random_state))
+        if random_state is None:
+            random_state = struct.unpack("I", os.urandom(4))[0]
 
-    os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
+        os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
 
     import random
     import numpy as np
