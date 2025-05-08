@@ -235,7 +235,6 @@ def encode_df(
                 values=df[column],
                 column_stats=column_stats,
                 context_keys=context_keys,
-                worker=True,
             )
         )
     if delayed_encodes:
@@ -250,9 +249,8 @@ def _encode_col(
     values: pd.Series,
     column_stats: dict,
     context_keys: pd.Series | None = None,
-    worker: bool = False,
 ) -> pd.DataFrame:
-    set_random_state(worker=worker)
+    set_random_state(worker=True)
     is_sequential_column = is_sequential(values)
     if is_sequential_column:
         # explode nested columns and encode the same way as flat columns

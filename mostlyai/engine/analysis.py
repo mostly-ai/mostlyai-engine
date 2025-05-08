@@ -243,7 +243,6 @@ def _analyze_partition(
                 values=tgt_df[column],
                 encoding_type=encoding_type,
                 context_keys=tgt_context_keys,
-                worker=True,
             )
             for column, encoding_type in tgt_encoding_types.items()
         )
@@ -285,7 +284,6 @@ def _analyze_partition(
                     values=ctx_df[column],
                     encoding_type=encoding_type,
                     root_keys=ctx_root_keys,
-                    worker=True,
                 )
                 for column, encoding_type in ctx_encoding_types.items()
             )
@@ -496,9 +494,8 @@ def _analyze_col(
     encoding_type: ModelEncodingType,
     root_keys: pd.Series | None = None,
     context_keys: pd.Series | None = None,
-    worker: bool = False,
 ) -> dict:
-    set_random_state(worker=worker)
+    set_random_state(worker=True)
 
     stats: dict = {"encoding_type": encoding_type}
 

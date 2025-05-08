@@ -615,16 +615,18 @@ class FixedSizeSampleBuffer:
 
 
 def set_random_state(random_state: int | None = None, worker: bool = False):
+    def get_random_int_from_os() -> int:
+        # 32-bit, cryptographically secure random int from os
+        return int(struct.unpack("I", os.urandom(4))[0])
+
     if worker:  # worker process
-        assert "MOSTLYAI_ENGINE_SEED" in os.environ, "MOSTLYAI_ENGINE_SEED should be set in the main process"
-        random_state = int(os.environ["MOSTLYAI_ENGINE_SEED"])
+        random_state = os.environ.get("MOSTLYAI_ENGINE_SEED", get_random_int_from_os())
     else:  # main process
         if random_state is not None:
             _LOG.info(f"Global random_state set to `{random_state}`")
 
         if random_state is None:
-            # get a 32-bit int seed from os
-            random_state = struct.unpack("I", os.urandom(4))[0]
+            random_state = get_random_int_from_os()
 
         os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
 
