@@ -620,7 +620,12 @@ def set_random_state(random_state: int | None = None, worker: bool = False):
         return int(struct.unpack("I", os.urandom(4))[0])
 
     if worker:  # worker process
-        random_state = os.environ.get("MOSTLYAI_ENGINE_SEED", get_random_int_from_os())
+        if "MOSTLYAI_ENGINE_SEED" in os.environ:
+            random_state = int(os.environ["MOSTLYAI_ENGINE_SEED"])
+        else:
+            # normally, the seed should have been set in the main process
+            # but if not (e.g. in tests), we fallback to generating a random seed here
+            random_state = get_random_int_from_os()
     else:  # main process
         if random_state is not None:
             _LOG.info(f"Global random_state set to `{random_state}`")
