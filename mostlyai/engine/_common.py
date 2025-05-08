@@ -612,7 +612,7 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
-def set_seed(seed: int):
+def set_random_state(seed: int):
     import random
     import numpy as np
     import torch

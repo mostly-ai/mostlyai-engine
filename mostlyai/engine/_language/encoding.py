@@ -27,7 +27,7 @@ from mostlyai.engine._common import (
     ProgressCallback,
     ProgressCallbackWrapper,
     TABLE_COLUMN_INFIX,
-    set_seed,
+    set_random_state,
 )
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._encoding_types.language.categorical import encode_language_categorical
@@ -156,12 +156,13 @@ def _encode_partition(
 
 
 def encode(
-    workspace_dir: str | Path | None = None, update_progress: ProgressCallback | None = None, seed: int | None = None
+    workspace_dir: str | Path | None = None,
+    update_progress: ProgressCallback | None = None,
+    random_state: int | None = None,
 ) -> None:
     _LOG.info("ENCODE_LANGUAGE started")
     t0 = time.time()
-    if seed is not None:
-        set_seed(seed)
+    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         workspace_dir = ensure_workspace_dir(workspace_dir)
         workspace = Workspace(workspace_dir)
