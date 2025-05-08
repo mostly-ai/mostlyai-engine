@@ -344,7 +344,7 @@ def test_reproducibility(input_data, tmp_path_factory):
     ws_2 = tmp_path_factory.mktemp("ws_2")
 
     def run_with_fixed_seed(ws):
-        split(tgt_data=df, workspace_dir=ws, random_state=42)
+        split(tgt_data=df, workspace_dir=ws, tgt_primary_key="id", random_state=42)
         analyze(workspace_dir=ws, random_state=42)
         encode(workspace_dir=ws, random_state=42)
         train(workspace_dir=ws, max_epochs=1, random_state=42)
