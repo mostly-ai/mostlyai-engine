@@ -19,7 +19,8 @@ import pandas as pd
 from mostlyai.engine._common import (
     ANALYZE_MIN_MAX_TOP_N,
     ANALYZE_REDUCE_MIN_MAX_N,
-    dp_quantiles,
+    compute_log_histogram,
+    dp_approx_bounds,
     get_stochastic_rare_threshold,
     safe_convert_datetime,
 )
@@ -27,6 +28,9 @@ from mostlyai.engine._common import (
 
 def analyze_language_datetime(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:
     values = safe_convert_datetime(values)
+    # compute log histogram for DP bounds
+    log_hist = compute_log_histogram(values.dropna().astype("int64"))
+
     df = pd.concat([root_keys, values], axis=1)
     # determine lowest/highest values by root ID, and return Top 10
     min_dates = df.groupby(root_keys.name)[values.name].min().dropna()
@@ -40,6 +44,7 @@ def analyze_language_datetime(values: pd.Series, root_keys: pd.Series, _: pd.Ser
         "has_nan": has_nan,
         "min_n": min_n,
         "max_n": max_n,
+        "log_hist": log_hist,
     }
     return stats
 
@@ -51,7 +56,6 @@ def analyze_reduce_language_datetime(
 ) -> dict:
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
-    # determine min / max 5 values to map too low / too high values to
     reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
     reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
@@ -61,18 +65,17 @@ def analyze_reduce_language_datetime(
             reduced_max = None
         else:
             if value_protection_epsilon is not None:
-                values = reduced_min_n + reduced_max_n
-                # convert to int64 unix timestamp so that we can apply dp_quantiles
-                if any(len(v) > 10 for v in values):
+                if any(len(v) > 10 for v in reduced_min_n + reduced_max_n):
                     dt_format = "%Y-%m-%d %H:%M:%S"
                 else:
                     dt_format = "%Y-%m-%d"
-                values = pd.to_datetime(values).astype("int64")
-                quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
-                reduced_min, reduced_max = dp_quantiles(values, quantiles, value_protection_epsilon)
-                # convert back to the original string format
-                reduced_min = pd.to_datetime(int(reduced_min)).strftime(dt_format)
-                reduced_max = pd.to_datetime(int(reduced_max)).strftime(dt_format)
+                # Sum up log histograms bin-wise from all partitions
+                log_hist = [sum(bin) for bin in zip(*[j["log_hist"] for j in stats_list])]
+                reduced_min, reduced_max = dp_approx_bounds(log_hist, value_protection_epsilon)
+                if reduced_min is not None and reduced_max is not None:
+                    # convert back to the original string format
+                    reduced_min = pd.to_datetime(int(reduced_min), unit="us").strftime(dt_format)
+                    reduced_max = pd.to_datetime(int(reduced_max), unit="us").strftime(dt_format)
             else:
                 reduced_min = str(reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)])
                 reduced_max = str(reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)])

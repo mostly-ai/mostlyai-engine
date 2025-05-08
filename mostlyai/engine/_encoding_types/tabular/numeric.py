@@ -31,8 +31,9 @@ import pandas as pd
 from mostlyai.engine._common import (
     ANALYZE_MIN_MAX_TOP_N,
     ANALYZE_REDUCE_MIN_MAX_N,
+    compute_log_histogram,
+    dp_approx_bounds,
     dp_non_rare,
-    dp_quantiles,
     find_distinct_bins,
     get_stochastic_rare_threshold,
     safe_convert_numeric,
@@ -150,6 +151,9 @@ def analyze_numeric(
     non_na_values = values.dropna()
     cnt_unique_values = non_na_values.nunique()
 
+    # compute log histogram for DP bounds
+    log_hist = compute_log_histogram(non_na_values)
+
     # determine sufficient quantiles; used for binned numeric encoding
     if (
         encoding_type in [ModelEncodingType.tabular_numeric_binned, ModelEncodingType.tabular_numeric_auto]
@@ -204,6 +208,7 @@ def analyze_numeric(
         "max_n": max_n,
         "cnt_values": cnt_values,
         "quantiles": quantiles,
+        "log_hist": log_hist,
     }
     return stats
 
@@ -218,7 +223,6 @@ def analyze_reduce_numeric(
     has_nan = any([j["has_nan"] for j in stats_list])
     # check if there are negative values
     has_neg = any([j["has_neg"] for j in stats_list])
-
     # determine precision to apply rounding of sampled values during generation
     keys = stats_list[0]["max_digits"].keys()
     min_digits = {k: min([j["min_digits"][k] for j in stats_list]) for k in keys}
@@ -226,7 +230,6 @@ def analyze_reduce_numeric(
     non_zero_prec = [k for k in keys if max_digits[k] > 0 and k.startswith("E")]
     min_decimal = min([int(k[1:]) for k in non_zero_prec]) if len(non_zero_prec) > 0 else 0
 
-    # determine min / max 5 values to map too low / too high values to
     reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
     reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
@@ -236,9 +239,9 @@ def analyze_reduce_numeric(
             reduced_max = None
         else:
             if value_protection_epsilon is not None:
-                values = reduced_min_n + reduced_max_n
-                quantiles = [0.01, 0.99] if len(values) >= 10_000 else [0.05, 0.95]
-                reduced_min, reduced_max = dp_quantiles(values, quantiles, value_protection_epsilon)
+                # Sum up log histograms bin-wise from all partitions
+                log_hist = [sum(bin) for bin in zip(*[j["log_hist"] for j in stats_list])]
+                reduced_min, reduced_max = dp_approx_bounds(log_hist, value_protection_epsilon)
             else:
                 reduced_min = reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)]
                 reduced_max = reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)]

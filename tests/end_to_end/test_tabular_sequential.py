@@ -501,12 +501,12 @@ class TestTabularTrainingStrategy:
     def workspace_before_training(self, tmp_path_factory):
         workspace_dir = tmp_path_factory.mktemp("ws")
         cats = ["a", "b", "c"]
-        fltctx = pd.DataFrame({"id": list(range(100)), "flt": np.random.choice(cats, 100)})
+        fltctx = pd.DataFrame({"id": list(range(1000)), "flt": np.random.choice(cats, 1000)})
         seqctx = (
             pd.DataFrame(
                 {
-                    "id": np.repeat(list(range(100)), 2),
-                    "seq": np.random.choice(cats, 100 * 2),
+                    "id": np.repeat(list(range(1000)), 2),
+                    "seq": np.random.choice(cats, 1000 * 2),
                 }
             )
             .groupby("id")
@@ -515,8 +515,8 @@ class TestTabularTrainingStrategy:
         ctx = fltctx.merge(seqctx, on="id")
         tgt = pd.DataFrame(
             {
-                "id": np.repeat(list(range(100)), 2),
-                "seq": np.random.choice(cats, 100 * 2),
+                "id": np.repeat(list(range(1000)), 2),
+                "seq": np.random.choice(cats, 1000 * 2),
             }
         )
         split(

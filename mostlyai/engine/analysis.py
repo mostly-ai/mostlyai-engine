@@ -27,6 +27,7 @@ import pandas as pd
 from joblib import Parallel, delayed, parallel_config, cpu_count
 
 from mostlyai.engine._common import (
+    ANALYZE_REDUCE_MIN_MAX_N,
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
@@ -608,20 +609,20 @@ def _analyze_reduce_seq_len(
     )
     min_length = max_length = median = None
     if value_protection:
-        if len(lengths) <= 10:  # FIXME: what should the new threshold be?
+        if len(lengths) < ANALYZE_REDUCE_MIN_MAX_N:
             # less or equal to 10 subjects; we need to protect all
             lengths = np.repeat(1, 10)
         else:
             # don't use DP quantiles if all lengths are 1 (non-sequential data)
             if value_protection_epsilon is not None and np.any(lengths != 1):
-                if len(lengths) >= 10_000:
-                    quantiles = [0.01, 0.5, 0.99]
-                else:
-                    quantiles = [0.05, 0.5, 0.95]
+                quantiles = [0.01, 0.5, 0.99]
                 min_length, median, max_length = dp_quantiles(lengths, quantiles, value_protection_epsilon)
-                min_length = int(min_length)
-                max_length = int(max_length)
-                median = int(median)
+                if median is None:  # protect all if DP quantiles are not available
+                    lengths = np.repeat(1, 10)
+                else:
+                    min_length = int(min_length)
+                    max_length = int(max_length)
+                    median = int(median)
             else:
                 lengths = lengths[
                     get_stochastic_rare_threshold(min_threshold=5) : -get_stochastic_rare_threshold(min_threshold=5)

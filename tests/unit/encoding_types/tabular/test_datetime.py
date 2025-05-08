@@ -106,6 +106,7 @@ def test_datetime_empty(tmp_path):
         "max_values": min_max_values,
         "min_n": [],
         "min_values": min_max_values,
+        "log_hist": [0.0] * 128,
     }
     assert stats == {
         "cardinalities": {"day": 1, "month": 1, "year": 1},

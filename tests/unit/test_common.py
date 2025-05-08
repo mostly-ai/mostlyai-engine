@@ -26,7 +26,6 @@ from mostlyai.engine._common import (
     ARGN_PROCESSOR,
     ARGN_TABLE,
     CtxSequenceLengthError,
-    _dp_approx_bounds,
     apply_encoding_type_dtypes,
     dp_non_rare,
     dp_quantiles,
@@ -636,27 +635,25 @@ def test_find_distinct_bins():
 
 def test_dp_quantiles():
     epsilon = 1.0
-    q = [0.05, 0.95]
+    q = [0.01, 0.99]
 
     # given large enough sample size and epsilon, dp_quantiles should be reasonably close to the true quantiles
     values = np.random.lognormal(0, 1, 10_000) - 0.5  # right-skewed distribution with some negative values
     q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
-    # assert abs(values[values < q5_dp].shape[0] / values.shape[0] - 0.05) < 0.005
-    # assert abs(values[values > q95_dp].shape[0] / values.shape[0] - 0.05) < 0.005
+    assert abs(values[values < q5_dp].shape[0] / values.shape[0] - 0.01) < 0.005
+    assert abs(values[values > q95_dp].shape[0] / values.shape[0] - 0.01) < 0.005
     assert q5_dp <= q95_dp
 
     # edge case: uniform distribution of the same value
     values = np.random.uniform(1, 1, 10_000)
     q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
-    # assert q5_dp <= 1 <= q95_dp
+    assert q5_dp <= 1 <= q95_dp
 
     # small sample size
-    # it should fall back to the unbounded quantiles method and not fail
+    # it should fail to approximate the bounds and therefore return None
     values = np.random.normal(0, 10, 100)
-    lower, upper = _dp_approx_bounds(values, epsilon / (len(q) + 1))
-    assert lower is None and upper is None
     q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
-    assert q5_dp <= q95_dp
+    assert q5_dp is None and q95_dp is None
 
 
 def test_dp_non_rare():
