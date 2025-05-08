@@ -623,6 +623,7 @@ def set_random_state(random_state: int | None = None, worker: bool = False):
             _LOG.info(f"Global random_state set to `{random_state}`")
 
         if random_state is None:
+            # get a 32-bit int seed from os
             random_state = struct.unpack("I", os.urandom(4))[0]
 
         os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
