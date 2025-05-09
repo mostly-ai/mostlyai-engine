@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import random
 import time
 import uuid
 from functools import partial
@@ -197,7 +198,9 @@ def _generate_primary_keys(size: int, type: Literal["uuid", "int"] = "uuid") -> 
     if type == "uuid":
         # generate watermarked 36-chars UUIDv4s
         # e.g. mostly2b-d87c-4825-884f-611b309c3c55
-        return pd.Series([f"mostly{str(uuid.uuid4())[6:]}" for _ in range(size)], dtype="string")
+        return pd.Series(
+            [f"mostly{str(uuid.UUID(int=random.getrandbits(128), version=4))[6:]}" for _ in range(size)], dtype="string"
+        )
     else:
         return pd.Series(range(size), dtype="int")
 
