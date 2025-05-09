@@ -180,10 +180,7 @@ class DifferentialPrivacyConfig(CustomBaseModel):
     value_protection_epsilon: float | None = Field(
         default=1.0,
         alias="valueProtectionEpsilon",
-        description="The DP epsilon of the privacy budget for determining the value ranges, which are gathered prior to "
-        "the model training during the analysis step. Only applicable if value protection is True. Privacy budget will be "
-        "equally distributed between the columns. For categorical we calculate noisy histograms and use a noisy threshold. "
-        "For numeric we calculate bounds and then the bounded 1st and 99th percentiles.",
+        description="The DP epsilon of the privacy budget for determining the value ranges, which are gathered prior to the model training during the analysis step. Only applicable if value protection is True.\nPrivacy budget will be equally distributed between the columns. For categorical we calculate noisy histograms and use a noisy threshold. For numeric and datetime we calculate bounds based on noisy histograms.\n",
         ge=0.0,
         le=10000.0,
     )
