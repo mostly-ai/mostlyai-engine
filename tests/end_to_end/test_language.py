@@ -45,23 +45,37 @@ from mostlyai.engine.domain import (
 )
 
 
-def prepare_encoded_dataset(data: pd.DataFrame, workspace_dir, tgt_encoding_types, ctx_encoding_types=None):
-    tbl_pk = TEMPORARY_PRIMARY_KEY
-    data[tbl_pk] = list(range(data.shape[0]))
-    ctx_columns = [tbl_pk, *[key for key in ctx_encoding_types.keys()]] if ctx_encoding_types else [tbl_pk]
-    tgt_columns = [tbl_pk, *[key for key in tgt_encoding_types.keys()]]
-    ctx_df = data[ctx_columns]
-    tgt_df = data[tgt_columns]
+def prepare_encoded_dataset(
+    data: pd.DataFrame,
+    workspace_dir,
+    tgt_encoding_types,
+    ctx_encoding_types=None,
+    differential_privacy=None,
+    no_context=False,
+):
+    if no_context:
+        ctx_primary_key = tgt_context_key = None
+        ctx_encoding_types = None
+        ctx_df = None
+        tgt_df = data[list(tgt_encoding_types.keys())]
+    else:
+        ctx_encoding_types = ctx_encoding_types or {}
+        ctx_primary_key = tgt_context_key = TEMPORARY_PRIMARY_KEY
+        data[ctx_primary_key] = list(range(data.shape[0]))
+        ctx_columns = [ctx_primary_key, *[key for key in ctx_encoding_types.keys()]]
+        tgt_columns = [tgt_context_key, *[key for key in tgt_encoding_types.keys()]]
+        ctx_df = data[ctx_columns]
+        tgt_df = data[tgt_columns]
     split(
         tgt_data=tgt_df,
-        tgt_context_key=tbl_pk,
+        tgt_context_key=tgt_context_key,
         tgt_encoding_types=tgt_encoding_types,
         ctx_data=ctx_df,
-        ctx_primary_key=tbl_pk,
+        ctx_primary_key=ctx_primary_key,
         ctx_encoding_types=ctx_encoding_types,
         workspace_dir=workspace_dir,
     )
-    analyze(workspace_dir=workspace_dir)
+    analyze(workspace_dir=workspace_dir, differential_privacy=differential_privacy)
     encode(workspace_dir=workspace_dir)
 
 
@@ -103,14 +117,9 @@ def null_only_text_dataset(tmp_path_factory):
 @pytest.fixture(scope="session")
 def tgt_only_text_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws-tgt-only")
-    tgt_df = pd.DataFrame({"bio": ["Joe"] * 20})
-    split(
-        tgt_data=tgt_df,
-        workspace_dir=workspace_dir,
-        model_type="LANGUAGE",
-    )
-    analyze(workspace_dir=workspace_dir)
-    encode(workspace_dir=workspace_dir)
+    data = pd.DataFrame({"bio": ["Joe"] * 20})
+    tgt_encoding_types = {"bio": ModelEncodingType.language_categorical.value}
+    prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types, no_context=True)
     return workspace_dir
 
 
@@ -156,14 +165,26 @@ def test_language_with_context(encoded_text_dataset, model_name):
         (LSTMFromScratchConfig.model_id, 40),
     ],
 )
-def test_language_with_dp(encoded_text_dataset, model_name, dp_max_epsilon):
-    workspace_dir = encoded_text_dataset
-    ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
+def test_language_with_dp(tmp_path, model_name, dp_max_epsilon):
+    workspace_dir = tmp_path
+    no_of_records = 20
+    data = pd.DataFrame(
+        {
+            "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),
+            "bio": chain(*[[f"Joe {i}", f"Anna {i}", pd.NA, pd.NA] for i in range(int(no_of_records / 4))]),
+        }
+    )
+    ctx_encoding_types = {"gender": ModelEncodingType.tabular_categorical.value}
+    tgt_encoding_types = {"bio": ModelEncodingType.language_text.value}
     differential_privacy = DifferentialPrivacyConfig(
         max_epsilon=dp_max_epsilon,
         noise_multiplier=0.2,
     )
+    prepare_encoded_dataset(
+        data, workspace_dir, tgt_encoding_types, ctx_encoding_types, differential_privacy=differential_privacy
+    )
     train(workspace_dir=workspace_dir, model=model_name, differential_privacy=differential_privacy, batch_size=16)
+    ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
     generate(
         workspace_dir=workspace_dir,
         ctx_data=ctx_data,
@@ -448,7 +469,7 @@ def test_special_character_column_name(tmp_path_factory):
 @pytest.fixture(scope="session")
 def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
     workspace_dir = tmp_path_factory.mktemp("ws")
-    no_of_records = 40
+    no_of_records = 120
     data = pd.DataFrame(
         {
             "gender": ["m", "f", "x", pd.NA] * int(no_of_records / 4),

@@ -19,7 +19,7 @@ Character encoding splits any value into its characters, and encodes each positi
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string
+from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
 
 UNKNOWN_TOKEN = "\0"
 MAX_LENGTH_CHARS = 50
@@ -44,7 +44,11 @@ def analyze_character(values: pd.Series, root_keys: pd.Series, _: pd.Series | No
     return stats
 
 
-def analyze_reduce_character(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_character(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
     # gather maximum string length across partitions
     max_string_length = max(stats["max_string_length"] for stats in stats_list)
     positions = [f"P{idx}" for idx in range(max_string_length)]
@@ -56,14 +60,16 @@ def analyze_reduce_character(stats_list: list[dict], value_protection: bool = Tr
         for item in stats_list:
             for value, count in item["characters"].get(pos, {}).items():
                 cnt_values[value] = cnt_values.get(value, 0) + count
-        # create alphabetically sorted list of non-rare tokens
-        known_categories = [k for k in sorted(cnt_values.keys())]
+        cnt_values = dict(sorted(cnt_values.items()))
+        known_categories = list(cnt_values.keys())
         if value_protection:
-            # stochastic threshold for rare tokens
-            rare_min = 5 + int(3 * np.random.uniform())
+            if value_protection_epsilon is not None:
+                categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, threshold=5)
+            else:
+                rare_min = get_stochastic_rare_threshold(min_threshold=5)
+                categories = [k for k in known_categories if cnt_values[k] >= rare_min]
         else:
-            rare_min = 0
-        categories = [k for k in known_categories if cnt_values[k] >= rare_min]
+            categories = known_categories
         # add special token for UNKNOWN at first position
         categories = [UNKNOWN_TOKEN] + [c for c in categories if c != UNKNOWN_TOKEN]
         # assign codes for each token

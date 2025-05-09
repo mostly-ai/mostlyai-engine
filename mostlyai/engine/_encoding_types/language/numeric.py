@@ -14,20 +14,29 @@
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_numeric
+from mostlyai.engine._common import (
+    ANALYZE_MIN_MAX_TOP_N,
+    ANALYZE_REDUCE_MIN_MAX_N,
+    compute_log_histogram,
+    dp_approx_bounds,
+    get_stochastic_rare_threshold,
+    safe_convert_numeric,
+)
 from mostlyai.engine._encoding_types.tabular.numeric import _type_safe_numeric_series
 from mostlyai.engine.domain import ModelEncodingType
 
 
 def analyze_language_numeric(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:
     values = safe_convert_numeric(values)
+    # compute log histogram for DP bounds
+    log_hist = compute_log_histogram(values.dropna())
 
-    # determine lowest/highest values by root ID, and return top 11
+    # determine lowest/highest values by root ID, and return top ANALYZE_MIN_MAX_TOP_N
     df = pd.concat([root_keys, values], axis=1)
     min_values = df.groupby(root_keys.name)[values.name].min().dropna()
-    min11 = min_values.sort_values(ascending=True).head(11).tolist()
+    min_n = min_values.sort_values(ascending=True).head(ANALYZE_MIN_MAX_TOP_N).tolist()
     max_values = df.groupby(root_keys.name)[values.name].max().dropna()
-    max11 = max_values.sort_values(ascending=False).head(11).tolist()
+    max_n = max_values.sort_values(ascending=False).head(ANALYZE_MIN_MAX_TOP_N).tolist()
 
     # determine if there are any NaN values
     has_nan = bool(values.isna().any())
@@ -47,41 +56,52 @@ def analyze_language_numeric(values: pd.Series, root_keys: pd.Series, _: pd.Seri
     stats = {
         "has_nan": has_nan,
         "max_scale": max_scale,
-        "min11": min11,
-        "max11": max11,
+        "min_n": min_n,
+        "max_n": max_n,
+        "log_hist": log_hist,
     }
     return stats
 
 
-def analyze_reduce_language_numeric(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_language_numeric(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
     # check for occurrence of NaN values
     has_nan = any([j["has_nan"] for j in stats_list])
 
     # determine max scale
     max_scale = max([j["max_scale"] for j in stats_list])
 
-    # determine min / max 5 values to map too low / too high values to
-    min11 = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)[:11]
-    max11 = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)[:11]
+    reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
+    reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(min11) < 11 or len(max11) < 11:
-            # less than 11 subjects with non-NULL values; we need to protect all
-            min5 = []
-            max5 = []
+        if len(reduced_min_n) < ANALYZE_REDUCE_MIN_MAX_N or len(reduced_max_n) < ANALYZE_REDUCE_MIN_MAX_N:
+            # protect all values if there are less than ANALYZE_REDUCE_MIN_MAX_N values
+            reduced_min = None
+            reduced_max = None
         else:
-            min5 = min11[5:10]  # drop 1 to 5th lowest; keep 6th to 10th lowest
-            max5 = max11[5:10]  # drop 1 to 5th highest; keep 6th to 10th highest
+            if value_protection_epsilon is not None:
+                # Sum up log histograms bin-wise from all partitions
+                log_hist = [sum(bin) for bin in zip(*[j["log_hist"] for j in stats_list])]
+                reduced_min, reduced_max = dp_approx_bounds(log_hist, value_protection_epsilon)
+                if reduced_min is not None and reduced_max is not None and max_scale == 0:
+                    reduced_min = int(reduced_min)
+                    reduced_max = int(reduced_max)
+            else:
+                reduced_min = reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)]
+                reduced_max = reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)]
     else:
-        min5 = min11[0:5]
-        max5 = max11[0:5]
+        reduced_min = reduced_min_n[0] if len(reduced_min_n) > 0 else None
+        reduced_max = reduced_max_n[0] if len(reduced_max_n) > 0 else None
 
     stats = {
         "encoding_type": ModelEncodingType.language_numeric.value,
         "has_nan": has_nan,
         "max_scale": max_scale,
-        "min5": min5,
-        "max5": max5,
+        "min": reduced_min,
+        "max": reduced_max,
     }
 
     return stats
@@ -101,36 +121,23 @@ def encode_language_numeric(values: pd.Series, stats: dict, _: pd.Series | None 
             values = values.astype(dtype)
     # reset index, as `values.mask` can throw errors for misaligned indices
     values.reset_index(drop=True, inplace=True)
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    min5 = _type_safe_numeric_series(stats["min5"] or [0], dtype)
-    max5 = _type_safe_numeric_series(stats["max5"] or [0], dtype)
-    values.mask(
-        values < min5[0],
-        min5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
-    values.mask(
-        values > max5[0],
-        max5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
+    if stats["min"] is not None:
+        reduced_min = _type_safe_numeric_series([stats["min"]], dtype).iloc[0]
+        values.loc[values < reduced_min] = reduced_min
+    if stats["max"] is not None:
+        reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
+        values.loc[values > reduced_max] = reduced_max
     return values
 
 
-def _clip_numeric(x: pd.Series, min5: list, max5: list) -> pd.Series:
-    x_numeric = pd.to_numeric(x, errors="coerce")
-    min_arr = np.array(min5, dtype=x_numeric.dtype)
-    max_arr = np.array(max5, dtype=x_numeric.dtype)
-    n = len(x_numeric)
-    random_mins = np.random.choice(min_arr, size=n)
-    random_maxs = np.random.choice(max_arr, size=n)
-    clipped = np.minimum(np.maximum(x_numeric.to_numpy(), random_mins), random_maxs)
-    return pd.Series(clipped, index=x.index)
-
-
-def decode_language_numeric(x: pd.Series, col_stats: dict[str, str]) -> pd.Series:
+def decode_language_numeric(x: pd.Series, stats: dict[str, str]) -> pd.Series:
     x = pd.to_numeric(x, errors="coerce")
-    x = x.round(col_stats["max_scale"])
-    x = _clip_numeric(x, col_stats["min5"], col_stats["max5"])
-    dtype = "Int64" if col_stats["max_scale"] == 0 else float
+    x = x.round(stats["max_scale"])
+    if stats["min"] is not None:
+        reduced_min = np.dtype(x.dtype).type(stats["min"])
+        x.loc[x < reduced_min] = reduced_min
+    if stats["max"] is not None:
+        reduced_max = np.dtype(x.dtype).type(stats["max"])
+        x.loc[x > reduced_max] = reduced_max
+    dtype = "Int64" if stats["max_scale"] == 0 else float
     return x.astype(dtype)

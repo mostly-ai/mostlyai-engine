@@ -16,10 +16,9 @@
 Categorical encoding maps each categorical value to its own integer code.
 """
 
-import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string
+from mostlyai.engine._common import get_stochastic_rare_threshold, safe_convert_string, dp_non_rare
 
 CATEGORICAL_UNKNOWN_TOKEN = "_RARE_"
 CATEGORICAL_NULL_TOKEN = "<<NULL>>"
@@ -47,9 +46,13 @@ def safe_categorical_unescape(values: pd.Series) -> pd.Series:
     return values
 
 
-def analyze_categorical(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:
+def analyze_categorical(
+    values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None, *, safe_escape: bool = True
+) -> dict:
     # ensure a safe representation of values: 1. string dtype; 2. escape reserved tokens
-    values = safe_categorical_escape(safe_convert_string(values))
+    values = safe_convert_string(values)
+    if safe_escape:
+        values = safe_categorical_escape(values)
     # count distinct root_keys per categorical value for rare-category protection
     df = pd.concat([root_keys, values], axis=1)
     cnt_values = df.groupby(values.name)[root_keys.name].nunique().to_dict()
@@ -57,20 +60,26 @@ def analyze_categorical(values: pd.Series, root_keys: pd.Series, _: pd.Series | 
     return stats
 
 
-def analyze_reduce_categorical(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_categorical(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
     # sum up all counts for each categorical value
     cnt_values: dict[str, int] = {}
     for item in stats_list:
         for value, count in item["cnt_values"].items():
             cnt_values[value] = cnt_values.get(value, 0) + count
-    # create alphabetically sorted list of non-rare categories
-    known_categories = [k for k in sorted(cnt_values.keys())]
+    cnt_values = dict(sorted(cnt_values.items()))
+    known_categories = list(cnt_values.keys())
     if value_protection:
-        # stochastic threshold for rare categories
-        rare_min = 5 + int(3 * np.random.uniform())
+        if value_protection_epsilon is not None:
+            categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, threshold=5)
+        else:
+            rare_min = get_stochastic_rare_threshold(min_threshold=5)
+            categories = [k for k in known_categories if cnt_values[k] >= rare_min]
     else:
-        rare_min = 0
-    categories = [k for k in known_categories if cnt_values[k] >= rare_min]
+        categories = known_categories
     no_of_rare_categories = len(known_categories) - len(categories)
     # add special token for MISSING categories, if any are present
     if any([j["has_nan"] for j in stats_list]):

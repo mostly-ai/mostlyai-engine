@@ -27,6 +27,8 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CtxSequenceLengthError,
     apply_encoding_type_dtypes,
+    dp_non_rare,
+    dp_quantiles,
     find_distinct_bins,
     get_argn_name,
     get_columns_from_cardinalities,
@@ -491,7 +493,6 @@ class TestGetCtxSequenceLength:
                 "table1.col1": {
                     ARGN_PROCESSOR: "ctxseq",
                     "seq_len": {
-                        "deciles": [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3],
                         "min": 1,
                         "max": 3,
                         "median": 2,
@@ -630,3 +631,36 @@ def test_find_distinct_bins():
     x += [0.5] * 2_000
     bins = find_distinct_bins(x, 10, n_max=20)
     assert len(bins) > 0
+
+
+def test_dp_quantiles():
+    epsilon = 1.0
+    q = [0.01, 0.99]
+
+    # given large enough sample size and epsilon, dp_quantiles should be reasonably close to the true quantiles
+    values = np.random.lognormal(0, 1, 10_000) - 0.5  # right-skewed distribution with some negative values
+    q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
+    assert abs(values[values < q5_dp].shape[0] / values.shape[0] - 0.01) < 0.005
+    assert abs(values[values > q95_dp].shape[0] / values.shape[0] - 0.01) < 0.005
+    assert q5_dp <= q95_dp
+
+    # edge case: uniform distribution of the same value
+    values = np.random.uniform(1, 1, 10_000)
+    q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
+    assert q5_dp <= 1 <= q95_dp
+
+    # small sample size
+    # it should fail to approximate the bounds and therefore return None
+    values = np.random.normal(0, 10, 100)
+    q5_dp, q95_dp = dp_quantiles(values, q, epsilon)
+    assert q5_dp is None and q95_dp is None
+
+
+def test_dp_non_rare():
+    value_counts = {i: i for i in range(1, 101)}
+    epsilon = 1.0
+    selected, non_rare_ratio = dp_non_rare(value_counts, epsilon, threshold=10)
+    # given epsilon=1.0, the noise added to the count should be within the range [-5, 5]
+    # so in the worst case, we will have at least 4 and at most at most 14 rare categories
+    assert len(selected) >= 86 and len(selected) <= 96
+    assert non_rare_ratio >= 0.98 and non_rare_ratio <= 1.0
