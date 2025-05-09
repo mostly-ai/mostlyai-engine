@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import random
 import time
 import uuid
 from functools import partial
@@ -60,6 +61,7 @@ from mostlyai.engine._common import (
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
     is_sequential,
+    set_random_state,
     trim_sequences,
     get_sub_columns_nested_from_cardinalities,
     persist_data_part,
@@ -196,7 +198,9 @@ def _generate_primary_keys(size: int, type: Literal["uuid", "int"] = "uuid") -> 
     if type == "uuid":
         # generate watermarked 36-chars UUIDv4s
         # e.g. mostly2b-d87c-4825-884f-611b309c3c55
-        return pd.Series([f"mostly{str(uuid.uuid4())[6:]}" for _ in range(size)], dtype="string")
+        return pd.Series(
+            [f"mostly{str(uuid.UUID(int=random.getrandbits(128), version=4))[6:]}" for _ in range(size)], dtype="string"
+        )
     else:
         return pd.Series(range(size), dtype="int")
 
@@ -685,9 +689,11 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    random_state: int | None = None,
 ) -> None:
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
+    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)
@@ -757,7 +763,8 @@ def generate(
         _LOG.info(f"{gen_column_order=}")
         if not enable_flexible_generation:
             # check if resolved column order is the same as the one from training
-            trn_column_order = [
+            trn_column_order = [SLEN_SIDX_SDEC_COLUMN] if is_sequential else []
+            trn_column_order += [
                 get_argn_name(
                     argn_processor=tgt_stats["columns"][col][ARGN_PROCESSOR],
                     argn_table=tgt_stats["columns"][col][ARGN_TABLE],
