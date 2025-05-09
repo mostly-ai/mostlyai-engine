@@ -120,6 +120,7 @@ def analyze_reduce_datetime(
             else:
                 reduced_min = str(reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)])
                 reduced_max = str(reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)])
+            if reduced_min is not None and reduced_max is not None:
                 # update min/max year based on first four letters of protected min/max dates
                 max_values["year"] = int(reduced_max[0:4])
                 min_values["year"] = int(reduced_min[0:4])
