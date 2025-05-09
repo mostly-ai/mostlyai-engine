@@ -763,7 +763,7 @@ def generate(
         _LOG.info(f"{gen_column_order=}")
         if not enable_flexible_generation:
             # check if resolved column order is the same as the one from training
-            trn_column_order = [
+            trn_column_order = [SLEN_SIDX_SDEC_COLUMN] + [
                 get_argn_name(
                     argn_processor=tgt_stats["columns"][col][ARGN_PROCESSOR],
                     argn_table=tgt_stats["columns"][col][ARGN_TABLE],
