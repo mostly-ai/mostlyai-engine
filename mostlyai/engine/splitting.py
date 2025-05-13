@@ -75,7 +75,7 @@ def split(
     tgt_encoding_types: dict[str, str | ModelEncodingType] | None = None,
     ctx_encoding_types: dict[str, str | ModelEncodingType] | None = None,
     n_partitions: int = 1,
-    trn_val_split: float = 0.9,
+    trn_val_split: float = 0.8,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
     random_state: int | None = None,
