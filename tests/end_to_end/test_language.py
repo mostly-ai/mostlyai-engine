@@ -567,7 +567,15 @@ def test_gpu_estimate_max_batch_size():
 def test_batch_size_and_gradient_accumulation_heuristics():
     gpu_device = torch.device("cuda")
     bs = _physical_batch_size_heuristic(
-        no_of_records=1000, no_of_model_params=5_000_000, max_tokens=50, device=gpu_device
+        no_of_records=2000, no_of_model_params=5_000_000, max_tokens=50, model="amd/AMD-Llama-135m", device=gpu_device
+    )
+    assert bs == 128  # 2 ** int(np.log2(2000 / 8))
+    bs = _physical_batch_size_heuristic(
+        no_of_records=2000,
+        no_of_model_params=5_000_000,
+        max_tokens=50,
+        model=LSTMFromScratchConfig.model_id,
+        device=gpu_device,
     )
     assert bs == 64
     steps = _gradient_accumulation_steps_heuristic(
@@ -584,7 +592,7 @@ def test_batch_size_and_gradient_accumulation_heuristics():
 
     # very small dataset
     bs = _physical_batch_size_heuristic(
-        no_of_records=10, no_of_model_params=5_000_000, max_tokens=50, device=gpu_device
+        no_of_records=10, no_of_model_params=5_000_000, max_tokens=50, model="amd/AMD-Llama-135m", device=gpu_device
     )
     assert bs == 1
     steps = _gradient_accumulation_steps_heuristic(
