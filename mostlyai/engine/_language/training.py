@@ -75,7 +75,7 @@ _LOG = logging.getLogger(__name__)
 
 
 def _physical_batch_size_heuristic(
-    no_of_records: int, no_of_model_params: int, max_tokens: int, model: str, device: torch.device
+    no_of_records: int, no_of_model_params: int, max_tokens: int, model_id: str, device: torch.device
 ) -> int:
     """
     Calculate the physical batch size that fits in memory.
@@ -84,7 +84,7 @@ def _physical_batch_size_heuristic(
         no_of_records (int): Number of records in the training dataset.
         no_of_model_params (int): Number of model parameters.
         max_tokens (int): Maximum number of tokens that are in the training dataset.
-        model (str): Model name.
+        model_id (str): Model ID.
         device (torch.device): Device to run training on.
 
     Returns:
@@ -93,7 +93,7 @@ def _physical_batch_size_heuristic(
     min_batches = 8
 
     if device.type == "cuda":
-        if model == LSTMFromScratchConfig.model_id:
+        if model_id == LSTMFromScratchConfig.model_id:
             batch_size = 64  # empirically tuned for LSTM to have a better training dynamics
         else:
             batch_size = 2**10  # 1024, max 10 reductions
@@ -505,7 +505,7 @@ def train(
                 no_of_records=trn_cnt,
                 no_of_model_params=no_of_model_params,
                 max_tokens=max_tokens,
-                model=model.config.model_type,
+                model_id=model.config.model_type,
                 device=device,
             )
         batch_size = max(1, min(batch_size, trn_cnt))
