@@ -25,7 +25,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "setuptools>=75.0.0,<76",
+    "setuptools>=75.0.0",
     "numpy>=1.26.3",
     "pandas~=2.2.0",
     "pyarrow>=16.0.0",
