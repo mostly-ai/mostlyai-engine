@@ -27,7 +27,7 @@ from .conftest import MockData
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 from mostlyai.engine import split, analyze, encode, train, generate
-from mostlyai.engine import engine
+from mostlyai import engine
 
 
 @pytest.fixture(scope="module")
