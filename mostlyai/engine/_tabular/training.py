@@ -59,7 +59,6 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
-    set_random_state,
 )
 from mostlyai.engine._tabular.common import load_model_weights
 from mostlyai.engine._training_utils import (
@@ -350,11 +349,9 @@ def train(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ):
     _LOG.info("TRAIN_TABULAR started")
     t0 = time.time()
-    set_random_state(random_state)
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
     with ProgressCallbackWrapper(

@@ -35,7 +35,6 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
-    set_random_state,
 )
 from mostlyai.engine._encoding_types.tabular.categorical import encode_categorical
 from mostlyai.engine._encoding_types.tabular.character import encode_character
@@ -45,6 +44,7 @@ from mostlyai.engine._encoding_types.tabular.lat_long import encode_latlong
 from mostlyai.engine._encoding_types.tabular.numeric import encode_numeric
 from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
+from mostlyai.engine.random_state import set_random_state
 
 _LOG = logging.getLogger(__name__)
 
@@ -52,11 +52,9 @@ _LOG = logging.getLogger(__name__)
 def encode(
     workspace_dir: str | Path | None = None,
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     _LOG.info("ENCODE_TABULAR started")
     t0 = time.time()
-    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)
