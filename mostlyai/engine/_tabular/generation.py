@@ -61,7 +61,6 @@ from mostlyai.engine._common import (
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
     is_sequential,
-    set_random_state,
     trim_sequences,
     get_sub_columns_nested_from_cardinalities,
     persist_data_part,
@@ -689,11 +688,9 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
-    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)
