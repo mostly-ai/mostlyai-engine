@@ -351,6 +351,7 @@ def test_reproducibility(input_data, tmp_path_factory):
         encode(workspace_dir=ws)
         train(workspace_dir=ws, max_epochs=1)
         generate(workspace_dir=ws, sample_size=100)
+        engine.set_random_state(None)
 
     run_with_fixed_seed(ws_1)
     run_with_fixed_seed(ws_2)
