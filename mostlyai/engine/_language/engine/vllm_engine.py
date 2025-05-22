@@ -152,6 +152,7 @@ class VLLMEngine(LanguageEngine):
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
             swap_space=0,
             disable_log_stats=True,
+            tensor_parallel_size=torch.cuda.device_count(),
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
