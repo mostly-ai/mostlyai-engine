@@ -165,7 +165,7 @@ class VLLMEngine(LanguageEngine):
         self._logits_processors = None
 
     def get_default_batch_size(self) -> int:
-        return 192
+        return 512
 
     def supports_json_enforcing(self) -> bool:
         return True
