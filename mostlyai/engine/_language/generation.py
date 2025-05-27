@@ -181,6 +181,9 @@ def generate(
         tgt_text_columns = list(tgt_stats["columns"].keys())
         tgt_context_key = tgt_stats["keys"].get("context_key")
         has_context = workspace.ctx_stats.path.exists()
+        model_configs = workspace.model_configs.read()
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
+        _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve potential conflict between sample_seed and sample_size
         if seed_data is not None:
@@ -227,6 +230,15 @@ def generate(
             seed_data = pd.DataFrame(index=list(range(sample_size)))
         seed_data = seed_data[[c for c in tgt_text_columns if c in seed_data.columns]]
         _LOG.info(f"{seed_data.shape=}")
+
+        if not enable_flexible_generation:
+            # validate sample_seed maintains the same column order as the one from training
+            seed_columns = seed_data.columns.tolist()
+            if seed_columns != tgt_text_columns[: len(seed_columns)]:
+                raise ValueError(
+                    "The order of columns in the seed data does not match the order of columns from training. "
+                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+                )
 
         # sanity check: at this point sample seed and context data should have the same number of rows
         assert len(seed_data) == len(ctx_data)

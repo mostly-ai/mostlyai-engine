@@ -698,7 +698,7 @@ def generate(
         output_path = workspace.generated_data_path
         reset_dir(output_path)
 
-        model_configs = workspace.model_tabular_configs.read()
+        model_configs = workspace.model_configs.read()
         tgt_stats = workspace.tgt_stats.read()
         is_sequential = tgt_stats["is_sequential"]
         _LOG.info(f"{is_sequential=}")
