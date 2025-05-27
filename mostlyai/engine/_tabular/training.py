@@ -504,7 +504,7 @@ def train(
             "model_units": model_units,
             "enable_flexible_generation": enable_flexible_generation,
         }
-        workspace.model_tabular_configs.write(model_configs)
+        workspace.model_configs.write(model_configs)
 
         # heuristics for batch_size and for initial learn_rate
         mem_available_gb = get_available_ram_for_heuristics() / 1024**3

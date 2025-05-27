@@ -471,6 +471,10 @@ def train(
                 )
                 model.add_adapter(peft_config)
 
+        # persist model configs
+        model_configs = {"enable_flexible_generation": enable_flexible_generation}
+        workspace.model_configs.write(model_configs)
+
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
         model.train()
         no_of_model_params = model.num_parameters()

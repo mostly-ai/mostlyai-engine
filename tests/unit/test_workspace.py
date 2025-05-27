@@ -59,7 +59,7 @@ class TestWorkspace:
         # Train-related
         assert ws.model_path == Path(ws_path) / "ModelStore" / "model-data"
         assert ws.model_tabular_weights_path.exists()
-        assert isinstance(ws.model_tabular_configs.read(), dict)
+        assert isinstance(ws.model_configs.read(), dict)
 
         # Generate-related
         assert ws.generated_data_path == Path(ws_path) / "SyntheticData"
