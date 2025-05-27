@@ -329,10 +329,6 @@ def train(
         _LOG.info(f"{with_dp=}")
         _LOG.info(f"{model_state_strategy=}")
 
-        # persist model configs
-        model_configs = {"enable_flexible_generation": enable_flexible_generation}
-        workspace.model_configs.write(model_configs)
-
         # initialize callbacks
         upload_model_data_callback = upload_model_data_callback or (lambda *args, **kwargs: None)
 
@@ -474,6 +470,10 @@ def train(
                     task_type="CAUSAL_LM",
                 )
                 model.add_adapter(peft_config)
+
+        # persist model configs
+        model_configs = {"enable_flexible_generation": enable_flexible_generation}
+        workspace.model_configs.write(model_configs)
 
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
         model.train()
