@@ -329,6 +329,7 @@ def train(
             accelerator = Accelerator(fsdp_plugin=fsdp_plugin, cpu=device.type == "cpu")
 
         _LOG.info(f"{device=}")
+        _LOG.info(f"{torch.cuda.device_count()=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
         use_mixed_precision = bf16_supported and model != LSTMFromScratchConfig.model_id
