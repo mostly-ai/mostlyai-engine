@@ -85,7 +85,7 @@ def load_base_model_and_config(
         )
     else:
         quantization_config = None
-    
+
     if device.type == "cuda" and device.index is not None:
         device_map = str(device)
     elif device.type == "cuda" and with_dp:

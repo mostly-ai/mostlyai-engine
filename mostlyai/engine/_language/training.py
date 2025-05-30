@@ -311,7 +311,7 @@ def train(
             if device is not None
             else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
         )
-        
+
         if not with_dp:
             if device.type == "cuda":
                 fsdp_plugin = FullyShardedDataParallelPlugin(
@@ -319,9 +319,11 @@ def train(
                     optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=False),
                 )
                 single_gpu_if_smaller_than = 7_000_000_000
-                if model == LSTMFromScratchConfig.model_id or (device.index is None and get_num_model_params(model) < single_gpu_if_smaller_than):
+                if model == LSTMFromScratchConfig.model_id or (
+                    device.index is None and get_num_model_params(model) < single_gpu_if_smaller_than
+                ):
                     device = torch.device("cuda:0")
-                    _LOG.info(f"device set to single gpu (cuda:0) because model is too small")
+                    _LOG.info("device set to single gpu (cuda:0) because model is too small")
             else:
                 fsdp_plugin = None
             accelerator = Accelerator(fsdp_plugin=fsdp_plugin, cpu=device.type == "cpu")
