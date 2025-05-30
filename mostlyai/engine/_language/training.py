@@ -34,6 +34,7 @@ from torch.optim.lr_scheduler import LRScheduler
 from opacus import PrivacyEngine, GradSampleModule
 from opacus.accountants import PRVAccountant, RDPAccountant, GaussianAccountant
 from opacus.utils.batch_memory_manager import wrap_data_loader
+from huggingface_hub import get_safetensors_metadata
 
 from torch.utils.data import DataLoader
 
@@ -195,6 +196,11 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     return val_loss_avg.item()
 
 
+def get_num_model_params(model: str) -> int:
+    metadata = get_safetensors_metadata(model)
+    no_of_model_params = next(iter(metadata.parameter_count.values()))
+    return no_of_model_params
+
 def train(
     *,
     model: str = "MOSTLY_AI/LSTMFromScratch-3m",
@@ -227,16 +233,21 @@ def train(
             if device is not None
             else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
         )
+        
         if not with_dp:
             if device.type == "cuda":
                 fsdp_plugin = FullyShardedDataParallelPlugin(
                     state_dict_config=FullStateDictConfig(offload_to_cpu=True, rank0_only=False),
                     optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=False),
                 )
+                single_gpu_if_smaller_than = 7_000_000_000
+                if model == LSTMFromScratchConfig.model_id or (device.index is None and get_num_model_params(model) < single_gpu_if_smaller_than):
+                    device = torch.device("cuda:0")
+                    _LOG.info(f"device set to single gpu (cuda:0) because model is too small")
             else:
                 fsdp_plugin = None
             accelerator = Accelerator(fsdp_plugin=fsdp_plugin, cpu=device.type == "cpu")
-            device = accelerator.device
+
         _LOG.info(f"{device=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")

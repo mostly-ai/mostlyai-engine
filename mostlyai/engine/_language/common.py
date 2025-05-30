@@ -92,7 +92,14 @@ def load_base_model_and_config(
         )
     else:
         quantization_config = None
-    device_map = "cuda:0" if device.type == "cuda" and with_dp else "auto"
+    
+    if device.type == "cuda" and device.index is not None:
+        device_map = str(device)
+    elif device.type == "cuda" and with_dp:
+        device_map = "cuda:0"
+    else:
+        device_map = "auto"
+
     model = AutoModelForCausalLM.from_pretrained(
         model_id_or_path,
         torch_dtype=torch_dtype,
