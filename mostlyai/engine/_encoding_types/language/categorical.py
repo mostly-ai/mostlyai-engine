@@ -16,45 +16,32 @@
 Categorical encoding for language models.
 """
 
-import numpy as np
 import pandas as pd
 
 from mostlyai.engine._common import safe_convert_string, STRING
+from mostlyai.engine._encoding_types.tabular.categorical import analyze_categorical, analyze_reduce_categorical
 
 CATEGORICAL_UNKNOWN_TOKEN = "_RARE_"
 
 
 def analyze_language_categorical(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:
-    values = safe_convert_string(values)
-    # count distinct root_keys per categorical value for rare-category protection
-    df = pd.concat([root_keys, values], axis=1)
-    cnt_values = df.groupby(values.name)[root_keys.name].nunique().to_dict()
-    stats = {"has_nan": sum(values.isna()) > 0, "cnt_values": cnt_values}
-    return stats
+    return analyze_categorical(values, root_keys, _, safe_escape=False)
 
 
-def analyze_reduce_language_categorical(stats_list: list[dict], value_protection: bool = True) -> dict:
-    # sum up all counts for each categorical value
-    cnt_values: dict[str, int] = {}
-    for item in stats_list:
-        for value, count in item["cnt_values"].items():
-            cnt_values[value] = cnt_values.get(value, 0) + count
-    # create alphabetically sorted list of non-rare categories
-    known_categories = [k for k in sorted(cnt_values.keys())]
-    if value_protection:
-        # stochastic threshold for rare categories
-        rare_min = 5 + int(3 * np.random.uniform())
-    else:
-        rare_min = 0
-    categories = [k for k in known_categories if cnt_values[k] >= rare_min]
-    no_of_rare_categories = len(known_categories) - len(categories)
-    # add None to categories, if any are present
+def analyze_reduce_language_categorical(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
+    stats = analyze_reduce_categorical(stats_list, value_protection, value_protection_epsilon)
+    stats["categories"] = list(stats["codes"].keys())
     if any([j["has_nan"] for j in stats_list]):
-        categories = [None] + categories
-    # add special token for UNKNOWN categories at first position
-    if no_of_rare_categories > 0:
-        categories = [CATEGORICAL_UNKNOWN_TOKEN] + categories
-    stats = {"no_of_rare_categories": no_of_rare_categories, "categories": categories}
+        # when has_nan, tabular stats are like [CATEGORICAL_UNKNOWN_TOKEN, CATEGORICAL_NULL_TOKEN, ...]
+        # and we need to replace CATEGORICAL_NULL_TOKEN with None for language
+        stats["categories"][1] = None
+    # drop tabular stats
+    stats.pop("codes")
+    stats.pop("cardinalities")
     return stats
 
 

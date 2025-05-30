@@ -77,15 +77,15 @@ _LOG = logging.getLogger(__name__)
 ##################
 
 
-def _training_batch_size_heuristic(
+def _physical_batch_size_heuristic(
     mem_available_gb: float,
     no_of_records: int,
     no_tgt_data_points: int,
     no_ctx_data_points: int,
     no_of_model_params: int,
-) -> tuple[int, int]:
+) -> int:
     """
-    Calculate the physical batch size and gradient accumulation steps.
+    Calculate the physical batch size.
 
     Args:
         mem_available_gb (float): Available memory in GB.
@@ -95,9 +95,7 @@ def _training_batch_size_heuristic(
         no_of_model_params (int): Number of model parameters.
 
     Returns:
-        Tuple[int, int]: A tuple containing:
-            - Batch size (int)
-            - Gradient accumulation steps (int)
+        Batch size (int)
     """
     data_points = no_tgt_data_points + no_ctx_data_points
     min_batch_size = 8
@@ -122,7 +120,7 @@ def _training_batch_size_heuristic(
     # ensure a minimum number of batches to avoid excessive padding
     min_batches = 64
     batch_size = 2 ** int(np.log2(no_of_records / min_batches)) if no_of_records > 0 else min_batch_size
-    return int(np.clip(a=batch_size, a_min=min_batch_size, a_max=max_batch_size)), 1
+    return int(np.clip(a=batch_size, a_min=min_batch_size, a_max=max_batch_size))
 
 
 def _learn_rate_heuristic(batch_size: int) -> float:
@@ -428,15 +426,11 @@ def train(
 
         # gather sequence length stats for heuristics
         tgt_seq_len_stats = get_sequence_length_stats(tgt_stats)
-        tgt_seq_len_deciles = tgt_seq_len_stats["deciles"]
         tgt_seq_len_median = tgt_seq_len_stats["median"]
         tgt_seq_len_max = tgt_seq_len_stats["max"]
         max_sequence_window = np.clip(max_sequence_window, a_min=1, a_max=tgt_seq_len_max)
         _LOG.info(f"{max_sequence_window=}")
-        _LOG.info(f"{tgt_seq_len_deciles=}")
-        ctx_seq_deciles = get_ctx_sequence_length(ctx_stats, key="deciles")
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
-        _LOG.info(f"{ctx_seq_deciles=}")
 
         # the line below fixes issue with growing epoch time for later epochs
         # https://discuss.pytorch.org/t/training-time-gets-slower-and-slower-on-cpu/145483
@@ -510,23 +504,23 @@ def train(
             "model_units": model_units,
             "enable_flexible_generation": enable_flexible_generation,
         }
-        workspace.model_tabular_configs.write(model_configs)
+        workspace.model_configs.write(model_configs)
 
         # heuristics for batch_size and for initial learn_rate
         mem_available_gb = get_available_ram_for_heuristics() / 1024**3
         no_tgt_data_points = get_max_data_points_per_sample(tgt_stats)
         no_ctx_data_points = get_max_data_points_per_sample(ctx_stats)
-        default_batch_size, default_gradient_accumulation_steps = _training_batch_size_heuristic(
-            mem_available_gb=mem_available_gb,
-            no_of_records=trn_cnt,
-            no_tgt_data_points=no_tgt_data_points,
-            no_ctx_data_points=no_ctx_data_points,
-            no_of_model_params=no_of_model_params,
-        )
         if batch_size is None:
-            batch_size = default_batch_size
+            batch_size = _physical_batch_size_heuristic(
+                mem_available_gb=mem_available_gb,
+                no_of_records=trn_cnt,
+                no_tgt_data_points=no_tgt_data_points,
+                no_ctx_data_points=no_ctx_data_points,
+                no_of_model_params=no_of_model_params,
+            )
         if gradient_accumulation_steps is None:
-            gradient_accumulation_steps = default_gradient_accumulation_steps
+            # for TABULAR the batch size is typically large, so we use step=1 as default
+            gradient_accumulation_steps = 1
 
         # setup params for input pipeline
         batch_size = max(1, min(batch_size, trn_cnt))
@@ -625,7 +619,11 @@ def train(
             else:
                 dp_config = DifferentialPrivacyConfig(**differential_privacy).model_dump()
             dp_max_epsilon = dp_config.get("max_epsilon") or float("inf")
-            dp_delta = dp_config.get("delta", 1e-5)
+            dp_total_delta = dp_config.get("delta", 1e-5)
+            # take the actual value_protection_epsilon from the stats
+            dp_value_protection_epsilon = (ctx_stats.get("value_protection_epsilon_spent") or 0.0) + (
+                tgt_stats.get("value_protection_epsilon_spent") or 0.0
+            )
             # the implementation of PRV accountant seems to have numerical and memory issues for small noise multiplier
             # therefore, we choose RDP instead as it is more stable and provides comparable privacy guarantees
             dp_accountant = "rdp"  # hard-coded for now
@@ -656,7 +654,7 @@ def train(
             )
         else:
             privacy_engine = None
-            dp_config, dp_delta, dp_accountant = None, None, None
+            dp_config, dp_total_delta, dp_accountant = None, None, None
 
         progress_message = None
         start_trn_time = time.time()
@@ -737,8 +735,10 @@ def train(
                         device=device,
                     )
                 trn_loss = _calculate_average_trn_loss(trn_sample_losses)
-                dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
-                has_exceeded_dp_max_epsilon = dp_epsilon > dp_max_epsilon if with_dp else False
+                dp_total_epsilon = (
+                    privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+                )
+                has_exceeded_dp_max_epsilon = dp_total_epsilon > dp_max_epsilon if with_dp else False
                 if not has_exceeded_dp_max_epsilon:
                     # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
                     is_checkpoint = model_checkpoint.save_checkpoint_if_best(
@@ -760,8 +760,8 @@ def train(
                     val_loss=val_loss,
                     total_time=total_time_init + time.time() - start_trn_time,
                     learn_rate=current_lr,
-                    dp_eps=dp_epsilon,
-                    dp_delta=dp_delta,
+                    dp_eps=dp_total_epsilon,
+                    dp_delta=dp_total_delta,
                 )
                 # check for early stopping
                 do_stop = early_stopper(val_loss=val_loss) or has_exceeded_dp_max_epsilon
@@ -786,7 +786,9 @@ def train(
             if progress_message is None and (last_msg_elapsed > last_msg_interval or steps == 1):
                 # running mean loss of the most recent training samples
                 running_trn_loss = _calculate_average_trn_loss(trn_sample_losses, n=val_steps * val_batch_size)
-                dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
+                dp_total_epsilon = (
+                    privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+                )
                 progress_message = ProgressMessage(
                     epoch=epoch,
                     is_checkpoint=is_checkpoint,
@@ -796,8 +798,8 @@ def train(
                     val_loss=None,
                     total_time=total_time_init + time.time() - start_trn_time,
                     learn_rate=current_lr,
-                    dp_eps=dp_epsilon,
-                    dp_delta=dp_delta,
+                    dp_eps=dp_total_epsilon,
+                    dp_delta=dp_total_delta,
                 )
             if progress_message:
                 last_msg_time = time.time()
@@ -841,7 +843,9 @@ def train(
             else:
                 _LOG.info("calculate validation loss")
                 val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader)
-            dp_epsilon = privacy_engine.get_epsilon(dp_delta) if with_dp else None
+            dp_total_epsilon = (
+                privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+            )
             # send a final message to inform how far we've progressed
             trn_loss = _calculate_average_trn_loss(trn_sample_losses)
             progress_message = ProgressMessage(
@@ -853,8 +857,8 @@ def train(
                 val_loss=val_loss,
                 total_time=total_training_time,
                 learn_rate=current_lr,
-                dp_eps=dp_epsilon,
-                dp_delta=dp_delta,
+                dp_eps=dp_total_epsilon,
+                dp_delta=dp_total_delta,
             )
             progress.update(completed=steps, total=steps, message=progress_message)
             # ensure everything gets uploaded

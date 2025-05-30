@@ -28,7 +28,16 @@ import typing
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import find_distinct_bins, safe_convert_numeric
+from mostlyai.engine._common import (
+    ANALYZE_MIN_MAX_TOP_N,
+    ANALYZE_REDUCE_MIN_MAX_N,
+    compute_log_histogram,
+    dp_approx_bounds,
+    dp_non_rare,
+    find_distinct_bins,
+    get_stochastic_rare_threshold,
+    safe_convert_numeric,
+)
 from mostlyai.engine._dtypes import is_float_dtype, is_integer_dtype
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
@@ -142,6 +151,9 @@ def analyze_numeric(
     non_na_values = values.dropna()
     cnt_unique_values = non_na_values.nunique()
 
+    # compute log histogram for DP bounds
+    log_hist = compute_log_histogram(non_na_values)
+
     # determine sufficient quantiles; used for binned numeric encoding
     if (
         encoding_type in [ModelEncodingType.tabular_numeric_binned, ModelEncodingType.tabular_numeric_auto]
@@ -165,12 +177,12 @@ def analyze_numeric(
         # do not count values, if there are too many
         cnt_values = None
 
-    # determine lowest/highest values by root ID, and return top 11
+    # determine lowest/highest values by root ID, and return top ANALYZE_MIN_MAX_TOP_N
     df = pd.concat([root_keys, values], axis=1)
     min_values = df.groupby(root_keys.name)[values.name].min().dropna()
-    min11 = min_values.sort_values(ascending=True).head(11).astype("float").tolist()
+    min_n = min_values.sort_values(ascending=True).head(ANALYZE_MIN_MAX_TOP_N).astype("float").tolist()
     max_values = df.groupby(root_keys.name)[values.name].max().dropna()
-    max11 = max_values.sort_values(ascending=False).head(11).astype("float").tolist()
+    max_n = max_values.sort_values(ascending=False).head(ANALYZE_MIN_MAX_TOP_N).astype("float").tolist()
 
     # split values into digits; used for digit numeric encoding, plus to determine precision
     df_split = split_sub_columns_digit(values)
@@ -192,10 +204,11 @@ def analyze_numeric(
         "has_neg": has_neg,
         "min_digits": min_digits,
         "max_digits": max_digits,
-        "min11": min11,
-        "max11": max11,
+        "min_n": min_n,
+        "max_n": max_n,
         "cnt_values": cnt_values,
         "quantiles": quantiles,
+        "log_hist": log_hist,
     }
     return stats
 
@@ -203,13 +216,13 @@ def analyze_numeric(
 def analyze_reduce_numeric(
     stats_list: list[dict],
     value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
     encoding_type: ModelEncodingType | None = ModelEncodingType.tabular_numeric_auto,
 ) -> dict:
     # check for occurrence of NaN values
     has_nan = any([j["has_nan"] for j in stats_list])
     # check if there are negative values
     has_neg = any([j["has_neg"] for j in stats_list])
-
     # determine precision to apply rounding of sampled values during generation
     keys = stats_list[0]["max_digits"].keys()
     min_digits = {k: min([j["min_digits"][k] for j in stats_list]) for k in keys}
@@ -217,24 +230,27 @@ def analyze_reduce_numeric(
     non_zero_prec = [k for k in keys if max_digits[k] > 0 and k.startswith("E")]
     min_decimal = min([int(k[1:]) for k in non_zero_prec]) if len(non_zero_prec) > 0 else 0
 
-    # determine min / max 5 values to map too low / too high values to
-    min11 = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)[:11]
-    max11 = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)[:11]
+    reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
+    reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(min11) < 11 or len(max11) < 11:
-            # less than 11 subjects with non-NULL values; we need to protect all
-            min5 = []
-            max5 = []
+        if len(reduced_min_n) < ANALYZE_REDUCE_MIN_MAX_N or len(reduced_max_n) < ANALYZE_REDUCE_MIN_MAX_N:
+            # protect all values if there are less than ANALYZE_REDUCE_MIN_MAX_N values
+            reduced_min = None
+            reduced_max = None
         else:
-            min5 = min11[5:10]  # drop 1 to 5th lowest; keep 6th to 10th lowest
-            max5 = max11[5:10]  # drop 1 to 5th highest; keep 6th to 10th highest
+            if value_protection_epsilon is not None:
+                # Sum up log histograms bin-wise from all partitions
+                log_hist = [sum(bin) for bin in zip(*[j["log_hist"] for j in stats_list])]
+                reduced_min, reduced_max = dp_approx_bounds(log_hist, value_protection_epsilon)
+            else:
+                reduced_min = reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)]
+                reduced_max = reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)]
     else:
-        min5 = min11[0:5]
-        max5 = max11[0:5]
+        reduced_min = reduced_min_n[0] if len(reduced_min_n) > 0 else None
+        reduced_max = reduced_max_n[0] if len(reduced_max_n) > 0 else None
 
-    if len(min5) > 0 or len(max5) > 0:
-        max_abs = np.max(np.abs(np.array([min5[0], max5[0]])))
+    if reduced_min is not None or reduced_max is not None:
+        max_abs = np.max(np.abs(np.array([reduced_min, reduced_max])))
         max_decimal = int(np.floor(np.log10(max_abs))) if max_abs >= 10 else 0
     else:
         max_decimal = 0
@@ -254,12 +270,19 @@ def analyze_reduce_numeric(
         cnt_total = sum(cnt_values.values())
         # apply rare value protection
         if value_protection:
-            rare_min = 5 + int(3 * np.random.uniform())
-            cnt_values = {c: v for c, v in cnt_values.items() if v > rare_min}
-        non_rare_ratio = sum(cnt_values.values()) / cnt_total
+            if value_protection_epsilon is not None:
+                categories, non_rare_ratio = dp_non_rare(cnt_values, value_protection_epsilon, threshold=5)
+            else:
+                rare_min = get_stochastic_rare_threshold(min_threshold=5)
+                cnt_values = {c: v for c, v in cnt_values.items() if v >= rare_min}
+                categories = list(cnt_values.keys())
+                non_rare_ratio = sum(cnt_values.values()) / cnt_total
+        else:
+            categories = list(cnt_values.keys())
+            non_rare_ratio = 1.0
     else:
-        cnt_values = {}
-        non_rare_ratio = 0
+        categories = []
+        non_rare_ratio = 0.0
 
     # auto heuristic
     if encoding_type == ModelEncodingType.tabular_numeric_auto:
@@ -271,12 +294,11 @@ def analyze_reduce_numeric(
             encoding_type = ModelEncodingType.tabular_numeric_binned
 
     if encoding_type == ModelEncodingType.tabular_numeric_discrete:
-        # add unknown/rare token
-        categories = [NUMERIC_DISCRETE_UNKNOWN_TOKEN]
         # add NULL token if NaN values exist
         if has_nan:
-            categories += [NUMERIC_DISCRETE_NULL_TOKEN]
-        categories += [k for k in cnt_values.keys()]
+            categories = [NUMERIC_DISCRETE_NULL_TOKEN] + categories
+        # add unknown/rare token
+        categories = [NUMERIC_DISCRETE_UNKNOWN_TOKEN] + categories
         stats = {
             "encoding_type": ModelEncodingType.tabular_numeric_discrete.value,
             "cardinalities": {CATEGORICAL_SUB_COL_SUFFIX: len(categories)},
@@ -302,20 +324,24 @@ def analyze_reduce_numeric(
             "max_digits": max_digits,
             "max_decimal": max_decimal,
             "min_decimal": min_decimal,
-            "min5": min5,
-            "max5": max5,
+            "min": reduced_min,
+            "max": reduced_max,
         }
 
     elif encoding_type == ModelEncodingType.tabular_numeric_binned:
-        # binned numeric encoding
-        quantiles = np.concatenate([j["quantiles"] for j in stats_list if j["quantiles"]])
-        if len(min5) == 0 or len(max5) == 0:
+        if reduced_min is None or reduced_max is None:
             # handle edge case where all values are privacy protected
             bins = [0]
             min_decimal = 0
         else:
-            quantiles = list(np.clip(quantiles, min(min5), max(max5)))
-            bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
+            if value_protection_epsilon is None:
+                quantiles = np.concatenate([j["quantiles"] for j in stats_list if j["quantiles"]])
+                quantiles = list(np.clip(quantiles, reduced_min, reduced_max))
+                bins = find_distinct_bins(quantiles, NUMERIC_BINNED_MAX_BINS)
+            else:
+                # use linear interpolation between the value-protected min and max
+                # to avoid spending privacy budget on calculating all those quantiles
+                bins = list(np.linspace(reduced_min, reduced_max, NUMERIC_BINNED_MAX_BINS + 1))
         # add unknown/rare token
         categories = [NUMERIC_BINNED_UNKNOWN_TOKEN]
         # add NULL token if NaN values exist
@@ -323,9 +349,10 @@ def analyze_reduce_numeric(
             categories += [NUMERIC_BINNED_NULL_TOKEN]
 
         # add min/max tokens if min/max are not rare
-        if len(set(min5)) == 1:
+        # FIXME: what should the new behavior be?
+        if reduced_min is not None:
             categories += [NUMERIC_BINNED_MIN_TOKEN]
-        if len(set(max5)) == 1:
+        if reduced_max is not None:
             categories += [NUMERIC_BINNED_MAX_TOKEN]
         stats = {
             "encoding_type": ModelEncodingType.tabular_numeric_binned.value,
@@ -371,19 +398,13 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
             values = values.astype(dtype)
     # reset index, as `values.mask` can throw errors for misaligned indices
     values.reset_index(drop=True, inplace=True)
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    min5 = _type_safe_numeric_series(stats["min5"] or [0], dtype)
-    max5 = _type_safe_numeric_series(stats["max5"] or [0], dtype)
-    values.mask(
-        values < min5[0],
-        min5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
-    values.mask(
-        values > max5[0],
-        max5.sample(n=len(values), replace=True, ignore_index=True),
-        inplace=True,
-    )
+    # replace extreme values with min/max
+    if stats["min"] is not None:
+        reduced_min = _type_safe_numeric_series([stats["min"]], dtype).iloc[0]
+        values.loc[values < reduced_min] = reduced_min
+    if stats["max"] is not None:
+        reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
+        values.loc[values > reduced_max] = reduced_max
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
     is_not_nan = df["nan"] == 0
@@ -528,18 +549,12 @@ def _decode_numeric_digit(df_encoded: pd.DataFrame, stats: dict) -> pd.Series:
         values[df_encoded["nan"] == 1] = pd.NA
     if "neg" in df_encoded.columns:
         values[df_encoded["neg"] == 1] = -1 * values[df_encoded["neg"] == 1]
-    # replace extreme values with randomly sampled 5-th to 10-th largest/smallest values
-    if len(stats["min5"]) > 0 and len(stats["max5"]) > 0:
-        min5 = _type_safe_numeric_series(stats["min5"], dtype).values
-        max5 = _type_safe_numeric_series(stats["max5"], dtype).values
-        is_too_low = values.notna() & (values < min5[0])
-        is_too_high = values.notna() & (values > max5[0])
-        values.loc[is_too_low] = _type_safe_numeric_series(
-            np.random.uniform(min(min5), max(min5), size=sum(is_too_low)), dtype
-        ).values
-        values.loc[is_too_high] = _type_safe_numeric_series(
-            np.random.uniform(min(max5), max(max5), size=sum(is_too_high)), dtype
-        ).values
+    # replace extreme values with min/max
+    if stats["min"] is not None and stats["max"] is not None:
+        is_too_low = values.notna() & (values < stats["min"])
+        is_too_high = values.notna() & (values > stats["max"])
+        values.loc[is_too_low] = _type_safe_numeric_series(np.ones(sum(is_too_low)) * stats["min"], dtype).values
+        values.loc[is_too_high] = _type_safe_numeric_series(np.ones(sum(is_too_high)) * stats["max"], dtype).values
     elif "nan" in df_encoded.columns:
         # set all values to NaN if no valid values were present
         values[df_encoded["nan"] == 0] = pd.NA

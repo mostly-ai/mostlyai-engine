@@ -27,12 +27,15 @@ import pandas as pd
 from joblib import Parallel, delayed, parallel_config, cpu_count
 
 from mostlyai.engine._common import (
+    ANALYZE_REDUCE_MIN_MAX_N,
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
     TGT,
+    dp_quantiles,
+    get_stochastic_rare_threshold,
     is_a_list,
     is_sequential,
     read_json,
@@ -75,7 +78,7 @@ from mostlyai.engine._encoding_types.language.categorical import (
     analyze_language_categorical,
     analyze_reduce_language_categorical,
 )
-from mostlyai.engine.domain import ModelEncodingType
+from mostlyai.engine.domain import ModelEncodingType, DifferentialPrivacyConfig
 
 from mostlyai.engine._workspace import (
     PathDesc,
@@ -83,6 +86,7 @@ from mostlyai.engine._workspace import (
     ensure_workspace_dir,
     reset_dir,
 )
+from mostlyai.engine.random_state import set_random_state
 
 _LOG = logging.getLogger(__name__)
 
@@ -102,6 +106,7 @@ _VALUE_PROTECTION_ENCODING_TYPES = (
 def analyze(
     *,
     value_protection: bool = True,
+    differential_privacy: DifferentialPrivacyConfig | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ) -> None:
@@ -162,18 +167,29 @@ def analyze(
                 ctx_encoding_types=ctx_encoding_types,
                 ctx_primary_key=ctx_primary_key if has_context else None,
                 ctx_root_key=ctx_root_key,
-                n_jobs=min(cpu_count() - 1, 16),
+                n_jobs=min(16, max(1, cpu_count() - 1)),
             )
             progress.update(completed=i, total=len(tgt_pqt_partitions) + 1)
 
         # combine partition statistics
         _LOG.info("combine partition statistics")
+        # no need to split epsilon because training will have max_epsilon - value_protection_epsilon as the budget
+        value_protection_epsilon = (
+            differential_privacy.value_protection_epsilon if value_protection and differential_privacy else None
+        )
+        if has_context:
+            dp_tgt_ratio = float(len(tgt_encoding_types) + 1) / (len(tgt_encoding_types) + len(ctx_encoding_types) + 1)
+            dp_ctx_ratio = float(len(ctx_encoding_types)) / (len(tgt_encoding_types) + len(ctx_encoding_types) + 1)
         _analyze_reduce(
             all_stats=workspace.tgt_all_stats,
             out_stats=workspace.tgt_stats,
             keys=tgt_keys,
             mode="tgt",
             value_protection=value_protection,
+            # further split epsilon and delta if context is present
+            value_protection_epsilon=value_protection_epsilon * dp_tgt_ratio
+            if value_protection_epsilon is not None and has_context
+            else value_protection_epsilon,
         )
         if has_context:
             _analyze_reduce(
@@ -181,7 +197,10 @@ def analyze(
                 out_stats=workspace.ctx_stats,
                 keys=ctx_keys,
                 mode="ctx",
-                value_protection=True,  # always protect context values
+                value_protection=value_protection,
+                value_protection_epsilon=value_protection_epsilon * dp_ctx_ratio
+                if value_protection_epsilon is not None and has_context
+                else value_protection_epsilon,
             )
 
         # clean up partition-wise stats files, as they contain non-protected values
@@ -302,6 +321,7 @@ def _analyze_reduce(
     keys: dict[str, str],
     mode: Literal["tgt", "ctx"],
     value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
 ) -> None:
     """
     Reduces partial statistics.
@@ -316,7 +336,6 @@ def _analyze_reduce(
     recorded such as training / validation records number, sequence lengths
     summary and others.
     """
-
     stats_files = all_stats.fetch_all()
     stats_list = [read_json(file) for file in stats_files]
     stats: dict[str, Any] = {"columns": {}}
@@ -324,6 +343,13 @@ def _analyze_reduce(
     encoding_types = {
         column: column_stats.get("encoding_type") for column, column_stats in stats_list[0]["columns"].items()
     }
+
+    # ctx: distribute the privacy budget across all columns
+    # tgt: distribute the privacy budget across all columns + sequence length
+    n_dp_splits = len(encoding_types) if mode == "ctx" else len(encoding_types) + 1
+    _LOG.info(f"{value_protection = }")
+    if value_protection_epsilon is not None and n_dp_splits > 0:
+        _LOG.info(f"epsilon for analyzing each column and sequence length: {value_protection_epsilon / n_dp_splits}")
 
     for column in encoding_types:
         encoding_type = encoding_types[column]
@@ -339,60 +365,48 @@ def _analyze_reduce(
             stats["columns"][column] = {"encoding_type": encoding_type}
             continue
 
-        if encoding_type == ModelEncodingType.tabular_categorical:
-            stats_col = analyze_reduce_categorical(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type in [
-            ModelEncodingType.tabular_numeric_auto,
-            ModelEncodingType.tabular_numeric_digit,
-            ModelEncodingType.tabular_numeric_discrete,
-            ModelEncodingType.tabular_numeric_binned,
-        ]:
-            stats_col = analyze_reduce_numeric(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-                encoding_type=encoding_type,
-            )
-        elif encoding_type == ModelEncodingType.tabular_datetime:
-            stats_col = analyze_reduce_datetime(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.tabular_datetime_relative:
-            stats_col = analyze_reduce_itt(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.tabular_character:
-            stats_col = analyze_reduce_character(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.tabular_lat_long:
-            stats_col = analyze_reduce_latlong(
-                stats_list=column_stats_list,
-            )
-        elif encoding_type == ModelEncodingType.language_text:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list)
-        elif encoding_type == ModelEncodingType.language_categorical:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_categorical(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.language_numeric:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_numeric(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        elif encoding_type == ModelEncodingType.language_datetime:
-            stats_col = analyze_reduce_text(stats_list=column_stats_list) | analyze_reduce_language_datetime(
-                stats_list=column_stats_list,
-                value_protection=value_protection,
-            )
-        else:
-            raise RuntimeError(f"unknown encoding type {encoding_type}")
+        analyze_reduce_column_args = {
+            "stats_list": column_stats_list,
+            "value_protection": value_protection,
+            "value_protection_epsilon": value_protection_epsilon / n_dp_splits
+            if value_protection_epsilon is not None
+            else None,
+        }
+
+        match encoding_type:
+            case ModelEncodingType.tabular_categorical:
+                stats_col = analyze_reduce_categorical(**analyze_reduce_column_args)
+            case (
+                ModelEncodingType.tabular_numeric_auto
+                | ModelEncodingType.tabular_numeric_digit
+                | ModelEncodingType.tabular_numeric_discrete
+                | ModelEncodingType.tabular_numeric_binned
+            ):
+                stats_col = analyze_reduce_numeric(**analyze_reduce_column_args, encoding_type=encoding_type)
+            case ModelEncodingType.tabular_datetime:
+                stats_col = analyze_reduce_datetime(**analyze_reduce_column_args)
+            case ModelEncodingType.tabular_datetime_relative:
+                stats_col = analyze_reduce_itt(**analyze_reduce_column_args)
+            case ModelEncodingType.tabular_character:
+                stats_col = analyze_reduce_character(**analyze_reduce_column_args)
+            case ModelEncodingType.tabular_lat_long:
+                stats_col = analyze_reduce_latlong(**analyze_reduce_column_args)
+            case ModelEncodingType.language_text:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args)
+            case ModelEncodingType.language_categorical:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_categorical(
+                    **analyze_reduce_column_args
+                )
+            case ModelEncodingType.language_numeric:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_numeric(
+                    **analyze_reduce_column_args
+                )
+            case ModelEncodingType.language_datetime:
+                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_datetime(
+                    **analyze_reduce_column_args
+                )
+            case _:
+                raise RuntimeError(f"unknown encoding type {encoding_type}")
 
         # store encoding type, if it's not present yet
         stats_col = {"encoding_type": encoding_type} | stats_col
@@ -449,16 +463,6 @@ def _analyze_reduce(
         )
         stats["columns"][column] = stats_col
 
-    if mode == "ctx":
-        # log ctxseq sequence length statistics
-        deciles: dict[str, list[int]] = {}
-        for column in stats["columns"]:
-            if "seq_len" in stats["columns"][column]:  # ctxseq column
-                table = get_table(column)
-                if table not in deciles:  # first column in ctxseq table
-                    deciles[table] = stats["columns"][column]["seq_len"]["deciles"]
-        _LOG.info(f"ctxseq sequence length deciles: {deciles}")
-
     if mode == "tgt":
         # gather number of records and split into trn/val
         trn_cnt = sum(item["no_of_training_records"] for item in stats_list)
@@ -469,17 +473,20 @@ def _analyze_reduce(
         # gather sequence length statistics
         stats["seq_len"] = _analyze_reduce_seq_len(
             stats_list=[item["seq_len"] for item in stats_list],
-            value_protection=True,  # always protect sequence lengths
+            value_protection=value_protection,
+            value_protection_epsilon=value_protection_epsilon / n_dp_splits
+            if value_protection_epsilon is not None
+            else None,
         )
         seq_len_min = stats["seq_len"]["min"]
         seq_len_max = stats["seq_len"]["max"]
-        deciles = stats["seq_len"]["deciles"]
-        _LOG.info(f"tgt sequence length deciles: {deciles}")
         # check whether data is sequential or not
         stats["is_sequential"] = seq_len_min != 1 or seq_len_max != 1
         _LOG.info(f"is_sequential: {stats['is_sequential']}")
 
     stats["keys"] = keys
+    # TODO: store the actual epsilon spent, so that we can use the rest on training
+    stats["value_protection_epsilon_spent"] = value_protection_epsilon
 
     # persist statistics
     _LOG.info(f"write statistics to `{out_stats.path}`")
@@ -492,6 +499,8 @@ def _analyze_col(
     root_keys: pd.Series | None = None,
     context_keys: pd.Series | None = None,
 ) -> dict:
+    set_random_state(worker=True)
+
     stats: dict = {"encoding_type": encoding_type}
 
     if values.empty:
@@ -585,7 +594,11 @@ def _analyze_seq_len(
     return stats
 
 
-def _analyze_reduce_seq_len(stats_list: list[dict], value_protection: bool = True) -> dict:
+def _analyze_reduce_seq_len(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
     # gather sequence length counts
     cnt_lengths: dict[str, int] = {}
     for item in stats_list:
@@ -597,23 +610,37 @@ def _analyze_reduce_seq_len(stats_list: list[dict], value_protection: bool = Tru
         if len(cnt_lengths) > 0
         else np.empty(0)
     )
+    min_length = max_length = median = None
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(lengths) <= 10:
+        if len(lengths) < ANALYZE_REDUCE_MIN_MAX_N:
             # less or equal to 10 subjects; we need to protect all
             lengths = np.repeat(1, 10)
         else:
-            lengths = lengths[5:-5]
+            # don't use DP quantiles if all lengths are 1 (non-sequential data)
+            if value_protection_epsilon is not None and np.any(lengths != 1):
+                quantiles = [0.01, 0.5, 0.99]
+                min_length, median, max_length = dp_quantiles(lengths, quantiles, value_protection_epsilon)
+                if median is None:  # protect all if DP quantiles are not available
+                    lengths = np.repeat(1, 10)
+                else:
+                    min_length = int(min_length)
+                    max_length = int(max_length)
+                    median = int(median)
+            else:
+                lengths = lengths[
+                    get_stochastic_rare_threshold(min_threshold=5) : -get_stochastic_rare_threshold(min_threshold=5)
+                ]
+    if median is None:
+        # non-DP case
+        min_length = int(np.min(lengths))
+        max_length = int(np.max(lengths))
+        median = int(np.median(lengths))
     stats = {
         # calculate min/max for GENERATE
-        "min": int(np.min(lengths)),
-        "max": int(np.max(lengths)),
+        "min": min_length,
+        "max": max_length,
         # calculate median for LSTM heuristic
-        "median": int(np.median(lengths)),
-        # calculate deciles of sequence lengths for bucket_by_seq_length
-        "deciles": [int(v) for v in np.quantile(lengths, q=np.arange(0, 1.1, 0.1), method="inverted_cdf")]
-        if len(lengths) > 0
-        else [],
+        "median": median,
         "value_protection": value_protection,
     }
     return stats

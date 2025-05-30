@@ -17,6 +17,7 @@ import importlib
 import json
 import os
 import platform
+from typing import Any
 
 import json_repair
 import logging
@@ -25,11 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from huggingface_hub import constants as hf_constants
-from transformers import (
-    PreTrainedTokenizerBase,
-)
-
+from transformers import PreTrainedTokenizerBase
 
 from mostlyai.engine._common import (
     persist_data_part,
@@ -41,19 +38,29 @@ from mostlyai.engine._encoding_types.language.categorical import decode_language
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
 from mostlyai.engine._encoding_types.language.numeric import decode_language_numeric
 from mostlyai.engine._encoding_types.language.text import decode_text
-from mostlyai.engine._language.common import estimate_max_tokens, MAX_LENGTH
+from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
+from mostlyai.engine._language.xgrammar_utils import create_schemas
 from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
-from mostlyai.engine._language.formatron_utils import (
-    get_formatter_builders,
-    prepare_seed_for_formatron,
-    get_vocab_processors,
-)
+from mostlyai.engine._language.xgrammar_utils import ensure_seed_can_be_tokenized
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
 DUMMY_CONTEXT_KEY = "__dummy_context_key"
 _LOG = logging.getLogger(__name__)
+
+
+def _estimate_max_new_tokens(tgt_stats: dict[str, Any]) -> int:
+    estimated_new_nchar = (
+        # accommodate leading space, curly brackets and eos
+        10
+        # each column is roughly like '"' + col + '": "' + value + '", '
+        + sum([(1 + len(col) + 4 + stats["nchar_max"] + 3) for col, stats in tgt_stats["columns"].items()])
+    )
+    estimated_new_tokens = estimated_new_nchar / 2  # ~2 chars per tokens
+    estimated_new_tokens = int(estimated_new_tokens * 1.4)  # add some safety buffer
+    _LOG.info(f"{estimated_new_tokens=}")
+    return estimated_new_tokens
 
 
 def decode_buffered_samples(
@@ -103,15 +110,10 @@ def decode_buffered_samples(
     tgt_data = tgt_data.map(
         lambda x: x.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace") if not pd.isna(x) else x
     )
-    # overwrite generated columns with the seeded values
-    tgt_data.update(tgt_seed)
 
     # prepend the context keys to the data (if not dummy context)
     if ctx_keys.name != DUMMY_CONTEXT_KEY:
         tgt_data = pd.concat([ctx_keys, tgt_data], axis=1)
-    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
-        "{:.2f}%".format
-    )
 
     for col in tgt_stats["columns"].keys():
         col_stats = tgt_stats["columns"][col]
@@ -124,6 +126,12 @@ def decode_buffered_samples(
         else:
             tgt_data[col] = decode_text(tgt_data[col], col_stats)
 
+    # overwrite generated columns with the seeded values
+    tgt_data.update(tgt_seed)
+
+    invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
+        "{:.2f}%".format
+    )
     _LOG.info(f"percentage of invalid values: {invalid_percentage.to_dict()}")
     _LOG.info(f"decoded {tgt_data.shape} from {len(buffer.buffer)} batches in {time.time() - t0:.2f}s")
     return tgt_data
@@ -173,6 +181,9 @@ def generate(
         tgt_text_columns = list(tgt_stats["columns"].keys())
         tgt_context_key = tgt_stats["keys"].get("context_key")
         has_context = workspace.ctx_stats.path.exists()
+        model_configs = workspace.model_configs.read()
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
+        _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve potential conflict between sample_seed and sample_size
         if seed_data is not None:
@@ -220,6 +231,15 @@ def generate(
         seed_data = seed_data[[c for c in tgt_text_columns if c in seed_data.columns]]
         _LOG.info(f"{seed_data.shape=}")
 
+        if not enable_flexible_generation:
+            # validate sample_seed maintains the same column order as the one from training
+            seed_columns = seed_data.columns.tolist()
+            if seed_columns != tgt_text_columns[: len(seed_columns)]:
+                raise ValueError(
+                    "The order of columns in the seed data does not match the order of columns from training. "
+                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+                )
+
         # sanity check: at this point sample seed and context data should have the same number of rows
         assert len(seed_data) == len(ctx_data)
 
@@ -234,24 +254,23 @@ def generate(
         encoded_ctx_data = encode_df(ctx_df=ctx_data, ctx_stats=ctx_stats)
 
         # estimate max new tokens based on char length of original data; consider JSON overhead
-        max_new_tokens = estimate_max_tokens(tgt_stats)
+        max_new_tokens = _estimate_max_new_tokens(tgt_stats)
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()
-        hf_constants.HF_HUB_OFFLINE = (
-            False  # needed for gated hf models that are not sharded, otherwise GatedRepoError in vLLM
-        )
-        # set the default env var so that we don't pass it explicitly to vLLM
-        os.environ["HF_TOKEN"] = os.getenv("MOSTLY_HUGGING_FACE_TOKEN") or os.getenv("HF_TOKEN", "")
+        # use MOSTLY_HUGGING_FACE_TOKEN if available, otherwise HF_TOKEN should be unset or with a pre-set value as is
+        if os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
+            os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
-        if is_peft_adapter and (
-            device.type == "cuda" or (platform.system() == "Darwin" and importlib.util.find_spec("vllm") is not None)
-        ):
+        is_vllm_available = importlib.util.find_spec("vllm") is not None
+        if is_peft_adapter and ((device.type == "cuda" or platform.system() == "Darwin") and is_vllm_available):
             from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
 
             engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
         else:
+            if device.type == "cuda" and not is_vllm_available:
+                _LOG.warning("CUDA device was found but vllm is not available. Please use extra [gpu] to install vllm")
             from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
 
             engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
@@ -264,8 +283,7 @@ def generate(
             batch_size = sample_size
         _LOG.info(f"{batch_size=}")
 
-        # prepare seed data for clean consumption by formatron
-        seed_data = prepare_seed_for_formatron(seed_data, engine.tokenizer)
+        seed_data = ensure_seed_can_be_tokenized(seed_data, engine.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
 
         total_tokenize_fn_time = 0
@@ -274,14 +292,16 @@ def generate(
 
         enforce_json_output = engine.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
-        formatron_vocab_processors = get_vocab_processors(is_peft_adapter)
 
-        if enforce_json_output and len(seeded_tgt_columns) == 0:
+        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine"
+        if enforce_json_output and initialize_logits_processors_once:
             t0 = time.time()
-            formatter_builders = get_formatter_builders(
-                size=batch_size, stats=tgt_stats, rare_category_replacement_method=rare_category_replacement_method
+            schemas = create_schemas(
+                size=batch_size,
+                stats=tgt_stats,
+                rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+            engine.initialize_logits_processors(schemas=schemas)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -295,15 +315,14 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            if enforce_json_output and len(seeded_tgt_columns) > 0:
+            if enforce_json_output and not initialize_logits_processors_once:
                 t0 = time.time()
-                # some columns are seeded, so we need to create a new logits processor for each batch
-                formatter_builders = get_formatter_builders(
+                schemas = create_schemas(
                     seed_df=sample_seed_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(formatter_builders, formatron_vocab_processors)
+                engine.initialize_logits_processors(schemas=schemas)
                 total_logits_processor_build_time += time.time() - t0
 
             outputs, metrics = engine.generate(

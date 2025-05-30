@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import random
 import time
 import uuid
 from functools import partial
@@ -196,7 +197,9 @@ def _generate_primary_keys(size: int, type: Literal["uuid", "int"] = "uuid") -> 
     if type == "uuid":
         # generate watermarked 36-chars UUIDv4s
         # e.g. mostly2b-d87c-4825-884f-611b309c3c55
-        return pd.Series([f"mostly{str(uuid.uuid4())[6:]}" for _ in range(size)], dtype="string")
+        return pd.Series(
+            [f"mostly{str(uuid.UUID(int=random.getrandbits(128), version=4))[6:]}" for _ in range(size)], dtype="string"
+        )
     else:
         return pd.Series(range(size), dtype="int")
 
@@ -695,7 +698,7 @@ def generate(
         output_path = workspace.generated_data_path
         reset_dir(output_path)
 
-        model_configs = workspace.model_tabular_configs.read()
+        model_configs = workspace.model_configs.read()
         tgt_stats = workspace.tgt_stats.read()
         is_sequential = tgt_stats["is_sequential"]
         _LOG.info(f"{is_sequential=}")
@@ -720,7 +723,7 @@ def generate(
         # read model config
         model_units = model_configs.get("model_units") or ModelSize.M
         _LOG.debug(f"{model_units=}")
-        enable_flexible_generation = model_configs.get("enable_flexible_generation")
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
         _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve device
@@ -755,6 +758,23 @@ def generate(
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
+        if not enable_flexible_generation:
+            # check if resolved column order is the same as the one from training
+            trn_column_order = [SLEN_SIDX_SDEC_COLUMN] if is_sequential else []
+            trn_column_order += [
+                get_argn_name(
+                    argn_processor=tgt_stats["columns"][col][ARGN_PROCESSOR],
+                    argn_table=tgt_stats["columns"][col][ARGN_TABLE],
+                    argn_column=tgt_stats["columns"][col][ARGN_COLUMN],
+                )
+                for col in tgt_stats["columns"].keys()
+            ]
+            _LOG.info(f"{trn_column_order=}")
+            if gen_column_order != trn_column_order:
+                raise ValueError(
+                    "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
+                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+                )
 
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)

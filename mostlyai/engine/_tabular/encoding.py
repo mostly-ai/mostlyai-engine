@@ -44,6 +44,7 @@ from mostlyai.engine._encoding_types.tabular.lat_long import encode_latlong
 from mostlyai.engine._encoding_types.tabular.numeric import encode_numeric
 from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
+from mostlyai.engine.random_state import set_random_state
 
 _LOG = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ def encode(
                 output_path=workspace.encoded_data_path,
                 ctx_partition_file=ctx_pqt_partitions[i] if has_context else None,
                 ctx_stats=ctx_stats if has_context else None,
-                n_jobs=min(cpu_count() - 1, 16),
+                n_jobs=min(16, max(1, cpu_count() - 1)),
             )
             progress.update(completed=i, total=len(tgt_pqt_partitions) + 1)
     _LOG.info(f"ENCODE_TABULAR finished in {time.time() - t0:.2f}s")
@@ -247,6 +248,7 @@ def _encode_col(
     column_stats: dict,
     context_keys: pd.Series | None = None,
 ) -> pd.DataFrame:
+    set_random_state(worker=True)
     is_sequential_column = is_sequential(values)
     if is_sequential_column:
         # explode nested columns and encode the same way as flat columns

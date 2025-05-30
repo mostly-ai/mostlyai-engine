@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mostlyai.engine._common import ANALYZE_MIN_MAX_TOP_N
 from mostlyai.engine._encoding_types.language.numeric import (
     analyze_language_numeric,
     analyze_reduce_language_numeric,
@@ -27,32 +28,32 @@ from mostlyai.engine.domain import ModelEncodingType
 
 class TestLanguageNumericAnalyze:
     def test_analyze_language_numeric(self):
-        values = pd.Series([0, 1, 2, 3, 4, 5] * 11, name="value")
+        values = pd.Series([0, 1, 2, 3, 4, 5] * ANALYZE_MIN_MAX_TOP_N, name="value")
         ids = pd.Series(range(len(values)), name="id")
         stats = analyze_language_numeric(values, ids)
         assert stats["has_nan"] is False
-        assert stats["max11"] == [5] * 11
-        assert stats["min11"] == [0] * 11
+        assert stats["max_n"] == [5] * ANALYZE_MIN_MAX_TOP_N
+        assert stats["min_n"] == [0] * ANALYZE_MIN_MAX_TOP_N
 
 
 class TestLanguageNumericAnalyzeReduce:
     def test_analyze_reduce_language_numeric(self):
         stats1 = {
             "has_nan": False,
-            "max11": [5] * 11,
-            "min11": [0] * 11,
+            "max_n": [5] * ANALYZE_MIN_MAX_TOP_N,
+            "min_n": [0] * ANALYZE_MIN_MAX_TOP_N,
             "max_scale": 0,
         }
         stats2 = {
             "has_nan": True,
-            "max11": [10] * 11,
-            "min11": [6] * 11,
+            "max_n": [10] * ANALYZE_MIN_MAX_TOP_N,
+            "min_n": [6] * ANALYZE_MIN_MAX_TOP_N,
             "max_scale": 1,
         }
         reduced = analyze_reduce_language_numeric([stats1, stats2])
         assert reduced["has_nan"] is True
-        assert reduced["max5"] == [10] * 5
-        assert reduced["min5"] == [0] * 5
+        assert reduced["max"] == 10
+        assert reduced["min"] == 0
         assert reduced["max_scale"] == 1
 
 
@@ -61,8 +62,8 @@ class TestLanguageNumericEncode:
         values = pd.Series([-1, 0, 1, 2, 3, 4, 5, 6], name="value")
         stats = {
             "has_nan": False,
-            "max5": [5] * 5,
-            "min5": [0] * 5,
+            "max": 5,
+            "min": 0,
             "max_scale": 0,
         }
         encoded = encode_language_numeric(values, stats)
@@ -84,9 +85,9 @@ class TestLanguageNumericDecode:
         return {
             "encoding_type": ModelEncodingType.language_numeric,
             "has_nan": False,
-            "max5": [91] * 5,
+            "max": 91,
             "max_scale": 0,
-            "min5": [17] * 5,
+            "min": 17,
         }
 
     @pytest.fixture
@@ -94,9 +95,9 @@ class TestLanguageNumericDecode:
         return {
             "encoding_type": ModelEncodingType.language_numeric,
             "has_nan": False,
-            "max5": [91.12] * 5,
+            "max": 91.12,
             "max_scale": 2,
-            "min5": [17.0] * 5,
+            "min": 17.0,
         }
 
     @pytest.fixture
@@ -115,10 +116,8 @@ class TestLanguageNumericDecode:
         decoded = decode_language_numeric(sample_values, stats)
         assert decoded.dtype == expected_dtype
         non_null = decoded.dropna()  # we don't enforce compatability with "has_nan"
-        max_val = stats["max5"][0]
-        min_val = stats["min5"][0]
         round_digits = stats["max_scale"]
         for v in non_null:
             assert np.isclose(v, round(v, round_digits), atol=1e-8)
-        assert all(non_null <= max_val)
-        assert all(non_null >= min_val)
+        assert all(non_null <= stats["max"])
+        assert all(non_null >= stats["min"])

@@ -26,7 +26,14 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_datetime
+from mostlyai.engine._common import (
+    ANALYZE_MIN_MAX_TOP_N,
+    ANALYZE_REDUCE_MIN_MAX_N,
+    compute_log_histogram,
+    dp_approx_bounds,
+    get_stochastic_rare_threshold,
+    safe_convert_datetime,
+)
 from mostlyai.engine._dtypes import is_date_dtype, is_timestamp_dtype
 from mostlyai.engine._encoding_types.tabular.datetime import split_sub_columns_datetime
 
@@ -37,12 +44,15 @@ def analyze_itt(
     context_keys: pd.Series,
 ) -> dict:
     values = safe_convert_datetime(values)
+    # compute log histogram for DP bounds
+    log_hist = compute_log_histogram(values.dropna().astype("int64"))
+
     df = pd.concat([root_keys, context_keys, values], axis=1)
     # calculate min/max values for start dates
     start_dates = df.dropna().groupby(root_keys.name)[values.name].nth(0)
-    min11 = start_dates.sort_values(ascending=True).head(11).astype(str).tolist()
+    min_n = start_dates.sort_values(ascending=True).head(ANALYZE_MIN_MAX_TOP_N).astype(str).tolist()
     start_dates = df.dropna().groupby(root_keys.name)[values.name].nth(0)
-    max11 = start_dates.sort_values(ascending=False).head(11).astype(str).tolist()
+    max_n = start_dates.sort_values(ascending=False).head(ANALYZE_MIN_MAX_TOP_N).astype(str).tolist()
     # split into datetime/ITT parts
     df_split = split_sub_columns_itt(values, context_keys)
     is_not_nan = df_split["nan"] == 0
@@ -79,13 +89,18 @@ def analyze_itt(
         "has_neg": has_neg,
         "min_values": min_values,
         "max_values": max_values,
-        "min11": min11,
-        "max11": max11,
+        "min_n": min_n,
+        "max_n": max_n,
+        "log_hist": log_hist,
     }
     return stats
 
 
-def analyze_reduce_itt(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_itt(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
     # check if there are negative values
@@ -96,25 +111,37 @@ def analyze_reduce_itt(stats_list: list[dict], value_protection: bool = True) ->
     max_values = {k: max([j["max_values"][k] for j in stats_list]) for k in keys}
     # check if any record has non-zero timestamp information
     has_time = max_values["start_hour"] > 0 or max_values["start_minute"] > 0 or max_values["start_second"] > 0
-    # determine min / max 5 values to map too low / too high values to
-    min11 = sorted([v for min11 in [j["min11"] for j in stats_list] for v in min11], reverse=False)[:11]
-    max11 = sorted([v for max11 in [j["max11"] for j in stats_list] for v in max11], reverse=True)[:11]
+    reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
+    reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:
-        # extreme value protection - discard lowest/highest 5 values
-        if len(min11) < 11 or len(max11) < 11:
-            # less than 11 subjects with non-NULL values; we need to protect all
-            min5 = []
-            max5 = []
+        if len(reduced_min_n) < ANALYZE_REDUCE_MIN_MAX_N or len(reduced_max_n) < ANALYZE_REDUCE_MIN_MAX_N:
+            # protect all values if there are less than ANALYZE_REDUCE_MIN_MAX_N values
+            reduced_min = None
+            reduced_max = None
             has_time = False
         else:
-            min5 = [str(v) for v in min11[5:10]]  # drop 1 to 5th lowest; keep 6th to 10th lowest
-            max5 = [str(v) for v in max11[5:10]]  # drop 1 to 5th highest; keep 6th to 10th highest
-            # update min/max year based on first four letters of protected min/max dates
-            max_values["start_year"] = int(max5[0][0:4])
-            min_values["start_year"] = int(min5[0][0:4])
+            if value_protection_epsilon is not None:
+                if any(len(v) > 10 for v in reduced_min_n + reduced_max_n):
+                    dt_format = "%Y-%m-%d %H:%M:%S"
+                else:
+                    dt_format = "%Y-%m-%d"
+                # Sum up log histograms bin-wise from all partitions
+                log_hist = [sum(bin) for bin in zip(*[j["log_hist"] for j in stats_list])]
+                reduced_min, reduced_max = dp_approx_bounds(log_hist, value_protection_epsilon)
+                if reduced_min is not None and reduced_max is not None:
+                    # convert back to the original string format
+                    reduced_min = pd.to_datetime(int(reduced_min), unit="us").strftime(dt_format)
+                    reduced_max = pd.to_datetime(int(reduced_max), unit="us").strftime(dt_format)
+            else:
+                reduced_min = str(reduced_min_n[get_stochastic_rare_threshold(min_threshold=5)])
+                reduced_max = str(reduced_max_n[get_stochastic_rare_threshold(min_threshold=5)])
+            if reduced_min is not None and reduced_max is not None:
+                # update min/max year based on first four letters of protected min/max dates
+                max_values["start_year"] = int(reduced_max[0:4])
+                min_values["start_year"] = int(reduced_min[0:4])
     else:
-        min5 = min11[0:4]
-        max5 = max11[0:4]
+        reduced_min = str(reduced_min_n[0]) if len(reduced_min_n) > 0 else None
+        reduced_max = str(reduced_max_n[0]) if len(reduced_max_n) > 0 else None
 
     # determine cardinalities
     cardinalities = {}
@@ -145,8 +172,8 @@ def analyze_reduce_itt(stats_list: list[dict], value_protection: bool = True) ->
         "has_time": has_time,
         "min_values": min_values,
         "max_values": max_values,
-        "min5": min5,
-        "max5": max5,
+        "min": reduced_min,
+        "max": reduced_max,
     }
     return stats
 
@@ -284,11 +311,9 @@ def decode_itt(
         starts = safe_convert_datetime(starts)
         # clip start values to privacy-safe value range;
         # note, that final date values may fall out of original date range, as we prioritize retaining ITT properties
-        if len(stats["min5"]) > 0 and len(stats["max5"]) > 0:
-            min5 = stats["min5"]
-            max5 = stats["max5"]
-            starts.loc[starts > max5[0]] = max5[0]
-            starts.loc[starts < min5[0]] = min5[0]
+        if stats["min"] is not None and stats["max"] is not None:
+            starts.loc[starts > stats["max"]] = stats["max"]
+            starts.loc[starts < stats["min"]] = stats["min"]
         return starts
 
     def continue_starts():

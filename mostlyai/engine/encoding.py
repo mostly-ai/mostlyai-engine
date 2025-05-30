@@ -19,7 +19,11 @@ from mostlyai.engine.domain import ModelType
 from mostlyai.engine._workspace import resolve_model_type
 
 
-def encode(*, workspace_dir: str | Path = "engine-ws", update_progress: ProgressCallback | None = None) -> None:
+def encode(
+    *,
+    workspace_dir: str | Path = "engine-ws",
+    update_progress: ProgressCallback | None = None,
+) -> None:
     """
     Encodes data in the workspace that has already been split and analyzed.
 

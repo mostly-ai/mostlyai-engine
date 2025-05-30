@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from mostlyai.engine._common import safe_convert_string
+from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_UNKNOWN_TOKEN,
     encode_categorical,
@@ -267,7 +267,11 @@ def analyze_latlong(values: pd.Series, root_keys: pd.Series, _: pd.Series | None
     return stats
 
 
-def analyze_reduce_latlong(stats_list: list[dict], value_protection: bool = True) -> dict:
+def analyze_reduce_latlong(
+    stats_list: list[dict],
+    value_protection: bool = True,
+    value_protection_epsilon: float | None = None,
+) -> dict:
     # check if there are missing values
     has_nan = any([j["has_nan"] for j in stats_list])
     unk_cat_aliases = [""]  # na / unknown (unseen) category
@@ -276,16 +280,23 @@ def analyze_reduce_latlong(stats_list: list[dict], value_protection: bool = True
     quad_codes = {}
 
     for quad in quads:
-        keys = list(
-            set(chain.from_iterable([stats["quad_codes"][quad].keys() for stats in stats_list]))
-        )  # all the possible values for a given quad
-        totals = {
-            key: sum([stats["quad_codes"][quad].get(key, 0) for stats in stats_list]) for key in keys if key
-        }  # mapped to total counts per each value
-        totals = {
-            val: cnt for val, cnt in totals.items() if cnt >= RARE_CATEGORY_THRESHOLD
-        }  # keep only those, which appear at least {rare_category_threshold} times
-        categories = ([CATEGORICAL_UNKNOWN_TOKEN] + [cat for cat in totals.keys() if cat not in unk_cat_aliases])[
+        # all the possible values for a given quad
+        possible_keys = list(set(chain.from_iterable([stats["quad_codes"][quad].keys() for stats in stats_list])))
+        # counts of all possible values
+        cnt_values: dict[str, int] = {}
+        for stats in stats_list:
+            for key in possible_keys:
+                if key:  # FIXME: is this if statement necessary?
+                    cnt_values[key] = cnt_values.get(key, 0) + stats["quad_codes"][quad].get(key, 0)
+        # NOTE: latlong always has value protection
+        if value_protection_epsilon is not None:
+            categories, _ = dp_non_rare(cnt_values, value_protection_epsilon, threshold=RARE_CATEGORY_THRESHOLD)
+        else:
+            rare_min = get_stochastic_rare_threshold(
+                min_threshold=RARE_CATEGORY_THRESHOLD
+            )  # FIXME: should this be 20 + noise?
+            categories = [k for k in cnt_values.keys() if cnt_values[k] >= rare_min]
+        categories = ([CATEGORICAL_UNKNOWN_TOKEN] + [cat for cat in categories if cat not in unk_cat_aliases])[
             :MAX_UNIQUE_VALUES_PER_QUAD
         ]  # UNK + remaining possible values
         if len(categories) - 1 < MIN_UNIQUE_QUAD_VALUES:  # excluding unknown category

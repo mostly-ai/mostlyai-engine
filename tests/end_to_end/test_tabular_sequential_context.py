@@ -101,7 +101,7 @@ class TestThreeTableSetup:
         # ctx has exactly the same events as tgt (df_syn should match them)
         df_ctx["events"] = df_ctx["events"].apply(list)
         df_ctx.rename(columns={"events": "events_ctx"}, inplace=True)
-        df_syn["events"] = df_syn["events"].astype("Int64")
+        df_syn["events"] = df_syn["events"].astype("int")
         df_syn.rename(columns={"events": "events_syn"}, inplace=True)
         df_syn = df_syn.groupby("id").agg(list).reset_index()
         df_syn = df_syn.merge(df_ctx, on="id").astype(str)

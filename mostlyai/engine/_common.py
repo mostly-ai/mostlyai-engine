@@ -57,6 +57,12 @@ SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # s
 SDEC_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
+ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
+
+# the minimal number of min/max values to trigger the reduction; if less, the min/max will be reduced to None
+# this should be at least greater than the non-DP stochastic threshold for rare value protection (5 + noise)
+ANALYZE_REDUCE_MIN_MAX_N = 20
+
 TEMPORARY_PRIMARY_KEY = "__primary_key"
 
 STRING = "string[pyarrow]"  # This utilizes pyarrow's large string type since pandas 2.2
@@ -431,14 +437,12 @@ def get_sequence_length_stats(stats: dict) -> dict:
             "min": stats["seq_len"]["min"],
             "median": stats["seq_len"]["median"],
             "max": stats["seq_len"]["max"],
-            "deciles": stats["seq_len"]["deciles"],
         }
     else:
         stats = {
             "min": 1,
             "median": 1,
             "max": 1,
-            "deciles": [1 for i in range(11)],
         }
     return stats
 
@@ -511,7 +515,7 @@ def skip_if_error(func: Callable) -> Callable:
 
 
 def encode_slen_sidx_sdec(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
-    assert vals.dtype == int or vals.dtype == "int64[pyarrow]"
+    assert is_integer_dtype(vals)
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD or prefix == SDEC_SUB_COLUMN_PREFIX:
         # encode slen and sidx as numeric_discrete
         df = pd.DataFrame({f"{prefix}cat": vals})
@@ -610,3 +614,270 @@ class FixedSizeSampleBuffer:
         self.buffer = []
         self.current_size = 0
         self.n_clears += 1
+
+
+def _get_log_histogram_edges(idx: int, bins: int = 64) -> tuple[float, float]:
+    """
+    Modified from OpenDP's SmartNoise SDK (MIT License)
+    Source: https://github.com/opendp/smartnoise-sdk/blob/main/sql/snsql/sql/_mechanisms/approx_bounds.py
+    """
+    if idx == bins:
+        return (0.0, 1.0)
+    elif idx > bins:
+        return (2.0 ** (idx - bins - 1), 2.0 ** (idx - bins))
+    elif idx == bins - 1:
+        return (-1.0, -0.0)
+    else:
+        return (-1 * 2.0 ** np.abs(bins - idx - 1), -1 * 2.0 ** np.abs(bins - idx - 2))
+
+
+def compute_log_histogram(values: np.ndarray, bins: int = 64) -> list[int]:
+    """
+    Modified from OpenDP's SmartNoise SDK (MIT License)
+    Source: https://github.com/opendp/smartnoise-sdk/blob/main/sql/snsql/sql/_mechanisms/approx_bounds.py
+    """
+    hist = [0.0] * bins * 2
+
+    values = np.array(values, dtype=np.float64)
+    values = values[values != np.inf]
+    values = values[values != -np.inf]
+    values = values[~np.isnan(values)]
+    edge_list = [_get_log_histogram_edges(idx) for idx in range(len(hist))]
+    min_val = min([lower for lower, _ in edge_list])
+    max_val = max([upper for _, upper in edge_list]) - 1
+    values = np.clip(values, min_val, max_val)
+
+    # compute histograms
+    for v in values:
+        bin = None
+        for idx, (lower, upper) in enumerate(edge_list):
+            if lower <= v < upper:
+                bin = idx
+                break
+        if bin is None:
+            bin = idx
+        hist[bin] += 1
+
+        # for testing
+        lower, upper = _get_log_histogram_edges(bin)
+    return hist
+
+
+def dp_approx_bounds(hist: list[int], epsilon: float) -> tuple[float | None, float | None]:
+    """
+    Modified from OpenDP's SmartNoise SDK (MIT License)
+    Source: https://github.com/opendp/smartnoise-sdk/blob/main/sql/snsql/sql/_mechanisms/approx_bounds.py
+
+    Estimate the minimium and maximum values of a list of values.
+    from: https://desfontain.es/thesis/Usability.html#usability-u-ding-
+
+    Args:
+        hist (list[int]): A list of log histogram counts.
+        epsilon (float): The privacy budget to spend estimating the bounds.
+
+    Returns:
+        tuple[float | None, float | None]: A tuple of the estimated minimum and maximum values.
+    """
+
+    n_bins = len(hist)
+
+    noise = np.random.laplace(loc=0.0, scale=1 / epsilon, size=n_bins)
+    hist = [val + lap_noise for val, lap_noise in zip(hist, noise)]
+
+    failure_prob = 10e-9
+    highest_failure_prob = 1 / (n_bins * 2)
+
+    exceeds = []
+    while len(exceeds) < 1 and failure_prob <= highest_failure_prob:
+        p = 1 - failure_prob
+        K = -np.log(2 - 2 * p ** (1 / (n_bins - 1))) / epsilon
+        exceeds = [idx for idx, v in enumerate(hist) if v > K]
+        failure_prob *= 10
+
+    if len(exceeds) == 0:
+        return (None, None)
+
+    lower_bin, upper_bin = min(exceeds), max(exceeds)
+    lower, _ = _get_log_histogram_edges(lower_bin)
+    _, upper = _get_log_histogram_edges(upper_bin)
+    return (float(lower), float(upper))
+
+
+def _dp_bounded_quantiles(
+    values: np.ndarray, quantiles: list[float], epsilon: float, lower: float, upper: float
+) -> list[float]:
+    """
+    Estimate the quantile.
+    from: http://cs-people.bu.edu/ads22/pubs/2011/stoc194-smith.pdf
+
+    Args:
+        values (np.ndarray): A 1D array of numeric values.
+        quantiles (list[float]): List of probabilities of the quantiles to estimate.
+        epsilon (float): Privacy budget.
+        lower (float): A bounding parameter. The quantile will be estimated only for values greater than or equal to this bound.
+        upper (float): A bounding parameter. The quantile will be estimated only for values less than or equal to this bound.
+
+    Returns:
+        list[float]: The estimated quantile.
+    """
+
+    _LOG.info(f"compute DP bounded quantiles within [{lower}, {upper}]")
+    results = []
+    eps_part = epsilon / len(quantiles)
+    k = len(values)
+    values = np.clip(values, lower, upper)
+    values = np.sort(values)
+    for q in quantiles:
+        Z = np.concatenate(([lower], values, [upper]))
+        Z -= lower  # shift right to be 0 bounded
+        y = np.exp(-eps_part * np.abs(np.arange(len(Z) - 1) - q * k)) * (Z[1:] - Z[:-1])
+        y_sum = y.sum()
+        p = y / y_sum if y_sum > 0 else np.ones(len(y)) / len(y)  # use uniform distribution if y_sum is zero
+        idx = np.random.choice(range(k + 1), 1, False, p)[0]
+        v = np.random.uniform(Z[idx], Z[idx + 1])
+        results.append(v + lower)
+
+    # ensure monotonicity of results with respect to quantiles
+    sorted_indices = [t[0] for t in sorted(enumerate(quantiles), key=lambda x: x[1])]
+    sorted_results = sorted(results)
+    results = [sorted_results[sorted_indices.index(i)] for i in range(len(quantiles))]
+
+    return results
+
+
+# NOTE: the unbounded method is not used in the current implementation
+# def _dp_unbounded_quantiles(
+#     values: np.ndarray, quantiles: list[float], epsilon: float, beta: float = 1.01
+# ) -> tuple[list[float], float]:
+#     """
+#     Fully unbounded differentially private quantile estimation using two AboveThreshold calls
+#     with Exponential noise (one-sided Laplace).
+
+#     Implements Algorithm 4 from Durfee (2023):
+#       1) AboveThreshold on positives: T1 = q*n, f_i = |{x_j + 1 < beta^i}|
+#       2) AboveThreshold on negatives: T2 = (1-q)*n, f_i = |{x_j - 1 > -beta^i}|
+#       3) If first halts at k>0: return  beta^k - 1
+#       4) If second halts at k>0: return -beta^k + 1
+#       5) Otherwise return 0
+
+#     Args:
+#         values (np.ndarray): A 1D array of numeric values.
+#         quantiles (list[float]): List of probabilities of the quantiles to estimate.
+#         epsilon (float): Privacy budget.
+#         beta (float): Multiplicative step size (default 1.01). Section 6.4 from Durfee (2023) suggests the range [1.01, 1.001] and 1.01 for general use, especially for more significant
+#         decreases in epsilon or in the data size.
+
+#     Returns:
+#         list[float]: Differentially private estimates of the quantiles.
+#     """
+
+#     def above_threshold(
+#         values: np.ndarray, q: float, eps: float, beta: float, is_positive_side: bool
+#     ) -> tuple[int, float]:
+#         n = len(values)
+#         eps1 = eps2 = eps / 2.0
+#         T = q * n if is_positive_side else (1 - q) * n
+#         noisy_T = T + np.random.exponential(scale=1 / eps1)
+#         i = 0
+#         while True:
+#             candidate = beta**i - 1 if is_positive_side else -(beta**i - 1)
+#             f_i = (values < candidate).sum() if is_positive_side else (values > candidate).sum()
+#             noisy_f_i = f_i + np.random.exponential(scale=1 / eps2)
+#             if noisy_f_i >= noisy_T:
+#                 return i, candidate
+#             i += 1
+
+#     _LOG.info("compute DP unbounded quantiles")
+#     # Split epsilon across quantiles and the two AboveThreshold calls per quantile
+#     eps_pass = epsilon / len(quantiles) / 2.0
+
+#     results = []
+#     for q in quantiles:
+#         # 1) Positive-side AboveThreshold
+#         k, candidate = above_threshold(values, q, eps_pass, beta, is_positive_side=True)
+#         if k > 0:
+#             results.append(candidate)
+#         else:
+#             # 2) Continue with negative-side AboveThreshold only if the first one did not halt at k > 0
+#             k, candidate = above_threshold(values, q, eps_pass, beta, is_positive_side=False)
+#             if k > 0:
+#                 results.append(candidate)
+#             else:
+#                 # 3) Return 0 if both AboveThreshold calls did not halt at k > 0
+#                 results.append(0.0)
+
+#     # ensure monotonicity of results with respect to quantiles
+#     sorted_indices = [t[0] for t in sorted(enumerate(quantiles), key=lambda x: x[1])]
+#     sorted_results = sorted(results)
+#     results = [sorted_results[sorted_indices.index(i)] for i in range(len(quantiles))]
+
+#     # NOTE: consider returning the actual epsilon spent in the future, so that the unused budget can be used for training later
+#     return results
+
+
+def dp_quantiles(values: list | np.ndarray, quantiles: list[float], epsilon: float) -> list[float]:
+    """
+    Differentially private quantile estimation.
+    First, estimate the bounds of the values, then use the bounds to estimate the quantiles.
+    If the bounds are not available, estimate the quantiles using the unbounded method.
+
+    Args:
+        values (list | np.ndarray): A list of numeric values.
+        quantiles (list[float]): List of probabilities of the quantiles to estimate.
+        epsilon (float): Privacy budget.
+
+    Returns:
+        list[float]: The estimated quantiles.
+    """
+    values = np.array(values)
+
+    # split epsilon in (m + 1) parts for m quantiles and 1 for the bounds
+    m = len(quantiles)
+    eps_bounds = epsilon / (m + 1)
+    eps_quantiles = epsilon - eps_bounds
+
+    # get the bounds
+    # for too small values of epsilon and/or sample size this can return None
+    hist = compute_log_histogram(values)
+    lower, upper = dp_approx_bounds(hist, eps_bounds)
+
+    if lower is None or upper is None:
+        return [None] * len(quantiles)
+    return _dp_bounded_quantiles(values=values, quantiles=quantiles, epsilon=eps_quantiles, lower=lower, upper=upper)
+
+
+def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5) -> tuple[list[str], float]:
+    """
+    Differentially private selection of all categories whose true count >= threshold,
+    via the Laplace vector mechanism + post-processing.
+
+    Args:
+        value_counts (dict): Mapping from category to its count.
+        epsilon (float): Privacy budget.
+        threshold (int): Threshold for non-rare values.
+
+    Returns:
+        list[str]: Categories whose noisy counts are above the threshold (DP guarantee: ε-DP).
+        float: Non-rare ratio (DP guarantee: ε-DP).
+    """
+
+    # 1. Add independent Laplace(1/ε) noise to each count (vector Laplace mechanism)
+    # Note: sensitivity of the count vector is 1 in L1 norm
+    noise = np.random.laplace(loc=0.0, scale=1 / epsilon, size=len(value_counts))
+    noisy_counts = np.clip(np.array(list(value_counts.values())) + noise, 0, None).astype(int)
+    for i, cat in enumerate(value_counts):
+        value_counts[cat] = noisy_counts[i]
+    total_counts = sum(value_counts.values())
+
+    # 2. Collect all categories whose noisy count >= threshold
+    selected = {cat: nc for cat, nc in value_counts.items() if nc >= threshold}
+
+    # 3. Compute the non-rare ratio
+    noisy_total_counts = sum(selected.values())
+    non_rare_ratio = noisy_total_counts / total_counts
+
+    return list(selected.keys()), non_rare_ratio
+
+
+def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
+    return min_threshold + int(noise_multiplier * np.random.uniform())
