@@ -15,25 +15,23 @@
 import contextlib
 import importlib
 import json
+import logging
 import os
 import platform
+import time
+from pathlib import Path
 from typing import Any
 
 import json_repair
-import logging
-import time
-from pathlib import Path
-
 import pandas as pd
 import torch
 from transformers import PreTrainedTokenizerBase
 
 from mostlyai.engine._common import (
-    persist_data_part,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
-    set_random_state,
+    persist_data_part,
 )
 from mostlyai.engine._encoding_types.language.categorical import decode_language_categorical
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
@@ -41,9 +39,8 @@ from mostlyai.engine._encoding_types.language.numeric import decode_language_num
 from mostlyai.engine._encoding_types.language.text import decode_text
 from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
-from mostlyai.engine._language.xgrammar_utils import create_schemas
-from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
-from mostlyai.engine._language.xgrammar_utils import ensure_seed_can_be_tokenized
+from mostlyai.engine._language.xgrammar_utils import create_schemas, ensure_seed_can_be_tokenized
+from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 INVALID_VALUE = "_INVALID_"  # when JSON parsing fails, the values of target columns will be set to this
@@ -150,11 +147,9 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ):
     _LOG.info("GENERATE_LANGUAGE started")
     t0_ = time.time()
-    set_random_state(random_state)
     os.environ["VLLM_LOGGING_LEVEL"] = "WARNING"
     os.environ["VLLM_NO_DEPRECATION_WARNING"] = "1"
 
@@ -184,6 +179,9 @@ def generate(
         tgt_text_columns = list(tgt_stats["columns"].keys())
         tgt_context_key = tgt_stats["keys"].get("context_key")
         has_context = workspace.ctx_stats.path.exists()
+        model_configs = workspace.model_configs.read()
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
+        _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve potential conflict between sample_seed and sample_size
         if seed_data is not None:
@@ -230,6 +228,15 @@ def generate(
             seed_data = pd.DataFrame(index=list(range(sample_size)))
         seed_data = seed_data[[c for c in tgt_text_columns if c in seed_data.columns]]
         _LOG.info(f"{seed_data.shape=}")
+
+        if not enable_flexible_generation:
+            # validate sample_seed maintains the same column order as the one from training
+            seed_columns = seed_data.columns.tolist()
+            if seed_columns != tgt_text_columns[: len(seed_columns)]:
+                raise ValueError(
+                    "The order of columns in the seed data does not match the order of columns from training. "
+                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+                )
 
         # sanity check: at this point sample seed and context data should have the same number of rows
         assert len(seed_data) == len(ctx_data)

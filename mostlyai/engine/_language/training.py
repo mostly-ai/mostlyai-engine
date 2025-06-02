@@ -12,59 +12,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import json
 import logging
 import math
 import time
-import gc
+import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from functools import partial
-from pathlib import Path
-from collections.abc import Callable
-import warnings
-
 from importlib.metadata import version
-import pandas as pd
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import torch
+from datasets import Dataset, DatasetDict, disable_progress_bar, load_dataset
+from opacus import GradSampleModule, PrivacyEngine
+from opacus.accountants import GaussianAccountant, PRVAccountant, RDPAccountant
 from opacus.grad_sample import register_grad_sampler
+from opacus.utils.batch_memory_manager import wrap_data_loader
+from peft import LoraConfig, PeftModel
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import LRScheduler
-
-from opacus import PrivacyEngine, GradSampleModule
-from opacus.accountants import PRVAccountant, RDPAccountant, GaussianAccountant
-from opacus.utils.batch_memory_manager import wrap_data_loader
-
 from torch.utils.data import DataLoader
-
-from mostlyai.engine._common import ProgressCallback, ProgressCallbackWrapper, TABLE_COLUMN_INFIX, set_random_state
-from mostlyai.engine._language.common import (
-    is_bf16_supported,
-    load_base_model_and_config,
-    MAX_LENGTH,
-)
-from mostlyai.engine._language.encoding import row_to_json
-from mostlyai.engine._language.tokenizer_utils import (
-    train_tokenizer,
-    MostlyDataCollatorForLanguageModeling,
-    tokenize_fn,
-)
-from mostlyai.engine._training_utils import (
-    check_early_training_exit,
-    EarlyStopper,
-    ModelCheckpoint,
-    ProgressMessage,
-)
-from mostlyai.engine.domain import ModelStateStrategy, DifferentialPrivacyConfig
-from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
-from datasets import load_dataset, DatasetDict, Dataset, disable_progress_bar
 from transformers import (
     AutoTokenizer,
     PreTrainedModel,
 )
-from mostlyai.engine._language.lstm import LSTMFromScratchLMHeadModel, LSTMFromScratchConfig
-from peft import LoraConfig, PeftModel
+
+from mostlyai.engine._common import TABLE_COLUMN_INFIX, ProgressCallback, ProgressCallbackWrapper
+from mostlyai.engine._language.common import (
+    MAX_LENGTH,
+    is_bf16_supported,
+    load_base_model_and_config,
+)
+from mostlyai.engine._language.encoding import row_to_json
+from mostlyai.engine._language.lstm import LSTMFromScratchConfig, LSTMFromScratchLMHeadModel
+from mostlyai.engine._language.tokenizer_utils import (
+    MostlyDataCollatorForLanguageModeling,
+    tokenize_fn,
+    train_tokenizer,
+)
+from mostlyai.engine._training_utils import (
+    EarlyStopper,
+    ModelCheckpoint,
+    ProgressMessage,
+    check_early_training_exit,
+)
+from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
+from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy
 
 _LOG = logging.getLogger(__name__)
 
@@ -284,11 +282,9 @@ def train(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ):
     _LOG.info("TRAIN_LANGUAGE started")
     t0_ = time.time()
-    set_random_state(random_state)
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
 
@@ -472,6 +468,10 @@ def train(
                     task_type="CAUSAL_LM",
                 )
                 model.add_adapter(peft_config)
+
+        # persist model configs
+        model_configs = {"enable_flexible_generation": enable_flexible_generation}
+        workspace.model_configs.write(model_configs)
 
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
         model.train()

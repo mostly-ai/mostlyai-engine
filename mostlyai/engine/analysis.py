@@ -18,13 +18,13 @@ Provides analysis functionality of the engine
 
 import logging
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Literal
-from collections.abc import Iterable
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed, parallel_config, cpu_count
+from joblib import Parallel, cpu_count, delayed, parallel_config
 
 from mostlyai.engine._common import (
     ANALYZE_REDUCE_MIN_MAX_N,
@@ -33,23 +33,30 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
+    TABLE_COLUMN_INFIX,
     TGT,
+    ProgressCallback,
+    ProgressCallbackWrapper,
     dp_quantiles,
     get_stochastic_rare_threshold,
     is_a_list,
     is_sequential,
     read_json,
-    set_random_state,
     write_json,
-    TABLE_COLUMN_INFIX,
-    ProgressCallback,
-    ProgressCallbackWrapper,
+)
+from mostlyai.engine._encoding_types.language.categorical import (
+    analyze_language_categorical,
+    analyze_reduce_language_categorical,
 )
 from mostlyai.engine._encoding_types.language.datetime import (
-    analyze_reduce_language_datetime,
     analyze_language_datetime,
+    analyze_reduce_language_datetime,
 )
 from mostlyai.engine._encoding_types.language.numeric import analyze_language_numeric, analyze_reduce_language_numeric
+from mostlyai.engine._encoding_types.language.text import (
+    analyze_reduce_text,
+    analyze_text,
+)
 from mostlyai.engine._encoding_types.tabular.categorical import (
     analyze_categorical,
     analyze_reduce_categorical,
@@ -71,22 +78,14 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
     analyze_numeric,
     analyze_reduce_numeric,
 )
-from mostlyai.engine._encoding_types.language.text import (
-    analyze_text,
-    analyze_reduce_text,
-)
-from mostlyai.engine._encoding_types.language.categorical import (
-    analyze_language_categorical,
-    analyze_reduce_language_categorical,
-)
-from mostlyai.engine.domain import ModelEncodingType, DifferentialPrivacyConfig
-
 from mostlyai.engine._workspace import (
     PathDesc,
     Workspace,
     ensure_workspace_dir,
     reset_dir,
 )
+from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelEncodingType
+from mostlyai.engine.random_state import set_random_state
 
 _LOG = logging.getLogger(__name__)
 
@@ -109,7 +108,6 @@ def analyze(
     differential_privacy: DifferentialPrivacyConfig | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     """
     Generates (privacy-safe) column-level statistics of the original data, that has been `split` into the workspace.
@@ -128,7 +126,6 @@ def analyze(
 
     _LOG.info("ANALYZE started")
     t0 = time.time()
-    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)

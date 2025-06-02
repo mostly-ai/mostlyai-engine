@@ -16,10 +16,9 @@ import inspect
 import itertools
 import json
 import logging
-import os
 import platform
-import struct
 import time
+from collections.abc import Callable, Iterable
 from functools import wraps
 from pathlib import Path
 from typing import (
@@ -28,16 +27,13 @@ from typing import (
     NamedTuple,
     Protocol,
 )
-from collections.abc import Callable, Iterable
 
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 
-
 from mostlyai.engine._dtypes import is_boolean_dtype, is_float_dtype, is_integer_dtype
 from mostlyai.engine.domain import ModelEncodingType
-
 
 _LOG = logging.getLogger(__name__)
 
@@ -883,34 +879,3 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
 def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
     return min_threshold + int(noise_multiplier * np.random.uniform())
-
-
-def set_random_state(random_state: int | None = None, worker: bool = False):
-    def get_random_int_from_os() -> int:
-        # 32-bit, cryptographically secure random int from os
-        return int(struct.unpack("I", os.urandom(4))[0])
-
-    if worker:  # worker process
-        if "MOSTLYAI_ENGINE_SEED" in os.environ:
-            random_state = int(os.environ["MOSTLYAI_ENGINE_SEED"])
-        else:
-            # normally, the seed should have been set in the main process
-            # but if not (e.g. in tests), we fallback to generating a random seed here
-            random_state = get_random_int_from_os()
-    else:  # main process
-        if random_state is not None:
-            _LOG.info(f"Global random_state set to `{random_state}`")
-
-        if random_state is None:
-            random_state = get_random_int_from_os()
-
-        os.environ["MOSTLYAI_ENGINE_SEED"] = str(random_state)
-
-    import random
-    import numpy as np
-    import torch
-
-    random.seed(random_state)
-    np.random.seed(random_state)
-    torch.manual_seed(random_state)
-    torch.cuda.manual_seed_all(random_state)

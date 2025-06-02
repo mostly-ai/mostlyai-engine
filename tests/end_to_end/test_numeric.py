@@ -19,11 +19,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine import analyze, encode
 from mostlyai.engine._common import write_json
 from mostlyai.engine._tabular.generation import generate
 from mostlyai.engine._tabular.training import train
+from mostlyai.engine.domain import ModelEncodingType
 
 
 @pytest.fixture

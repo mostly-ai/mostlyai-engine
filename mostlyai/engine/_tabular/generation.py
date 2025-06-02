@@ -24,33 +24,19 @@ import numpy as np
 import pandas as pd
 import torch
 
-from mostlyai.engine._memory import get_available_ram_for_heuristics, get_available_vram_for_heuristics
-from mostlyai.engine.domain import (
-    ModelEncodingType,
-    RareCategoryReplacementMethod,
-    RebalancingConfig,
-    ImputationConfig,
-    FairnessConfig,
-)
-from mostlyai.engine._tabular.common import load_model_weights
-
-from mostlyai.engine._tabular.fairness import get_fairness_transforms, FairnessTransforms
-
-from mostlyai.engine._tabular.argn import (
-    FlatModel,
-    ModelSize,
-    SequentialModel,
-    get_no_of_model_parameters,
-)
 from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
+    SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SIDX_SDEC_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
+    FixedSizeSampleBuffer,
+    ProgressCallback,
+    ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
     decode_slen_sidx_sdec,
     encode_slen_sidx_sdec,
@@ -60,17 +46,11 @@ from mostlyai.engine._common import (
     get_ctx_sequence_length,
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
-    is_sequential,
-    set_random_state,
-    trim_sequences,
     get_sub_columns_nested_from_cardinalities,
+    is_sequential,
     persist_data_part,
-    FixedSizeSampleBuffer,
-    SDEC_SUB_COLUMN_PREFIX,
-    ProgressCallback,
-    ProgressCallbackWrapper,
+    trim_sequences,
 )
-from mostlyai.engine._tabular.encoding import encode_df, pad_horizontally
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
     CATEGORICAL_SUB_COL_SUFFIX,
@@ -90,7 +70,24 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_DISCRETE_UNKNOWN_TOKEN,
     decode_numeric,
 )
+from mostlyai.engine._memory import get_available_ram_for_heuristics, get_available_vram_for_heuristics
+from mostlyai.engine._tabular.argn import (
+    FlatModel,
+    ModelSize,
+    SequentialModel,
+    get_no_of_model_parameters,
+)
+from mostlyai.engine._tabular.common import load_model_weights
+from mostlyai.engine._tabular.encoding import encode_df, pad_horizontally
+from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
+from mostlyai.engine.domain import (
+    FairnessConfig,
+    ImputationConfig,
+    ModelEncodingType,
+    RareCategoryReplacementMethod,
+    RebalancingConfig,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -689,11 +686,9 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
-    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)
@@ -701,7 +696,7 @@ def generate(
         output_path = workspace.generated_data_path
         reset_dir(output_path)
 
-        model_configs = workspace.model_tabular_configs.read()
+        model_configs = workspace.model_configs.read()
         tgt_stats = workspace.tgt_stats.read()
         is_sequential = tgt_stats["is_sequential"]
         _LOG.info(f"{is_sequential=}")

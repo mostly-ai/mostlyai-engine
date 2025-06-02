@@ -15,14 +15,14 @@
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine.domain import ModelEncodingType
+from mostlyai.engine._common import ANALYZE_MIN_MAX_TOP_N, read_json, write_json
 from mostlyai.engine.analysis import (
     _analyze_col,
     _analyze_partition,
     _analyze_reduce_seq_len,
     _analyze_seq_len,
 )
-from mostlyai.engine._common import ANALYZE_MIN_MAX_TOP_N, read_json, write_json
+from mostlyai.engine.domain import ModelEncodingType
 
 
 def test_analyze_cnt(tmp_path):

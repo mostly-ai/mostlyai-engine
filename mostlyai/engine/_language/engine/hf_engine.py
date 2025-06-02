@@ -20,65 +20,15 @@ from os import PathLike
 from pathlib import Path
 
 import torch
-import transformers
-import xgrammar as xgr
 from peft import PeftModel
 from pydantic import BaseModel
 from transformers import AutoTokenizer
+from xgrammar.contrib.hf import LogitsProcessor
 
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
-
-
-class XGrammarLogitsProcessor(transformers.LogitsProcessor):
-    """
-    Inspired by [LogitsProcessor](https://github.com/mlc-ai/xgrammar/blob/414473e7c029d0d9e2dfbeacb48afa946d0e3419/python/xgrammar/contrib/hf.py#L14).
-    HuggingFace's XGrammarLogitsProcessor cannot be reused. Logits processors must be initialized for each call to generate().
-    """
-
-    def __init__(self, compiled_grammars: list[xgr.CompiledGrammar]):
-        self.compiled_grammars = compiled_grammars
-        self.vocab_size = self.compiled_grammars[0].tokenizer_info.vocab_size
-        self.batch_size = len(compiled_grammars)
-
-        self.matchers: list[xgr.GrammarMatcher] | None = None
-        self.token_bitmask: torch.Tensor | None = None
-        self.prefilled = False
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # lazily initialize GrammarMatchers and bitmask
-        if self.matchers is None:
-            self.matchers = [xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)]
-            self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.vocab_size)
-
-        if input_ids.shape[0] != self.batch_size:
-            raise RuntimeError(
-                "Expect input_ids.shape[0] to be XGrammarLogitsProcessor.batch_size. "
-                + f"Got {input_ids.shape[0]} for the former, and {self.batch_size} for the latter."
-            )
-
-        if not self.prefilled:
-            # have not sampled a token yet
-            self.prefilled = True
-        else:
-            for i in range(self.batch_size):
-                if not self.matchers[i].is_terminated():
-                    sampled_token = input_ids[i][-1]
-                    assert self.matchers[i].accept_token(sampled_token)
-
-        for i in range(self.batch_size):
-            if not self.matchers[i].is_terminated():
-                self.matchers[i].fill_next_token_bitmask(self.token_bitmask, i)
-
-        device_type = scores.device.type
-        if device_type != "cuda":
-            scores = scores.to("cpu")
-        xgr.apply_token_bitmask_inplace(scores, self.token_bitmask.to(scores.device))
-        if device_type != "cuda":
-            scores = scores.to(device_type)
-        return scores
 
 
 class HuggingFaceEngine(LanguageEngine):
@@ -132,7 +82,7 @@ class HuggingFaceEngine(LanguageEngine):
             vocab_size=self._model_config.vocab_size,
             is_peft_adapter=self.is_peft_adapter,
         )
-        self._logits_processors = [XGrammarLogitsProcessor(list(compiled_grammars))]
+        self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float

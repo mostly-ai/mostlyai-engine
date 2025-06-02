@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import pandas as pd
 import pytest
-import numpy as np
 
 from mostlyai.engine._encoding_types.language.categorical import (
     CATEGORICAL_UNKNOWN_TOKEN,
-    decode_language_categorical,
     analyze_language_categorical,
     analyze_reduce_language_categorical,
+    decode_language_categorical,
     encode_language_categorical,
 )
 

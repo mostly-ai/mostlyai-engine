@@ -23,16 +23,15 @@ This module provides two models for tabular data:
 Each model can learn to generate data given some context data, which can either consist of scalar or sequential data.
 """
 
+import logging
 from enum import Enum
 from functools import partial
-import logging
 from typing import Any, Literal
 
 import numpy as np
 import torch
-from torch import nn
-
 from opacus.layers import DPLSTM
+from torch import nn
 
 from mostlyai.engine._common import (
     CTXFLT,

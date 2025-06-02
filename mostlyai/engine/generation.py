@@ -13,17 +13,18 @@
 # limitations under the License.
 
 from pathlib import Path
+
 import pandas as pd
 
 from mostlyai.engine._common import ProgressCallback
+from mostlyai.engine._workspace import resolve_model_type
 from mostlyai.engine.domain import (
+    FairnessConfig,
+    ImputationConfig,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
-    ImputationConfig,
-    FairnessConfig,
 )
-from mostlyai.engine._workspace import resolve_model_type
 
 
 def generate(
@@ -41,7 +42,6 @@ def generate(
     fairness: FairnessConfig | dict | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     """
     Generates synthetic data from a trained model.
@@ -64,7 +64,6 @@ def generate(
         fairness: Configuration for fairness constraints. Only applicable for tabular models.
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
-        random_state: Seed for the random number generators.
     """
     model_type = resolve_model_type(workspace_dir)
     if model_type == ModelType.tabular:
@@ -84,7 +83,6 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
-            random_state=random_state,
         )
     else:
         from mostlyai.engine._language.generation import generate as generate_language
@@ -106,5 +104,4 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
-            random_state=random_state,
         )

@@ -23,16 +23,15 @@ from pandas.core.dtypes.common import is_datetime64_any_dtype
 from tokenizers.pre_tokenizers import ByteLevel
 
 from mostlyai.engine._common import (
-    is_sequential,
+    TABLE_COLUMN_INFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
-    TABLE_COLUMN_INFIX,
-    set_random_state,
+    is_sequential,
 )
-from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._encoding_types.language.categorical import encode_language_categorical
-from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
 from mostlyai.engine._encoding_types.language.datetime import encode_language_datetime
+from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
+from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 
 _LOG = logging.getLogger(__name__)
 
@@ -158,11 +157,9 @@ def _encode_partition(
 def encode(
     workspace_dir: str | Path | None = None,
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     _LOG.info("ENCODE_LANGUAGE started")
     t0 = time.time()
-    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         workspace_dir = ensure_workspace_dir(workspace_dir)
         workspace = Workspace(workspace_dir)

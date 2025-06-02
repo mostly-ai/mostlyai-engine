@@ -31,7 +31,6 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_DISCRETE_SUB_COL_SUFFIX,
     NUMERIC_DISCRETE_UNKNOWN_TOKEN,
 )
-from mostlyai.engine.domain import ModelEncodingType, ImputationConfig, FairnessConfig
 from mostlyai.engine._tabular.generation import (
     RareCategoryReplacementMethod,
     RebalancingConfig,
@@ -41,10 +40,11 @@ from mostlyai.engine._tabular.generation import (
     _fix_rare_token_probs,
     _fix_rebalancing_probs,
     _pad_vertically,
+    _reshape_pt_to_pandas,
     _resolve_gen_column_order,
     _translate_fixed_probs,
-    _reshape_pt_to_pandas,
 )
+from mostlyai.engine.domain import FairnessConfig, ImputationConfig, ModelEncodingType
 
 
 class TestFixRareTokenProbs:

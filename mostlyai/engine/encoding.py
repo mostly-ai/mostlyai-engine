@@ -15,15 +15,14 @@
 from pathlib import Path
 
 from mostlyai.engine._common import ProgressCallback
-from mostlyai.engine.domain import ModelType
 from mostlyai.engine._workspace import resolve_model_type
+from mostlyai.engine.domain import ModelType
 
 
 def encode(
     *,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     """
     Encodes data in the workspace that has already been split and analyzed.
@@ -35,14 +34,13 @@ def encode(
     Args:
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
-        random_state: Seed for the random number generators.
     """
     model_type = resolve_model_type(workspace_dir)
     if model_type == ModelType.tabular:
         from mostlyai.engine._tabular.encoding import encode as encode_tabular
 
-        return encode_tabular(workspace_dir=workspace_dir, update_progress=update_progress, random_state=random_state)
+        return encode_tabular(workspace_dir=workspace_dir, update_progress=update_progress)
     else:
         from mostlyai.engine._language.encoding import encode as encode_language
 
-        return encode_language(workspace_dir=workspace_dir, update_progress=update_progress, random_state=random_state)
+        return encode_language(workspace_dir=workspace_dir, update_progress=update_progress)

@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import psutil
-import re
 import logging
+import os
+import re
 
+import psutil
 import torch
 
 _LOG = logging.getLogger(__name__)

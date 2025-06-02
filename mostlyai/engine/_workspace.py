@@ -14,10 +14,10 @@
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from mostlyai.engine._common import read_json, write_json
 from mostlyai.engine.domain import ModelType
@@ -161,7 +161,7 @@ class Workspace:
         self.model_dp_accountant_path: Path = self.model_path / "dp-accountant.pt"
         self.model_tabular_weights_path: Path = self.model_path / "model-weights.pt"
         self.model_progress_messages_path: Path = self.model_path / "progress-messages.csv"
-        self.model_tabular_configs = make_json_path_desc(parts=model_data + ["model-configs.json"])
+        self.model_configs = make_json_path_desc(parts=model_data + ["model-configs.json"])
 
         # Generate-related
         generated_data = ["SyntheticData"]

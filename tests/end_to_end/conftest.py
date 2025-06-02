@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
+
 import numpy as np
 import pandas as pd
-import random
 import pytest
 
 from mostlyai.engine._common import STRING

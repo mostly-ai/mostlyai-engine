@@ -16,30 +16,28 @@
 Split original data for training and validation.
 """
 
+import logging
 import time
 import warnings
 from pathlib import Path
 
-from mostlyai.engine._common import ProgressCallbackWrapper, ProgressCallback, set_random_state
+import numpy as np
+import pandas as pd
+
+from mostlyai.engine._common import ProgressCallback, ProgressCallbackWrapper
 from mostlyai.engine._dtypes import (
     is_date_dtype,
     is_float_dtype,
     is_integer_dtype,
     is_timestamp_dtype,
 )
-
-import numpy as np
-import logging
-
-import pandas as pd
-
-from mostlyai.engine.domain import ModelType, ModelEncodingType
 from mostlyai.engine._workspace import (
     PathDesc,
     Workspace,
     ensure_workspace_dir,
     reset_dir,
 )
+from mostlyai.engine.domain import ModelEncodingType, ModelType
 
 warnings.simplefilter(action="ignore", category=UserWarning)
 
@@ -78,7 +76,6 @@ def split(
     trn_val_split: float = 0.8,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-    random_state: int | None = None,
 ) -> None:
     """
     Splits the provided original data into training and validation sets, and stores these as partitioned Parquet files.
@@ -105,11 +102,9 @@ def split(
         trn_val_split: Fraction of data to use for training, with the remaining data used for validation.
         workspace_dir: Path to the workspace directory where files will be created.
         update_progress: A custom progress callback.
-        random_state: Seed for the random number generators.
     """
     _LOG.info("SPLIT started")
     t0 = time.time()
-    set_random_state(random_state)
     with ProgressCallbackWrapper(update_progress) as progress:
         # validate input
         if tgt_primary_key and tgt_primary_key not in tgt_data:

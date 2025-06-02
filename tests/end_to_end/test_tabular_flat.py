@@ -20,13 +20,14 @@ import pandas as pd
 import pytest
 import torch
 
+from mostlyai import engine
+from mostlyai.engine import analyze, encode, generate, split, train
 from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._encoding_types.tabular.lat_long import split_str_to_latlong
 from mostlyai.engine._workspace import Workspace
-from .conftest import MockData
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
-from mostlyai.engine import split, analyze, encode, train, generate
+from .conftest import MockData
 
 
 @pytest.fixture(scope="module")
@@ -344,11 +345,13 @@ def test_reproducibility(input_data, tmp_path_factory):
     ws_2 = tmp_path_factory.mktemp("ws_2")
 
     def run_with_fixed_seed(ws):
-        split(tgt_data=df, workspace_dir=ws, tgt_primary_key="id", random_state=42)
-        analyze(workspace_dir=ws, random_state=42)
-        encode(workspace_dir=ws, random_state=42)
-        train(workspace_dir=ws, max_epochs=1, random_state=42)
-        generate(workspace_dir=ws, sample_size=100, random_state=42)
+        engine.set_random_state(42)
+        split(tgt_data=df, workspace_dir=ws, tgt_primary_key="id")
+        analyze(workspace_dir=ws)
+        encode(workspace_dir=ws)
+        train(workspace_dir=ws, max_epochs=1)
+        generate(workspace_dir=ws, sample_size=100)
+        engine.set_random_state(None)
 
     run_with_fixed_seed(ws_1)
     run_with_fixed_seed(ws_2)
