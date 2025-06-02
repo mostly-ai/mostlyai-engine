@@ -14,6 +14,7 @@
 
 import pytest
 from pydantic import ValidationError
+
 from mostlyai.engine.domain import RebalancingConfig
 
 

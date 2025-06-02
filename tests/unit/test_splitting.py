@@ -17,8 +17,8 @@ import os
 import pandas as pd
 import pytest
 
-from mostlyai.engine.domain import ModelType, ModelEncodingType
 from mostlyai.engine._common import read_json
+from mostlyai.engine.domain import ModelEncodingType, ModelType
 from mostlyai.engine.splitting import split
 
 FIXTURES_PATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures"))

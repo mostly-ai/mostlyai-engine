@@ -18,9 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine.domain import ModelEncodingType, ModelStateStrategy, DifferentialPrivacyConfig
 from mostlyai.engine import analyze, encode, split
-from mostlyai.engine._workspace import Workspace
 from mostlyai.engine._common import read_json
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
@@ -28,6 +26,9 @@ from mostlyai.engine._encoding_types.tabular.categorical import (
 )
 from mostlyai.engine._tabular.generation import RareCategoryReplacementMethod, generate
 from mostlyai.engine._tabular.training import train
+from mostlyai.engine._workspace import Workspace
+from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelEncodingType, ModelStateStrategy
+
 from .conftest import MockData
 
 

@@ -18,7 +18,7 @@ Categorical encoding maps each categorical value to its own integer code.
 
 import pandas as pd
 
-from mostlyai.engine._common import get_stochastic_rare_threshold, safe_convert_string, dp_non_rare
+from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
 
 CATEGORICAL_UNKNOWN_TOKEN = "_RARE_"
 CATEGORICAL_NULL_TOKEN = "<<NULL>>"

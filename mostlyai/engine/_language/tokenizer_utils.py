@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Mapping, Iterator
 
-from transformers import DataCollatorForLanguageModeling, BatchEncoding, PreTrainedTokenizerFast, LlamaTokenizerFast
-from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch
+from transformers import BatchEncoding, DataCollatorForLanguageModeling, LlamaTokenizerFast, PreTrainedTokenizerFast
+from transformers.data.data_collator import _torch_collate_batch, pad_without_fast_tokenizer_warning
 
 from mostlyai.engine.domain import ModelEncodingType
-
 
 #################
 ### TOKENIZER ###

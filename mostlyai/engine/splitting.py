@@ -16,30 +16,28 @@
 Split original data for training and validation.
 """
 
+import logging
 import time
 import warnings
 from pathlib import Path
 
-from mostlyai.engine._common import ProgressCallbackWrapper, ProgressCallback
+import numpy as np
+import pandas as pd
+
+from mostlyai.engine._common import ProgressCallback, ProgressCallbackWrapper
 from mostlyai.engine._dtypes import (
     is_date_dtype,
     is_float_dtype,
     is_integer_dtype,
     is_timestamp_dtype,
 )
-
-import numpy as np
-import logging
-
-import pandas as pd
-
-from mostlyai.engine.domain import ModelType, ModelEncodingType
 from mostlyai.engine._workspace import (
     PathDesc,
     Workspace,
     ensure_workspace_dir,
     reset_dir,
 )
+from mostlyai.engine.domain import ModelEncodingType, ModelType
 
 warnings.simplefilter(action="ignore", category=UserWarning)
 
