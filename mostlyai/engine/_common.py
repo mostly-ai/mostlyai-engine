@@ -18,6 +18,7 @@ import json
 import logging
 import platform
 import time
+from collections.abc import Callable, Iterable
 from functools import wraps
 from pathlib import Path
 from typing import (
@@ -26,16 +27,13 @@ from typing import (
     NamedTuple,
     Protocol,
 )
-from collections.abc import Callable, Iterable
 
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 
-
 from mostlyai.engine._dtypes import is_boolean_dtype, is_float_dtype, is_integer_dtype
 from mostlyai.engine.domain import ModelEncodingType
-
 
 _LOG = logging.getLogger(__name__)
 

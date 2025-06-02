@@ -14,7 +14,7 @@
 
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string, STRING
+from mostlyai.engine._common import STRING, safe_convert_string
 
 
 def analyze_text(values: pd.Series, root_keys: pd.Series, _: pd.Series | None = None) -> dict:

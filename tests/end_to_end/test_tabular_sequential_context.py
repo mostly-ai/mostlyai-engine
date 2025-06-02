@@ -16,10 +16,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine import analyze, encode, split
 from mostlyai.engine._tabular.generation import generate
 from mostlyai.engine._tabular.training import train
+from mostlyai.engine.domain import ModelEncodingType
 
 
 class TestThreeTableSetup:

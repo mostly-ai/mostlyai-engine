@@ -18,7 +18,7 @@ Categorical encoding for language models.
 
 import pandas as pd
 
-from mostlyai.engine._common import safe_convert_string, STRING
+from mostlyai.engine._common import STRING, safe_convert_string
 from mostlyai.engine._encoding_types.tabular.categorical import analyze_categorical, analyze_reduce_categorical
 
 CATEGORICAL_UNKNOWN_TOKEN = "_RARE_"

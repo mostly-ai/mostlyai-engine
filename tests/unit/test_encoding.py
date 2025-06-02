@@ -19,8 +19,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from mostlyai.engine.domain import ModelEncodingType
-from mostlyai.engine._common import SIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX, SDEC_SUB_COLUMN_PREFIX
+from mostlyai.engine._common import SDEC_SUB_COLUMN_PREFIX, SIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX
 from mostlyai.engine._language.encoding import format_df
 from mostlyai.engine._tabular.encoding import (
     _encode_col,
@@ -28,6 +27,7 @@ from mostlyai.engine._tabular.encoding import (
     flatten_frame,
     pad_horizontally,
 )
+from mostlyai.engine.domain import ModelEncodingType
 
 
 def test_flatten_frame():

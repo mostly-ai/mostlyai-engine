@@ -20,10 +20,10 @@ import torch
 
 from mostlyai.engine._tabular.argn import (
     _make_permutation_mask,
+    _sample,
     _sampling_fixed_probs,
     _sampling_nucleus,
     _sampling_temperature,
-    _sample,
 )
 
 

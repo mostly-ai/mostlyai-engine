@@ -16,7 +16,6 @@ import os
 from pathlib import Path
 from unittest import mock
 
-
 from mostlyai.engine._common import read_json, write_json
 from mostlyai.engine._workspace import Workspace
 

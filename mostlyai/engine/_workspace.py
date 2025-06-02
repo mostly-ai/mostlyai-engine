@@ -14,10 +14,10 @@
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from mostlyai.engine._common import read_json, write_json
 from mostlyai.engine.domain import ModelType

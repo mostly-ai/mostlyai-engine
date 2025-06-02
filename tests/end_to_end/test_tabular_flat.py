@@ -20,14 +20,14 @@ import pandas as pd
 import pytest
 import torch
 
+from mostlyai import engine
+from mostlyai.engine import analyze, encode, generate, split, train
 from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._encoding_types.tabular.lat_long import split_str_to_latlong
 from mostlyai.engine._workspace import Workspace
-from .conftest import MockData
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
-from mostlyai.engine import split, analyze, encode, train, generate
-from mostlyai import engine
+from .conftest import MockData
 
 
 @pytest.fixture(scope="module")

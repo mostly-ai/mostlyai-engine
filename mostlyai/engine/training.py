@@ -13,14 +13,14 @@
 # limitations under the License.
 
 import inspect
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 import torch
 
 from mostlyai.engine._common import ProgressCallback
-from mostlyai.engine.domain import ModelType, ModelStateStrategy, DifferentialPrivacyConfig
 from mostlyai.engine._workspace import resolve_model_type
+from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy, ModelType
 
 
 def train(

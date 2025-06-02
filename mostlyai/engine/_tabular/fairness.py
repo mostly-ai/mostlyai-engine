@@ -13,24 +13,23 @@
 # limitations under the License.
 
 import logging
-from functools import partial
-from typing import Any, TypedDict
 from collections.abc import Callable
-
-import pandas as pd
-import numpy as np
-
+from functools import partial
 from itertools import product
+from typing import Any, TypedDict
+
+import numpy as np
+import pandas as pd
 import torch
 
 from mostlyai.engine._common import (
-    get_argn_name,
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
+    get_argn_name,
 )
 from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_SUB_COL_SUFFIX, CATEGORICAL_UNKNOWN_TOKEN
-from mostlyai.engine.domain import ModelEncodingType, FairnessConfig
+from mostlyai.engine.domain import FairnessConfig, ModelEncodingType
 
 _LOG = logging.getLogger(__name__)
 

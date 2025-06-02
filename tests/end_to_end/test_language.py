@@ -15,32 +15,31 @@
 import shutil
 from itertools import chain
 
+import numpy as np
 import pandas as pd
 import pytest
-import numpy as np
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from mostlyai.engine import split
-from mostlyai.engine._workspace import Workspace
-from mostlyai.engine._language.generation import generate
-from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.encoding import encode
-from mostlyai.engine.analysis import analyze
 from mostlyai.engine._common import TEMPORARY_PRIMARY_KEY
 from mostlyai.engine._encoding_types.language.categorical import CATEGORICAL_UNKNOWN_TOKEN
+from mostlyai.engine._language.encoding import encode
+from mostlyai.engine._language.generation import generate
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
-from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling
+from mostlyai.engine._language.tokenizer_utils import MostlyDataCollatorForLanguageModeling, tokenize_fn
 from mostlyai.engine._language.training import (
-    train,
     _gpu_estimate_max_batch_size,
-    _physical_batch_size_heuristic,
     _gradient_accumulation_steps_heuristic,
+    _physical_batch_size_heuristic,
+    train,
 )
+from mostlyai.engine._workspace import Workspace
+from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
+    DifferentialPrivacyConfig,
     ModelEncodingType,
     ModelStateStrategy,
-    DifferentialPrivacyConfig,
     RareCategoryReplacementMethod,
 )
 

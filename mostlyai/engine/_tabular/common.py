@@ -14,8 +14,9 @@
 
 import logging
 import time
-import torch
 from pathlib import Path
+
+import torch
 
 _LOG = logging.getLogger(__name__)
 
