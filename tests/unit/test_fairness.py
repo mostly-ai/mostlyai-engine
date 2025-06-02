@@ -14,10 +14,10 @@
 
 import pytest
 
-from mostlyai.engine.domain import ModelEncodingType
-from mostlyai.engine._common import get_argn_name, ARGN_PROCESSOR, ARGN_TABLE, ARGN_COLUMN
+from mostlyai.engine._common import ARGN_COLUMN, ARGN_PROCESSOR, ARGN_TABLE, get_argn_name
 from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_SUB_COL_SUFFIX
 from mostlyai.engine._tabular.fairness import _get_sensitive_groups
+from mostlyai.engine.domain import ModelEncodingType
 
 
 @pytest.fixture(scope="module")

@@ -13,17 +13,18 @@
 # limitations under the License.
 
 from pathlib import Path
+
 import pandas as pd
 
 from mostlyai.engine._common import ProgressCallback
+from mostlyai.engine._workspace import resolve_model_type
 from mostlyai.engine.domain import (
+    FairnessConfig,
+    ImputationConfig,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
-    ImputationConfig,
-    FairnessConfig,
 )
-from mostlyai.engine._workspace import resolve_model_type
 
 
 def generate(

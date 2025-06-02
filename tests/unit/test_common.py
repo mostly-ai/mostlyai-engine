@@ -20,7 +20,6 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
 
-from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
@@ -44,6 +43,7 @@ from mostlyai.engine._common import (
     safe_convert_string,
     skip_if_error,
 )
+from mostlyai.engine.domain import ModelEncodingType
 
 
 class TestSafeConvertDatetime:

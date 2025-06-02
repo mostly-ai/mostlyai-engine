@@ -16,9 +16,9 @@ import abc
 import logging
 import time
 
-from opacus.accountants import IAccountant
 import pandas as pd
 import torch
+from opacus.accountants import IAccountant
 from pydantic import BaseModel, Field, field_validator
 
 from mostlyai.engine._workspace import Workspace

@@ -15,8 +15,8 @@
 from pathlib import Path
 
 from mostlyai.engine._common import ProgressCallback
-from mostlyai.engine.domain import ModelType
 from mostlyai.engine._workspace import resolve_model_type
+from mostlyai.engine.domain import ModelType
 
 
 def encode(

@@ -17,7 +17,6 @@ import pandas as pd
 import pytest
 
 from mostlyai.engine._common import ANALYZE_MIN_MAX_TOP_N
-from mostlyai.engine.domain import ModelEncodingType
 from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_BINNED_MAX_QUANTILES,
     NUMERIC_BINNED_MAX_TOKEN,
@@ -31,6 +30,7 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
     encode_numeric,
     split_sub_columns_digit,
 )
+from mostlyai.engine.domain import ModelEncodingType
 
 
 def _ints(string: str) -> list[int]:

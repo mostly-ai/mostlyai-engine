@@ -23,15 +23,15 @@ from pandas.core.dtypes.common import is_datetime64_any_dtype
 from tokenizers.pre_tokenizers import ByteLevel
 
 from mostlyai.engine._common import (
-    is_sequential,
+    TABLE_COLUMN_INFIX,
     ProgressCallback,
     ProgressCallbackWrapper,
-    TABLE_COLUMN_INFIX,
+    is_sequential,
 )
-from mostlyai.engine._workspace import ensure_workspace_dir, Workspace, reset_dir
 from mostlyai.engine._encoding_types.language.categorical import encode_language_categorical
-from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
 from mostlyai.engine._encoding_types.language.datetime import encode_language_datetime
+from mostlyai.engine._encoding_types.language.numeric import encode_language_numeric
+from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 
 _LOG = logging.getLogger(__name__)
 
