@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 import torch
 from accelerate import Accelerator, FullyShardedDataParallelPlugin
+from accelerate.scheduler import AcceleratedScheduler
 from datasets import Dataset, DatasetDict, disable_progress_bar, load_dataset
 from huggingface_hub import get_safetensors_metadata
 from opacus import GradSampleModule, PrivacyEngine
@@ -310,18 +311,23 @@ def train(
             else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
         )
 
+        single_gpu_threshold = 7_000_000_000
+        if (
+            device.type == "cuda"
+            and device.index is None
+            and (
+                with_dp or model == LSTMFromScratchConfig.model_id or get_num_model_params(model) < single_gpu_threshold
+            )
+        ):
+            device = torch.device("cuda:0")
+            _LOG.info("device set to single gpu (cuda:0) because model is too small or differential privacy is enabled")
+
         if not with_dp:
             if device.type == "cuda":
                 fsdp_plugin = FullyShardedDataParallelPlugin(
                     state_dict_config=FullStateDictConfig(offload_to_cpu=True, rank0_only=False),
                     optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=False),
                 )
-                single_gpu_if_smaller_than = 7_000_000_000
-                if model == LSTMFromScratchConfig.model_id or (
-                    device.index is None and get_num_model_params(model) < single_gpu_if_smaller_than
-                ):
-                    device = torch.device("cuda:0")
-                    _LOG.info("device set to single gpu (cuda:0) because model is too small")
             else:
                 fsdp_plugin = None
             accelerator = Accelerator(fsdp_plugin=fsdp_plugin, cpu=device.type == "cpu")
@@ -664,6 +670,10 @@ def train(
         forward_ctx_mgr = (
             torch.autocast(device_type=device.type, dtype=torch.bfloat16) if use_mixed_precision else nullcontext()
         )
+        is_reduce_lr_on_plateau = isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) or (
+            isinstance(lr_scheduler, AcceleratedScheduler)
+            and isinstance(lr_scheduler.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        )
         # infinite loop over training steps, until we decide to stop
         # either because of max_epochs, max_training_time or early_stopping
         while not do_stop:
@@ -719,6 +729,10 @@ def train(
                 "lr"
             ]  # currently assume that we have the same lr for all param groups
 
+            # only the scheduling for ReduceLROnPlateau is postponed until the metric becomes available
+            if not is_reduce_lr_on_plateau:
+                lr_scheduler.step()
+
             # do validation
             do_validation = epoch.is_integer()
             if do_validation:
@@ -755,8 +769,9 @@ def train(
                 )
                 # check for early stopping
                 do_stop = early_stopper(val_loss=val_loss) or has_exceeded_dp_max_epsilon
-                # scheduling for ReduceLROnPlateau is postponed until the metric becomes available
-                lr_scheduler.step(metrics=val_loss)
+                # scheduling for ReduceLROnPlateau
+                if is_reduce_lr_on_plateau:
+                    lr_scheduler.step(metrics=val_loss)
 
             # log progress, either by time or by steps, whatever is shorter
             elapsed_training_time = time.time() - start_trn_time
