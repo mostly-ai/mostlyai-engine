@@ -22,7 +22,7 @@ from mostlyai.engine.splitting import split
 from mostlyai.engine.training import train
 
 __all__ = ["split", "analyze", "encode", "train", "generate", "init_logging", "set_random_state"]
-__version__ = "1.4.2"
+__version__ = "1.4.3"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*multi-threaded.*fork.*")
