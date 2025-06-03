@@ -452,7 +452,7 @@ def train(
             if resume_from_last_checkpoint:
                 tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
                 model, _ = load_base_model_and_config(
-                    model_id_or_path, device=device, is_peft_adapter=False, is_training=True, with_dp=with_dp
+                    model_id_or_path, device=device, is_peft_adapter=False, is_training=True
                 )
             else:
                 # fresh initialization of the custom tokenizer and LSTM model
@@ -470,7 +470,6 @@ def train(
                 device=device,
                 is_peft_adapter=resume_from_last_checkpoint,
                 is_training=True,
-                with_dp=with_dp,
             )
             tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
             if tokenizer.eos_token is None:

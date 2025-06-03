@@ -43,7 +43,7 @@ def get_attention_implementation(config: PretrainedConfig) -> str | None:
 
 
 def load_base_model_and_config(
-    model_id_or_path: str | Path, device: torch.device, is_peft_adapter: bool, is_training: bool, with_dp: bool = False
+    model_id_or_path: str | Path, device: torch.device, is_peft_adapter: bool, is_training: bool
 ) -> tuple[PreTrainedModel, PretrainedConfig]:
     # opacus DP does not support parallel/sharded training
     model_id_or_path = str(model_id_or_path)
@@ -88,8 +88,6 @@ def load_base_model_and_config(
 
     if device.type == "cuda" and device.index is not None:
         device_map = str(device)
-    elif device.type == "cuda" and with_dp:
-        device_map = "cuda:0"
     else:
         device_map = "auto"
 
