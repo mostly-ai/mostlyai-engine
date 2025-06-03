@@ -28,7 +28,6 @@ import numpy as np
 import pandas as pd
 import torch
 from accelerate import Accelerator, FullyShardedDataParallelPlugin
-from accelerate.scheduler import AcceleratedScheduler
 from datasets import Dataset, DatasetDict, disable_progress_bar, load_dataset
 from huggingface_hub import get_safetensors_metadata
 from opacus import GradSampleModule, PrivacyEngine
@@ -595,6 +594,8 @@ def train(
             min_lr=0.1 * initial_lr,
             # threshold=0,  # if we prefer to completely mimic the behavior of previous implementation
         )
+        is_reduce_lr_on_plateau = isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+
         if not with_dp:
             model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
 
@@ -668,10 +669,6 @@ def train(
         current_lr = initial_lr
         forward_ctx_mgr = (
             torch.autocast(device_type=device.type, dtype=torch.bfloat16) if use_mixed_precision else nullcontext()
-        )
-        is_reduce_lr_on_plateau = isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) or (
-            isinstance(lr_scheduler, AcceleratedScheduler)
-            and isinstance(lr_scheduler.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
         )
         # infinite loop over training steps, until we decide to stop
         # either because of max_epochs, max_training_time or early_stopping
