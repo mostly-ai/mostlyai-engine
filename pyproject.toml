@@ -1,6 +1,6 @@
 [project]
 name = "mostlyai-engine"
-version = "1.4.2"
+version = "1.4.3"
 description = "Synthetic Data Engine"
 authors = [{ name = "MOSTLY AI", email = "dev@mostly.ai" }]
 requires-python = ">=3.10"
@@ -64,6 +64,7 @@ docs = [
     "mkdocs>=1.6",
     "mkdocstrings[crystal, python]>=0.29",
     "mkdocs-material>=9.0",
+    "mkdocs-llmstxt>=0.2",
     "griffe>=1.0",
     "pymdown-extensions>=10.0",
     "griffe-fieldz>=0.2",
