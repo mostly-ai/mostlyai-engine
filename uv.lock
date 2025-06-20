@@ -1540,11 +1540,11 @@ wheels = [
 
 [[package]]
 name = "json-repair"
-version = "0.47.0"
+version = "0.46.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/18/c6/fc77ac9514ab4f49dbb2bb7429fa5b076c3847f44c53af0ec2fe453dad9e/json_repair-0.47.0.tar.gz", hash = "sha256:2a0582a74d2375ac8b0636a92b9763c9f6c508cb75fb3b3ecd6b17fb3f64c8d8", size = 33768 }
+sdist = { url = "https://files.pythonhosted.org/packages/cb/74/f8e4eb4ce31be034c08fd3da37328c9ab7a7503831cf6f41d2121699cc88/json_repair-0.46.2.tar.gz", hash = "sha256:4c81154d61c028ca3750b451472dbb33978f2ee6f44be84c42b444b03d9f4b16", size = 33605 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/00/4a02bf830aeb9fd2e3e18f3db06e22a4172cf4fd385b6f0c4a00852c1c50/json_repair-0.47.0-py3-none-any.whl", hash = "sha256:bb830ecab9e55432a7132ca47db1879f4a8fbb147cac82e1c7332be5c6532698", size = 22415 },
+    { url = "https://files.pythonhosted.org/packages/8c/d7/5f31df5ad00474f3005bbbac5f3a1e8d36535b40f1d352e6a5bd9880bf1f/json_repair-0.46.2-py3-none-any.whl", hash = "sha256:21fb339de583ab68db4272f984ec6fca9cc453d8117d9870e83c28b6b56c20e6", size = 22326 },
 ]
 
 [[package]]
@@ -2110,7 +2110,7 @@ requires-dist = [
     { name = "datasets", specifier = ">=3.0.0" },
     { name = "huggingface-hub", extras = ["hf-xet"], specifier = ">=0.30.2" },
     { name = "joblib", specifier = ">=1.4.2" },
-    { name = "json-repair", specifier = ">=0.30.0,<0.47.1" },
+    { name = "json-repair", specifier = ">=0.30.0,<0.47.0" },
     { name = "numpy", specifier = ">=1.26.3" },
     { name = "opacus", specifier = ">=1.5.2" },
     { name = "pandas", specifier = "~=2.2.0" },
