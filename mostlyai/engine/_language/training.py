@@ -28,13 +28,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from accelerate import Accelerator, FullyShardedDataParallelPlugin
 from datasets import Dataset, DatasetDict, disable_progress_bar, load_dataset
+from huggingface_hub import get_safetensors_metadata
 from opacus import GradSampleModule, PrivacyEngine
 from opacus.accountants import GaussianAccountant, PRVAccountant, RDPAccountant
 from opacus.grad_sample import register_grad_sampler
 from opacus.utils.batch_memory_manager import wrap_data_loader
 from peft import LoraConfig, PeftModel
 from torch import nn
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
 from torch.nn import CrossEntropyLoss
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
@@ -212,6 +215,12 @@ def _calculate_val_loss(model: PreTrainedModel | GradSampleModule, val_dataloade
     return val_loss_avg.item()
 
 
+def get_num_model_params(model: str) -> int:
+    metadata = get_safetensors_metadata(model)
+    no_of_model_params = next(iter(metadata.parameter_count.values()))
+    return no_of_model_params
+
+
 def _calculate_max_tokens(tokenized_trn_dataset: Dataset) -> int:
     max_tokens = 0
     for example in tokenized_trn_dataset:
@@ -294,13 +303,37 @@ def train(
     ) as progress:
         _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
         _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
-        _LOG.info(f"transformers={version('transformers')}, peft={version('peft')}")
+        _LOG.info(f"transformers={version('transformers')}, accelerate={version('accelerate')}, peft={version('peft')}")
+        with_dp = differential_privacy is not None
         device = (
             torch.device(device)
             if device is not None
             else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
         )
+
+        single_gpu_threshold = 7_000_000_000
+        if (
+            device.type == "cuda"
+            and device.index is None
+            and (
+                with_dp or model == LSTMFromScratchConfig.model_id or get_num_model_params(model) < single_gpu_threshold
+            )
+        ):
+            device = torch.device("cuda:0")
+            _LOG.info("device set to single gpu (cuda:0) because model is too small or differential privacy is enabled")
+
+        if not with_dp:
+            if device.type == "cuda":
+                fsdp_plugin = FullyShardedDataParallelPlugin(
+                    state_dict_config=FullStateDictConfig(offload_to_cpu=True, rank0_only=False),
+                    optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=False),
+                )
+            else:
+                fsdp_plugin = None
+            accelerator = Accelerator(fsdp_plugin=fsdp_plugin, cpu=device.type == "cpu")
+
         _LOG.info(f"{device=}")
+        _LOG.info(f"{torch.cuda.device_count()=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
         use_mixed_precision = bf16_supported and model != LSTMFromScratchConfig.model_id
@@ -324,7 +357,7 @@ def train(
             max_epochs = max_epochs_cap
         else:
             _LOG.info(f"{max_epochs=}")
-        with_dp = differential_privacy is not None
+
         _LOG.info(f"{with_dp=}")
         _LOG.info(f"{model_state_strategy=}")
 
@@ -566,6 +599,11 @@ def train(
             min_lr=0.1 * initial_lr,
             # threshold=0,  # if we prefer to completely mimic the behavior of previous implementation
         )
+        is_reduce_lr_on_plateau = isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+
+        if not with_dp:
+            model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
+
         if (
             model_state_strategy == ModelStateStrategy.resume
             and model_checkpoint.optimizer_and_lr_scheduler_paths_exist()
@@ -626,6 +664,7 @@ def train(
         else:
             privacy_engine = None
             dp_config, dp_total_delta, dp_accountant = None, None, None
+            trn_dataloader = accelerator.prepare(trn_dataloader)
 
         progress_message = None
         start_trn_time = time.time()
@@ -667,8 +706,12 @@ def train(
                         outputs = model(**step_data)
                     # FIXME approximation, should be divided by total sum of number of tokens in the batch
                     #  as in _calculate_per_label_losses, also the final sample may be smaller than the batch size.
-                    step_loss = outputs.loss / (1 if with_dp else gradient_accumulation_steps)
-                    step_loss.backward()
+                    if with_dp:
+                        step_loss = outputs.loss
+                        step_loss.backward()
+                    else:
+                        step_loss = outputs.loss / gradient_accumulation_steps
+                        accelerator.backward(step_loss)
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on
                 samples += step_data["input_ids"].shape[0]
@@ -686,8 +729,9 @@ def train(
             current_lr = optimizer.param_groups[0][
                 "lr"
             ]  # currently assume that we have the same lr for all param groups
+
             # only the scheduling for ReduceLROnPlateau is postponed until the metric becomes available
-            if not isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            if not is_reduce_lr_on_plateau:
                 lr_scheduler.step()
 
             # do validation
@@ -727,7 +771,7 @@ def train(
                 # check for early stopping
                 do_stop = early_stopper(val_loss=val_loss) or has_exceeded_dp_max_epsilon
                 # scheduling for ReduceLROnPlateau
-                if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                if is_reduce_lr_on_plateau:
                     lr_scheduler.step(metrics=val_loss)
 
             # log progress, either by time or by steps, whatever is shorter
@@ -788,7 +832,7 @@ def train(
         if not model_checkpoint.has_saved_once():
             _LOG.info("saving model weights, as none were saved so far")
             model_checkpoint.save_checkpoint(
-                model=model,
+                model=model if with_dp else accelerator.unwrap_model(model),
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
                 dp_accountant=privacy_engine.accountant if with_dp else None,
