@@ -758,15 +758,7 @@ def generate(
         _LOG.info(f"{gen_column_order=}")
         if not enable_flexible_generation:
             # check if resolved column order is the same as the one from training
-            trn_column_order = [SLEN_SIDX_SDEC_COLUMN] if is_sequential else []
-            trn_column_order += [
-                get_argn_name(
-                    argn_processor=tgt_stats["columns"][col][ARGN_PROCESSOR],
-                    argn_table=tgt_stats["columns"][col][ARGN_TABLE],
-                    argn_column=tgt_stats["columns"][col][ARGN_COLUMN],
-                )
-                for col in tgt_stats["columns"].keys()
-            ]
+            trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
             _LOG.info(f"{trn_column_order=}")
             if gen_column_order != trn_column_order:
                 raise ValueError(
