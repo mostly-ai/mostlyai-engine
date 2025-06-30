@@ -91,13 +91,19 @@ def load_base_model_and_config(
     else:
         device_map = "auto"
 
+    if hasattr(config, "text_config"):
+        config.text_config.use_cache = use_cache
+        config.text_config.attn_implementation = attn_implementation
+    else:
+        config.use_cache = use_cache
+        config.attn_implementation = attn_implementation
+
     model = AutoModelForCausalLM.from_pretrained(
         model_id_or_path,
-        torch_dtype=torch_dtype,
-        attn_implementation=attn_implementation,
-        use_cache=use_cache,
+        config=config,
         device_map=device_map,
         quantization_config=quantization_config,
+        torch_dtype=torch_dtype,
     )
     if quantization_config:
         # convert all non-kbit layers to float32
