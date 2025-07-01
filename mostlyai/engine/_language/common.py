@@ -102,15 +102,15 @@ def load_base_model_and_config(
     if hasattr(config, "text_config") and hasattr(config, "vision_config"):
         config.text_config.use_cache = use_cache
         config.text_config.attn_implementation = attn_implementation
-        model_cls = AutoModelForImageTextToText
+        auto_model_cls = AutoModelForImageTextToText
     elif hasattr(config, "use_cache"):
         config.use_cache = use_cache
         config.attn_implementation = attn_implementation
-        model_cls = AutoModelForCausalLM
+        auto_model_cls = AutoModelForCausalLM
     else:
         raise ValueError("Unsupported model")
 
-    model = model_cls.from_pretrained(
+    model = auto_model_cls.from_pretrained(
         model_id_or_path,
         config=config,
         device_map=device_map,
