@@ -256,9 +256,6 @@ def generate(
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()
-        # use MOSTLY_HUGGING_FACE_TOKEN if available, otherwise HF_TOKEN should be unset or with a pre-set value as is
-        if os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
-            os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
         is_vllm_available = importlib.util.find_spec("vllm") is not None
