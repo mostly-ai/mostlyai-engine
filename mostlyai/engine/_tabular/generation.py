@@ -34,11 +34,12 @@ from mostlyai.engine._common import (
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SIDX_SDEC_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
-    decode_slen_sidx_sdec,
+    decode_slen_sidx_sdec_stop,
     encode_slen_sidx_sdec,
     get_argn_name,
     get_cardinalities,
@@ -108,8 +109,7 @@ def _resolve_gen_column_order(
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
-    # TODO: sidx and stop should be at the beginning
-    # 0. SLEN/SIDX column
+    # 0. SLEN/SIDX/SDEC column
     # 1. Sample seed columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
@@ -276,6 +276,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
+    has_slen: bool,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -284,13 +285,26 @@ def _continue_sequence_mask(
         keys=[step_keys],
         key_name=key_name,
     )
-    # TODO: look at stop column to build continue sequence mask; do we even need sidx here?
-    # decode SLEN/SIDX columns
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    if has_slen:
+        # TEMPORARY: slen/sidx/sdec branch
+        # decode SLEN/SIDX/SDEC columns
+        syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+        syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+        syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    else:
+        # TEMPORARY: sidx/stop branch
+        # decode SIDX/STOP columns
+        syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+        syn[STOP_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=STOP_SUB_COLUMN_PREFIX)
+
+    if has_slen:
+        # TEMPORARY: slen/sidx/sdec branch
+        # calculate stop sequence mask (True=continue, False=stop)
+        return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    else:
+        # TEMPORARY: sidx/stop branch
+        # calculate stop sequence mask (True=continue, False=stop)
+        return syn[STOP_SUB_COLUMN_PREFIX] == 0
 
 
 def _post_process_decoding(
@@ -711,12 +725,19 @@ def generate(
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
         if is_sequential and model_configs.get("model_units"):
-            # remain backwards compatible to models trained without SDEC
-            has_sdec = any([f"{SDEC_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
-            if not has_sdec:
-                _LOG.warning("SDEC not found in model_units, removing SDEC columns from tgt_cardinalities")
+            # TODO: handle backwards compatibility later
+            has_slen = any([f"{SLEN_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
+            if has_slen:
+                # TEMPORARY: slen/sidx/sdec branch
+                del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
+                tgt_sub_columns.remove(f"{SLEN_SUB_COLUMN_PREFIX}cat")
                 del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
                 tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
+            else:
+                # TEMPORARY: sidx/stop branch
+                del tgt_cardinalities[f"{STOP_SUB_COLUMN_PREFIX}cat"]
+                tgt_sub_columns.remove(f"{STOP_SUB_COLUMN_PREFIX}cat")
+
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
@@ -996,7 +1017,6 @@ def generate(
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
-                    # TODO: this logic stays - we don't want to sample sidx
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
                     sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
@@ -1007,28 +1027,33 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    # TODO: this block related to slen should be removed; we don't have that column anymore
-                    # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
-                    if seq_step > 0:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                        slen = decode_slen_sidx_sdec(
-                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}),
-                            max_seq_len=seq_steps,
-                            prefix=SLEN_SUB_COLUMN_PREFIX,
-                        )
-                        sdec = (
-                            (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                        )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                    if has_slen:
+                        # TEMPORARY: slen/sidx/sdec branch
+                        # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
+                        if seq_step > 0:
+                            slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                            slen = decode_slen_sidx_sdec_stop(
+                                pd.DataFrame(
+                                    {c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}
+                                ),
+                                max_seq_len=seq_steps,
+                                prefix=SLEN_SUB_COLUMN_PREFIX,
+                            )
+                            sdec = (
+                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                        else:
+                            slen_vals = {}
+                            sdec = pd.Series([0] * step_size)  # initial sequence index decile
+                        sdec_vals = {
+                            f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
+                                torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
+                            )
+                        }
+                        fixed_values = sidx_vals | slen_vals | sdec_vals
                     else:
-                        slen_vals = {}
-                        sdec = pd.Series([0] * step_size)  # initial sequence index decile
-                    sdec_vals = {
-                        f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                            torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
-                        )
-                    }
-                    # TODO: fixed_values are only sidx_vals
-                    fixed_values = sidx_vals | slen_vals | sdec_vals
+                        # TEMPORARY: sidx/stop branch
+                        fixed_values = sidx_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1051,6 +1076,7 @@ def generate(
                         key_name=tgt_context_key,
                         seq_len_min=seq_len_min,
                         seq_len_max=seq_len_max,
+                        has_slen=has_slen,
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed

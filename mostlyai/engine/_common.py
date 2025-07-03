@@ -319,7 +319,7 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_slen_sidx_sdec_cardinalities(max_seq_len)
+        cardinalities |= get_slen_sidx_sdec_stop_cardinalities(max_seq_len)
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -526,8 +526,12 @@ def encode_slen_sidx_sdec(vals: pd.Series, max_seq_len: int, prefix: str = "") -
     return df
 
 
-def decode_slen_sidx_sdec(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
-    if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD or prefix == SDEC_SUB_COLUMN_PREFIX:
+def decode_slen_sidx_sdec_stop(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
+    if (
+        max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD
+        or prefix == SDEC_SUB_COLUMN_PREFIX
+        or prefix == STOP_SUB_COLUMN_PREFIX
+    ):
         # decode slen and sidx as numeric_discrete
         vals = df_encoded[f"{prefix}cat"]
     else:
@@ -537,7 +541,7 @@ def decode_slen_sidx_sdec(df_encoded: pd.DataFrame, max_seq_len: int, prefix: st
     return vals
 
 
-def get_slen_sidx_sdec_cardinalities(max_seq_len) -> dict[str, int]:
+def get_slen_sidx_sdec_stop_cardinalities(max_seq_len) -> dict[str, int]:
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
         # encode slen and sidx as numeric_discrete
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
@@ -556,7 +560,8 @@ def get_slen_sidx_sdec_cardinalities(max_seq_len) -> dict[str, int]:
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
     # order is important: slen first, then sidx, as the former has highest priority
     sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
-    return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
+    stop_cardinalities = {f"{STOP_SUB_COLUMN_PREFIX}cat": 2}
+    return slen_cardinalities | sidx_cardinalities | sdec_cardinalities | stop_cardinalities
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):
@@ -564,8 +569,8 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
         return syn
 
     # use SIDX and SLEN to determine sequence length
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+    syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     # ensure that seq_len_min is respected
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
