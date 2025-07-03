@@ -72,7 +72,14 @@ def test_enrich_slen_sidx_sdec_stop():
             "is_paid": [0, 1, 1],
         }
     )
-    assert_frame_equal(_enrich_slen_sidx_sdec_stop(df, context_key="key", max_seq_len=1), expected_df)
+    expected_df_with_stop = expected_df.drop(columns=[f"{SLEN_SUB_COLUMN_PREFIX}cat", f"{SDEC_SUB_COLUMN_PREFIX}cat"])
+    assert_frame_equal(
+        _enrich_slen_sidx_sdec_stop(df, context_key="key", max_seq_len=1, use_stop=True), expected_df_with_stop
+    )
+    expected_df_without_stop = expected_df.drop(columns=[f"{STOP_SUB_COLUMN_PREFIX}cat"])
+    assert_frame_equal(
+        _enrich_slen_sidx_sdec_stop(df, context_key="key", max_seq_len=1, use_stop=False), expected_df_without_stop
+    )
 
 
 def test_pad_horizontally():

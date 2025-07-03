@@ -386,17 +386,23 @@ def encode_stop(stop: pd.Series) -> pd.DataFrame:
     return pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": stop})
 
 
-def _enrich_slen_sidx_sdec_stop(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def _enrich_slen_sidx_sdec_stop(
+    df: pd.DataFrame, context_key: str, max_seq_len: int, use_stop: bool = True
+) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
     stop = (sidx == slen - 1).astype(int)
-    slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
     sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
-    sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
-    stop = encode_stop(stop)
-    df = pd.concat([slen, sidx, sdec, stop, df], axis=1)
+    if use_stop:
+        stop = encode_stop(stop)
+        sequence_columns = [sidx, stop]
+    else:
+        slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
+        sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
+        sequence_columns = [slen, sidx, sdec]
+    df = pd.concat(sequence_columns + [df], axis=1)
     return df
 
 
