@@ -532,7 +532,7 @@ def decode_slen_sidx_sdec_stop(df_encoded: pd.DataFrame, max_seq_len: int, prefi
         or prefix == SDEC_SUB_COLUMN_PREFIX
         or prefix == STOP_SUB_COLUMN_PREFIX
     ):
-        # decode slen and sidx as numeric_discrete
+        # decode slen, sidx, sdec, stop as numeric_discrete
         vals = df_encoded[f"{prefix}cat"]
     else:
         # decode slen and sidx as numeric_digit
