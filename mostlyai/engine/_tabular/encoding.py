@@ -27,6 +27,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -138,7 +139,7 @@ def _encode_partition(
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
         # enrich with sequence lengths and sequence indexes
         # TODO: enrich with sidx and stop
-        df = _enrich_slen_sidx_sdec(df, tgt_context_key, max_len)
+        df = _enrich_slen_sidx_sdec_stop(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
@@ -381,15 +382,21 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def _enrich_slen_sidx_sdec(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def encode_stop(stop: pd.Series) -> pd.DataFrame:
+    return pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": stop})
+
+
+def _enrich_slen_sidx_sdec_stop(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
+    stop = (sidx == slen - 1).astype(int)
     slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
     sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
-    df = pd.concat([slen, sidx, sdec, df], axis=1)
+    stop = encode_stop(stop)
+    df = pd.concat([slen, sidx, sdec, stop, df], axis=1)
     return df
 
 
