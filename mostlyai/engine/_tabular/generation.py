@@ -108,6 +108,7 @@ def _resolve_gen_column_order(
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
+    # TODO: sidx and stop should be at the beginning
     # 0. SLEN/SIDX column
     # 1. Sample seed columns
     # 2. Rebalancing column
@@ -283,6 +284,7 @@ def _continue_sequence_mask(
         keys=[step_keys],
         key_name=key_name,
     )
+    # TODO: look at stop column to build continue sequence mask; do we even need sidx here?
     # decode SLEN/SIDX columns
     syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
@@ -994,6 +996,7 @@ def generate(
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
+                    # TODO: this logic stays - we don't want to sample sidx
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
                     sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
@@ -1004,6 +1007,7 @@ def generate(
                         )
                         for c in sidx_df
                     }
+                    # TODO: this block related to slen should be removed; we don't have that column anymore
                     # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
                     if seq_step > 0:
                         slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
@@ -1023,6 +1027,7 @@ def generate(
                             torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
                         )
                     }
+                    # TODO: fixed_values are only sidx_vals
                     fixed_values = sidx_vals | slen_vals | sdec_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass

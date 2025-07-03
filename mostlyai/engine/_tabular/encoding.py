@@ -137,6 +137,7 @@ def _encode_partition(
         max_len = seq_len_stats["max"]
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
         # enrich with sequence lengths and sequence indexes
+        # TODO: enrich with sidx and stop
         df = _enrich_slen_sidx_sdec(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)

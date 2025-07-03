@@ -264,6 +264,7 @@ def _calculate_sample_losses(
     if isinstance(model, SequentialModel) or (
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
+        # TODO: masks are not needed for sidx and stop
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
 
         # generate masks for SLEN and time step
