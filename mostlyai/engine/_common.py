@@ -53,6 +53,7 @@ SLEN_SIDX_DIGIT_ENCODING_THRESHOLD = 100
 SLEN_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
 SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
 SDEC_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
+STOP_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}stop_"  # sequence stop token
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
