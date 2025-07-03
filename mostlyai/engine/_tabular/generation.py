@@ -32,7 +32,7 @@ from mostlyai.engine._common import (
     CTXSEQ,
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SIDX_SDEC_COLUMN,
+    SLEN_SIDX_SDEC_STOP_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
     STOP_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
@@ -185,9 +185,9 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SLEN_SIDX_SDEC_COLUMN in column_order:
+    if SLEN_SIDX_SDEC_STOP_COLUMN in column_order:
         # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [SLEN_SIDX_SDEC_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_COLUMN]
+        column_order = [SLEN_SIDX_SDEC_STOP_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_STOP_COLUMN]
 
     return column_order
 
@@ -625,6 +625,7 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
+    has_slen: bool = False,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -647,6 +648,7 @@ def decode_buffered_samples(
             tgt_context_key=tgt_context_key,
             seq_len_min=seq_len_min,
             seq_len_max=seq_len_max,
+            has_slen=has_slen,
         )
     else:
         (data,) = zip(*buffer.buffer)
@@ -1109,6 +1111,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
+                            has_slen=has_slen,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1177,6 +1180,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
+                    has_slen=has_slen,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1192,6 +1196,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
+                has_slen=has_slen,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()

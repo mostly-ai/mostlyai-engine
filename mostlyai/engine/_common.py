@@ -48,12 +48,12 @@ ARGN_COLUMN = "argn_column"
 PREFIX_TABLE = ":"
 PREFIX_COLUMN = "/"
 PREFIX_SUB_COLUMN = "__"
-SLEN_SIDX_SDEC_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
+SLEN_SIDX_SDEC_STOP_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
 SLEN_SIDX_DIGIT_ENCODING_THRESHOLD = 100
-SLEN_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
-SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
-SDEC_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
-STOP_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_COLUMN}{PREFIX_SUB_COLUMN}stop_"  # sequence stop token
+SLEN_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_STOP_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
+SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_STOP_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
+SDEC_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_STOP_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
+STOP_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_SDEC_STOP_COLUMN}{PREFIX_SUB_COLUMN}stop_"  # sequence stop token
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
@@ -564,25 +564,48 @@ def get_slen_sidx_sdec_stop_cardinalities(max_seq_len) -> dict[str, int]:
     return slen_cardinalities | sidx_cardinalities | sdec_cardinalities | stop_cardinalities
 
 
-def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):
+def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int, has_slen: bool):
     if syn.empty:
         return syn
 
-    # use SIDX and SLEN to determine sequence length
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    # ensure that seq_len_min is respected
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
-    # discarded padded context rows, ie where context key has been set to None
-    syn = syn.dropna(subset=[tgt_context_key])
-    # discard SLEN and SIDX columns
-    syn.drop(
-        [c for c in syn.columns if c.startswith(SLEN_SIDX_SDEC_COLUMN)],
-        axis=1,
-        inplace=True,
-    )
-    syn.reset_index(drop=True, inplace=True)
+    if has_slen:
+        # TEMPORARY: slen/sidx/sdec branch
+        # use SIDX and SLEN to determine sequence length
+        syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+        syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+        # ensure that seq_len_min is respected
+        syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+        syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
+        # discarded padded context rows, ie where context key has been set to None
+        syn = syn.dropna(subset=[tgt_context_key])
+        # discard SLEN, SIDX, SDEC columns
+        syn.drop(
+            [c for c in syn.columns if c.startswith(SLEN_SIDX_SDEC_STOP_COLUMN)],
+            axis=1,
+            inplace=True,
+        )
+        syn.reset_index(drop=True, inplace=True)
+    else:
+        # TEMPORARY: sidx/stop branch
+        # use SIDX and STOP to determine sequence length
+        syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+        syn[STOP_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=STOP_SUB_COLUMN_PREFIX)
+        # ensure that seq_len_min is respected
+        # ensure first stop=1 is propagated to all subsequent positions in each sequence
+        syn[STOP_SUB_COLUMN_PREFIX] = syn.groupby(tgt_context_key)[STOP_SUB_COLUMN_PREFIX].transform(
+            lambda x: x.cummax()
+        )
+        # ensure first stop=1 is beyond seq_len_min
+        syn.loc[syn[SIDX_SUB_COLUMN_PREFIX] < seq_len_min, STOP_SUB_COLUMN_PREFIX] = 0
+        # discarded padded context rows, ie where context key has been set to None
+        syn = syn.dropna(subset=[tgt_context_key])
+        # discard SIDX, STOP columns
+        syn.drop(
+            [c for c in syn.columns if c.startswith(SLEN_SIDX_SDEC_STOP_COLUMN)],
+            axis=1,
+            inplace=True,
+        )
+        syn.reset_index(drop=True, inplace=True)
     return syn
 
 
