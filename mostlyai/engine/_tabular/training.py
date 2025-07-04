@@ -386,8 +386,10 @@ def train(
         trn_cnt = tgt_stats["no_of_training_records"]
         val_cnt = tgt_stats["no_of_validation_records"]
         tgt_cardinalities = get_cardinalities(tgt_stats)
-        del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
-        del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
+        if f"{SLEN_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
+            del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
+        if f"{SDEC_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
+            del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
         ctx_cardinalities = get_cardinalities(ctx_stats) if has_context else {}
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_nested_sub_columns = get_sub_columns_nested_from_cardinalities(ctx_cardinalities, "processor")
