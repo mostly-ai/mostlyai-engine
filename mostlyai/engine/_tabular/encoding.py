@@ -27,6 +27,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -129,7 +130,7 @@ def _encode_partition(
             n_jobs=n_jobs,
         )
         # pad each list with one extra item
-        df_ctx = pad_horizontally(df_ctx, padding_value=0, right=False)
+        df_ctx = pad_horizontally(df_ctx, padding_value=0, right=False, pad_only_0seqlens=True)
 
     if is_sequential:
         assert isinstance(tgt_context_key, str)
@@ -137,7 +138,8 @@ def _encode_partition(
         max_len = seq_len_stats["max"]
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
         # enrich with sequence lengths and sequence indexes
-        df = _enrich_slen_sidx_sdec(df, tgt_context_key, max_len)
+        # TODO: enrich with sidx and stop
+        df = _enrich_slen_sidx_sdec_stop(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
@@ -148,7 +150,7 @@ def _encode_partition(
             df_miss = df_miss.merge(df_pads, how="cross")
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
         # pad each list with one extra item
-        df = pad_horizontally(df, padding_value=0, right=True)
+        df = pad_horizontally(df, padding_value=0, right=True, pad_only_0seqlens=False)
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
@@ -380,28 +382,40 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def _enrich_slen_sidx_sdec(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def encode_stop(stop: pd.Series) -> pd.DataFrame:
+    return pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": stop})
+
+
+def _enrich_slen_sidx_sdec_stop(
+    df: pd.DataFrame, context_key: str, max_seq_len: int, use_stop: bool = True
+) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
-    slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
+    stop = (slen != 0).astype(int)  # 1 if not padding, 0 otherwise
     sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
-    sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
-    df = pd.concat([slen, sidx, sdec, df], axis=1)
+    if use_stop:
+        stop = encode_stop(stop)
+        sequence_columns = [sidx, stop]
+    else:
+        slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
+        sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
+        sequence_columns = [slen, sidx, sdec]
+    df = pd.concat(sequence_columns + [df], axis=1)
     return df
 
 
-def pad_horizontally(df: pd.DataFrame, padding_value: int, right=True) -> pd.DataFrame:
+def pad_horizontally(df: pd.DataFrame, padding_value: int, right=True, pad_only_0seqlens=True) -> pd.DataFrame:
     if df.shape[0] == 0:
         return df
     list_cols = [c for c in df.columns if is_a_list(df.loc[0, c])]
 
     def pad_right(x):
-        return x + [padding_value] if len(x) == 0 else x
+        return x + [padding_value] if len(x) == 0 or not pad_only_0seqlens else x
 
     def pad_left(x):
-        return [padding_value] + x if len(x) == 0 else x
+        return [padding_value] + x if len(x) == 0 or not pad_only_0seqlens else x
 
     for col in list_cols:
         df[col] = df[col].apply(pad_right if right else pad_left)

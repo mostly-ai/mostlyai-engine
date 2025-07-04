@@ -38,6 +38,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -264,15 +265,33 @@ def _calculate_sample_losses(
     if isinstance(model, SequentialModel) or (
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
+        # TODO: masks are not needed for sidx and stop
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
+        stop_cols = [k for k in data if k.startswith(STOP_SUB_COLUMN_PREFIX)]
 
         # generate masks for SLEN and time step
-        slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
-        for slen_col in slen_cols:
-            slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
-        slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
-        time_step_mask[:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+        if slen_cols:
+            # TEMPORARY: slen/sidx/sdec branch
+            padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
+            for slen_col in slen_cols:
+                padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
+
+            padding_mask = padding_mask.squeeze(-1)
+            time_step_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+            time_step_mask[:, 0] = (
+                10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+            )
+        elif stop_cols:
+            # TEMPORARY: stop/sidx branch
+            padding_mask = torch.zeros_like(data[stop_cols[0]], dtype=torch.int64)
+            for stop_col in stop_cols:
+                padding_mask |= data[stop_col]  # mask loss for padded rows, which have STOP=0
+            padding_mask = padding_mask.squeeze(-1)
+            stop_mask = padding_mask.clone()
+            # FIXME error occurs here, some sequences are never padded.
+            stop_mask[torch.arange(stop_mask.size(0)), torch.sum(data[stop_cols[0]], dim=1)] = (
+                1  # don't mask loss for stop tokens
+            )
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
@@ -285,10 +304,12 @@ def _calculate_sample_losses(
             elif col in sidx_cols or col in sdec_cols:
                 # SIDX and SDEC columns need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
-                mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+                mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+            elif col in stop_cols:
+                mask = stop_mask
             else:
                 # mask out paddings
-                mask = slen_mask
+                mask = padding_mask
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
@@ -373,6 +394,10 @@ def train(
         trn_cnt = tgt_stats["no_of_training_records"]
         val_cnt = tgt_stats["no_of_validation_records"]
         tgt_cardinalities = get_cardinalities(tgt_stats)
+        if f"{SLEN_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
+            del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
+        if f"{SDEC_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
+            del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
         ctx_cardinalities = get_cardinalities(ctx_stats) if has_context else {}
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_nested_sub_columns = get_sub_columns_nested_from_cardinalities(ctx_cardinalities, "processor")

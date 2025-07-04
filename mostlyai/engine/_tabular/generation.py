@@ -32,13 +32,14 @@ from mostlyai.engine._common import (
     CTXSEQ,
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SIDX_SDEC_COLUMN,
+    SLEN_SIDX_SDEC_STOP_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
-    decode_slen_sidx_sdec,
+    decode_slen_sidx_sdec_stop,
     encode_slen_sidx_sdec,
     get_argn_name,
     get_cardinalities,
@@ -108,7 +109,7 @@ def _resolve_gen_column_order(
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
-    # 0. SLEN/SIDX column
+    # 0. SLEN/SIDX/SDEC column
     # 1. Sample seed columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
@@ -184,9 +185,9 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SLEN_SIDX_SDEC_COLUMN in column_order:
+    if SLEN_SIDX_SDEC_STOP_COLUMN in column_order:
         # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [SLEN_SIDX_SDEC_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_COLUMN]
+        column_order = [SLEN_SIDX_SDEC_STOP_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_STOP_COLUMN]
 
     return column_order
 
@@ -275,6 +276,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
+    has_slen: bool,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -283,12 +285,27 @@ def _continue_sequence_mask(
         keys=[step_keys],
         key_name=key_name,
     )
-    # decode SLEN/SIDX columns
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    if has_slen:
+        # TEMPORARY: slen/sidx/sdec branch
+        # decode SLEN/SIDX/SDEC columns
+        syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+        syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+        syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    else:
+        # TEMPORARY: sidx/stop branch
+        # decode SIDX/STOP columns
+        syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+        syn[STOP_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=STOP_SUB_COLUMN_PREFIX)
+
+    if has_slen:
+        # TEMPORARY: slen/sidx/sdec branch
+        # calculate stop sequence mask (True=continue, False=stop)
+        return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    else:
+        # TEMPORARY: sidx/stop branch
+        # calculate stop sequence mask (True=continue, False=stop)
+        # TODO: only start discontinuing when sidx >= seq_len_min
+        return syn[STOP_SUB_COLUMN_PREFIX] == 1
 
 
 def _post_process_decoding(
@@ -609,6 +626,7 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
+    has_slen: bool = False,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -631,6 +649,7 @@ def decode_buffered_samples(
             tgt_context_key=tgt_context_key,
             seq_len_min=seq_len_min,
             seq_len_max=seq_len_max,
+            has_slen=has_slen,
         )
     else:
         (data,) = zip(*buffer.buffer)
@@ -708,13 +727,21 @@ def generate(
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
+        has_slen = False
         if is_sequential and model_configs.get("model_units"):
-            # remain backwards compatible to models trained without SDEC
-            has_sdec = any([f"{SDEC_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
-            if not has_sdec:
-                _LOG.warning("SDEC not found in model_units, removing SDEC columns from tgt_cardinalities")
+            # TODO: handle backwards compatibility later
+            has_slen = any([f"{SLEN_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
+            if has_slen:
+                # TEMPORARY: sidx/stop branch
+                del tgt_cardinalities[f"{STOP_SUB_COLUMN_PREFIX}cat"]
+                tgt_sub_columns.remove(f"{STOP_SUB_COLUMN_PREFIX}cat")
+            else:
+                # TEMPORARY: slen/sidx/sdec branch
+                del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
+                tgt_sub_columns.remove(f"{SLEN_SUB_COLUMN_PREFIX}cat")
                 del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
                 tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
+
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
@@ -1004,26 +1031,33 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
-                    if seq_step > 0:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                        slen = decode_slen_sidx_sdec(
-                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}),
-                            max_seq_len=seq_steps,
-                            prefix=SLEN_SUB_COLUMN_PREFIX,
-                        )
-                        sdec = (
-                            (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                        )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                    if has_slen:
+                        # TEMPORARY: slen/sidx/sdec branch
+                        # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
+                        if seq_step > 0:
+                            slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                            slen = decode_slen_sidx_sdec_stop(
+                                pd.DataFrame(
+                                    {c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}
+                                ),
+                                max_seq_len=seq_steps,
+                                prefix=SLEN_SUB_COLUMN_PREFIX,
+                            )
+                            sdec = (
+                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                        else:
+                            slen_vals = {}
+                            sdec = pd.Series([0] * step_size)  # initial sequence index decile
+                        sdec_vals = {
+                            f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
+                                torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
+                            )
+                        }
+                        fixed_values = sidx_vals | slen_vals | sdec_vals
                     else:
-                        slen_vals = {}
-                        sdec = pd.Series([0] * step_size)  # initial sequence index decile
-                    sdec_vals = {
-                        f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                            torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
-                        )
-                    }
-                    fixed_values = sidx_vals | slen_vals | sdec_vals
+                        # TEMPORARY: sidx/stop branch
+                        fixed_values = sidx_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1046,6 +1080,7 @@ def generate(
                         key_name=tgt_context_key,
                         seq_len_min=seq_len_min,
                         seq_len_max=seq_len_max,
+                        has_slen=has_slen,
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
@@ -1078,6 +1113,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
+                            has_slen=has_slen,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1146,6 +1182,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
+                    has_slen=has_slen,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1161,6 +1198,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
+                has_slen=has_slen,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
