@@ -272,21 +272,27 @@ def _calculate_sample_losses(
         # generate masks for SLEN and time step
         if slen_cols:
             # TEMPORARY: slen/sidx/sdec branch
-            slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
+            padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
             for slen_col in slen_cols:
-                slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
+                padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
 
-            slen_mask = slen_mask.squeeze(-1)
-            time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+            padding_mask = padding_mask.squeeze(-1)
+            time_step_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
             time_step_mask[:, 0] = (
                 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
             )
         elif stop_cols:
             # TEMPORARY: stop/sidx branch
-            slen_mask = torch.zeros_like(data[stop_cols[0]], dtype=torch.int64)
+            padding_mask = torch.zeros_like(data[stop_cols[0]], dtype=torch.int64)
             for stop_col in stop_cols:
-                slen_mask = torch.max(slen_mask, 1 - torch.cumsum(data[stop_col], dim=1) + data[stop_col])
-            slen_mask = slen_mask.squeeze(-1)
+                padding_mask |= data[stop_col]  # mask loss for padded rows, which have STOP=0
+            padding_mask = padding_mask.squeeze(-1)
+            stop_mask = padding_mask.clone()
+            # FIXME error occurs here, some sequences are never padded.
+            stop_mask[torch.arange(stop_mask.size(0)), torch.sum(data[stop_cols[0]], dim=1)] = (
+                1  # don't mask loss for stop tokens
+            )
+
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
@@ -298,10 +304,12 @@ def _calculate_sample_losses(
             elif col in sidx_cols or col in sdec_cols:
                 # SIDX and SDEC columns need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
-                mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+                mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+            elif col in stop_cols:
+                mask = stop_mask
             else:
                 # mask out paddings
-                mask = slen_mask
+                mask = padding_mask
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)

@@ -130,7 +130,7 @@ def _encode_partition(
             n_jobs=n_jobs,
         )
         # pad each list with one extra item
-        df_ctx = pad_horizontally(df_ctx, padding_value=0, right=False)
+        df_ctx = pad_horizontally(df_ctx, padding_value=0, right=False, pad_only_0seqlens=True)
 
     if is_sequential:
         assert isinstance(tgt_context_key, str)
@@ -150,7 +150,7 @@ def _encode_partition(
             df_miss = df_miss.merge(df_pads, how="cross")
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
         # pad each list with one extra item
-        df = pad_horizontally(df, padding_value=0, right=True)
+        df = pad_horizontally(df, padding_value=0, right=True, pad_only_0seqlens=False)
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
@@ -393,7 +393,7 @@ def _enrich_slen_sidx_sdec_stop(
     slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
-    stop = (sidx == slen - 1).astype(int)
+    stop = (slen != 0).astype(int)  # 1 if not padding, 0 otherwise
     sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     if use_stop:
         stop = encode_stop(stop)
@@ -406,16 +406,16 @@ def _enrich_slen_sidx_sdec_stop(
     return df
 
 
-def pad_horizontally(df: pd.DataFrame, padding_value: int, right=True) -> pd.DataFrame:
+def pad_horizontally(df: pd.DataFrame, padding_value: int, right=True, pad_only_0seqlens=True) -> pd.DataFrame:
     if df.shape[0] == 0:
         return df
     list_cols = [c for c in df.columns if is_a_list(df.loc[0, c])]
 
     def pad_right(x):
-        return x + [padding_value] if len(x) == 0 else x
+        return x + [padding_value] if len(x) == 0 or not pad_only_0seqlens else x
 
     def pad_left(x):
-        return [padding_value] + x if len(x) == 0 else x
+        return [padding_value] + x if len(x) == 0 or not pad_only_0seqlens else x
 
     for col in list_cols:
         df[col] = df[col].apply(pad_right if right else pad_left)
