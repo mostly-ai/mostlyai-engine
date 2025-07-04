@@ -726,6 +726,7 @@ def generate(
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
+        has_slen = False
         if is_sequential and model_configs.get("model_units"):
             # TODO: handle backwards compatibility later
             has_slen = any([f"{SLEN_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
