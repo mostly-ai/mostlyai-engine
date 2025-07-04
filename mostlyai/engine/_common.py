@@ -591,12 +591,14 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
         syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
         syn[STOP_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec_stop(syn, seq_len_max, prefix=STOP_SUB_COLUMN_PREFIX)
         # ensure that seq_len_min is respected
-        # ensure first stop=1 is propagated to all subsequent positions in each sequence
+        # ensure first stop=0 is propagated to all subsequent positions in each sequence
         syn[STOP_SUB_COLUMN_PREFIX] = syn.groupby(tgt_context_key)[STOP_SUB_COLUMN_PREFIX].transform(
-            lambda x: x.cummax()
+            lambda x: x.cummin()
         )
-        # ensure first stop=1 is beyond seq_len_min
-        syn.loc[syn[SIDX_SUB_COLUMN_PREFIX] < seq_len_min, STOP_SUB_COLUMN_PREFIX] = 0
+        # ensure first stop=0 is beyond seq_len_min
+        syn.loc[syn[SIDX_SUB_COLUMN_PREFIX] < seq_len_min, STOP_SUB_COLUMN_PREFIX] = 1
+        # pick only rows with stop=1
+        syn = syn[syn[STOP_SUB_COLUMN_PREFIX] == 1]
         # discarded padded context rows, ie where context key has been set to None
         syn = syn.dropna(subset=[tgt_context_key])
         # discard SIDX, STOP columns
