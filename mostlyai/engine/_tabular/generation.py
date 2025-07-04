@@ -730,15 +730,15 @@ def generate(
             # TODO: handle backwards compatibility later
             has_slen = any([f"{SLEN_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
             if has_slen:
+                # TEMPORARY: sidx/stop branch
+                del tgt_cardinalities[f"{STOP_SUB_COLUMN_PREFIX}cat"]
+                tgt_sub_columns.remove(f"{STOP_SUB_COLUMN_PREFIX}cat")
+            else:
                 # TEMPORARY: slen/sidx/sdec branch
                 del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
                 tgt_sub_columns.remove(f"{SLEN_SUB_COLUMN_PREFIX}cat")
                 del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
                 tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
-            else:
-                # TEMPORARY: sidx/stop branch
-                del tgt_cardinalities[f"{STOP_SUB_COLUMN_PREFIX}cat"]
-                tgt_sub_columns.remove(f"{STOP_SUB_COLUMN_PREFIX}cat")
 
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
