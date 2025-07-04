@@ -38,6 +38,7 @@ from mostlyai.engine._common import (
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -266,15 +267,26 @@ def _calculate_sample_losses(
     ):
         # TODO: masks are not needed for sidx and stop
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
+        stop_cols = [k for k in data if k.startswith(STOP_SUB_COLUMN_PREFIX)]
 
         # generate masks for SLEN and time step
-        slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
-        for slen_col in slen_cols:
-            slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
-        slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
-        time_step_mask[:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+        if slen_cols:
+            # TEMPORARY: slen/sidx/sdec branch
+            slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
+            for slen_col in slen_cols:
+                slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
 
+            slen_mask = slen_mask.squeeze(-1)
+            time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+            time_step_mask[:, 0] = (
+                10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+            )
+        elif stop_cols:
+            # TEMPORARY: stop/sidx branch
+            slen_mask = torch.zeros_like(data[stop_cols[0]], dtype=torch.int64)
+            for stop_col in stop_cols:
+                slen_mask = torch.max(slen_mask, 1 - torch.cumsum(data[stop_col], dim=1) + data[stop_col])
+            slen_mask = slen_mask.squeeze(-1)
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
@@ -374,6 +386,8 @@ def train(
         trn_cnt = tgt_stats["no_of_training_records"]
         val_cnt = tgt_stats["no_of_validation_records"]
         tgt_cardinalities = get_cardinalities(tgt_stats)
+        del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
+        del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
         ctx_cardinalities = get_cardinalities(ctx_stats) if has_context else {}
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_nested_sub_columns = get_sub_columns_nested_from_cardinalities(ctx_cardinalities, "processor")
