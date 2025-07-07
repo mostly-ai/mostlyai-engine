@@ -292,9 +292,7 @@ def _calculate_sample_losses(
             padding_mask = padding_mask.squeeze(-1)
             stop_mask = padding_mask.clone()
             # FIXME error occurs here, some sequences are never padded.
-            stop_mask[torch.arange(stop_mask.size(0)), torch.sum(data[stop_cols[0]], dim=1)] = (
-                1  # don't mask loss for stop tokens
-            )
+            stop_mask[torch.arange(stop_mask.size(0)), stop_mask.sum(dim=1)] = 1  # don't mask loss for stop tokens
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
