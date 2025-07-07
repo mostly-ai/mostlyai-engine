@@ -190,6 +190,9 @@ class BatchCollator:
 
     @staticmethod
     def _slice_sequences(batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
+        # we pad sequences with one step
+        # thus, to respect the max_sequence_window provided by the user, we need to add 1 to it
+        max_sequence_window += 1
         # determine sequence lengths of current batch
         tgt_columns = [col for col in batch.columns if col.startswith(TGT)]
         seq_lens = batch[tgt_columns[0]].copy().str.len().values
