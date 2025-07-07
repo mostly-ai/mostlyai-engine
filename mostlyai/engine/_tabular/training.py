@@ -298,6 +298,7 @@ def _calculate_sample_losses(
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
         losses_by_column = []
+        losses_stop_0 = []
         for col in tgt_cols:
             if col in slen_cols:
                 # mask out SLEN for steps > 1
@@ -313,13 +314,25 @@ def _calculate_sample_losses(
                 mask = padding_mask
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
+            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
             losses_by_column.append(masked_loss)
+
+            if col in stop_cols:
+                flipped = torch.flip(mask, dims=[1])
+                idx = flipped.argmax(dim=1)
+                mask_stop_0 = torch.zeros_like(mask)
+                row_idx = torch.arange(mask.size(0))
+                col_idx = mask.size(1) - 1 - idx
+                mask_stop_0[row_idx, col_idx] = 1
+                stop_0_loss = torch.sum(column_loss * mask_stop_0, dim=1)
+                losses_stop_0.append(stop_0_loss)
+
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
     losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
-    return losses
+    losses_stop_0 = torch.sum(torch.stack(losses_stop_0, dim=0), dim=0)
+    return losses, losses_stop_0
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory
@@ -330,12 +343,16 @@ def _calculate_val_loss(
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
+    zero_sample_losses = []
     for step_data in val_dataloader:
-        step_losses = _calculate_sample_losses(model, step_data)
+        step_losses, zero_losses = _calculate_sample_losses(model, step_data)
         val_sample_losses.extend(step_losses.detach())
+        zero_sample_losses.extend(zero_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
     val_loss_avg = torch.mean(val_sample_losses).item()
+    zero_loss_avg = torch.mean(torch.stack(zero_sample_losses, dim=0)).item()
+    print(f"zero_loss_avg: {zero_loss_avg}, val_loss_avg: {val_loss_avg}")
     return val_loss_avg
 
 
@@ -706,7 +723,7 @@ def train(
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
+                step_losses, zero_losses = _calculate_sample_losses(argn, step_data)
                 # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
                 #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
                 #  than the batch size in both flat and sequential case.

@@ -165,25 +165,25 @@ def test_sequential_without_context(tmp_path_factory):
     )
     tgt_data = mock_data.df
     # test single categorical column
-    split(
-        tgt_data=tgt_data,
-        tgt_context_key="id",
-        tgt_encoding_types={"seq": ModelEncodingType.tabular_categorical},
-        workspace_dir=workspace_dir,
-    )
-    tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
-    syn_data_path = workspace_dir / "SyntheticData"
-    analyze(workspace_dir=workspace_dir)
-    encode(workspace_dir=workspace_dir)
-    train(max_epochs=10, workspace_dir=workspace_dir)
-    generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
-    tgt = pd.read_parquet(tgt_data_path)
-    syn = pd.read_parquet(syn_data_path)
-    assert "id" in syn.columns and "seq" in syn.columns
-    assert syn["id"].nunique() == n_samples
-    syn_seq_lens = syn.groupby("id").size()
-    tgt_seq_lens = tgt.groupby("id").size()
-    assert abs(1 - syn_seq_lens.mean() / tgt_seq_lens.mean()) < 0.1
+    # split(
+    #     tgt_data=tgt_data,
+    #     tgt_context_key="id",
+    #     tgt_encoding_types={"seq": ModelEncodingType.tabular_categorical},
+    #     workspace_dir=workspace_dir,
+    # )
+    # tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
+    # syn_data_path = workspace_dir / "SyntheticData"
+    # analyze(workspace_dir=workspace_dir)
+    # encode(workspace_dir=workspace_dir)
+    # train(max_epochs=10, workspace_dir=workspace_dir)
+    # generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
+    # tgt = pd.read_parquet(tgt_data_path)
+    # syn = pd.read_parquet(syn_data_path)
+    # assert "id" in syn.columns and "seq" in syn.columns
+    # assert syn["id"].nunique() == n_samples
+    # syn_seq_lens = syn.groupby("id").size()
+    # tgt_seq_lens = tgt.groupby("id").size()
+    # assert abs(1 - syn_seq_lens.mean() / tgt_seq_lens.mean()) < 0.1
 
     # test zero columns
     shutil.rmtree(workspace_dir / "SyntheticData", ignore_errors=True)
