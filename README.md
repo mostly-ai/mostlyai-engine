@@ -10,7 +10,7 @@
 
 Create high-fidelity privacy-safe synthetic data:
 
-1 prepare, analyze, and encode original data
+1. prepare, analyze, and encode original data
 2. train a generative model on the encoded data
 3. generate synthetic data samples to your needs:
     * up-sample / down-sample
