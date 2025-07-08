@@ -259,6 +259,7 @@ def _calculate_sample_losses(
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
         output, _ = model(data, mode="trn")
     criterion = nn.CrossEntropyLoss(reduction="none")
+    actual_to_predicted_seq_len = {}
 
     tgt_cols = (
         list(model.tgt_cardinalities.keys())
@@ -296,12 +297,13 @@ def _calculate_sample_losses(
             valid = col_idx < stop_mask.size(1)
             stop_mask[row_idx[valid], col_idx[valid]] = 1  # don't mask loss for stop tokens
 
+            # CODE TO MULTIPLY STOP TOKEN LOSS BY 10x
             # flipped = torch.flip(stop_mask, dims=[1])
             # idx = flipped.argmax(dim=1)
             # mask_stop_0 = torch.ones_like(stop_mask)
             # row_idx = torch.arange(stop_mask.size(0))
             # col_idx = stop_mask.size(1) - 1 - idx
-            # mask_stop_0[row_idx, col_idx] = 1
+            # mask_stop_0[row_idx, col_idx] = 10
             # stop_mask *= mask_stop_0
 
         # calculate per column losses
@@ -325,9 +327,8 @@ def _calculate_sample_losses(
             if col in stop_cols:
                 tgt_seqlens = [t.item() for t in data[col].squeeze(2).sum(dim=1)]
                 pred_zero_idx = [t.item() for t in output[col].argmax(dim=2).argmin(dim=1)]
-                mapping = {}
                 for tgt_len, pred_len in zip(tgt_seqlens, pred_zero_idx):
-                    mapping.setdefault(tgt_len, []).append(pred_len)
+                    actual_to_predicted_seq_len.setdefault(tgt_len, []).append(pred_len)
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
@@ -336,7 +337,7 @@ def _calculate_sample_losses(
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
     losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
-    return losses, mapping
+    return losses, actual_to_predicted_seq_len
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory
