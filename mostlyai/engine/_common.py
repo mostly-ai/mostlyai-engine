@@ -597,7 +597,7 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
             lambda x: x.cummin()
         )
         # ensure first stop=0 is beyond seq_len_min
-        syn.loc[syn[SIDX_SUB_COLUMN_PREFIX] < seq_len_min, STOP_SUB_COLUMN_PREFIX] = 1
+        syn.loc[syn[SIDX_SUB_COLUMN_PREFIX] <= seq_len_min, STOP_SUB_COLUMN_PREFIX] = 1
         # pick only rows with stop=1
         syn = syn[syn[STOP_SUB_COLUMN_PREFIX] == 1]
         # discarded padded context rows, ie where context key has been set to None

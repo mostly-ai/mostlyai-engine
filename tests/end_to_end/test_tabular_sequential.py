@@ -154,7 +154,7 @@ def test_sequential_with_context(tmp_path_factory):
 
 
 def test_sequential_without_context(tmp_path_factory):
-    n_samples = 2_000
+    n_samples = 3_000
     workspace_dir = tmp_path_factory.mktemp("workspace")
     mock_data = MockData(n_samples=n_samples)
     mock_data.add_index_column("id")
@@ -175,37 +175,37 @@ def test_sequential_without_context(tmp_path_factory):
     syn_data_path = workspace_dir / "SyntheticData"
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=15, workspace_dir=workspace_dir)
+    train(max_epochs=10, workspace_dir=workspace_dir)
     generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
     tgt = pd.read_parquet(tgt_data_path)
     syn = pd.read_parquet(syn_data_path)
     assert "id" in syn.columns and "seq" in syn.columns
-    # assert syn["id"].nunique() == n_samples
+    assert syn["id"].nunique() == n_samples
     syn_seq_lens = syn.groupby("id").size()
     tgt_seq_lens = tgt.groupby("id").size()
     assert abs(1 - syn_seq_lens.mean() / tgt_seq_lens.mean()) < 0.1
 
     # test zero columns
-    # shutil.rmtree(workspace_dir / "SyntheticData", ignore_errors=True)
-    # split(
-    #     tgt_data=tgt_data[["id"]],
-    #     tgt_context_key="id",
-    #     tgt_encoding_types={},
-    #     workspace_dir=workspace_dir,
-    # )
-    # tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
-    # analyze(workspace_dir=workspace_dir)
-    # encode(workspace_dir=workspace_dir)
-    # train(max_epochs=10, workspace_dir=workspace_dir)
-    # generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
-    # syn_data_path = workspace_dir / "SyntheticData"
-    # tgt = pd.read_parquet(tgt_data_path)
-    # syn = pd.read_parquet(syn_data_path)
-    # assert "id" in syn.columns
-    # assert syn["id"].nunique() == n_samples
-    # syn_seq_lens = syn.groupby("id").size()
-    # tgt_seq_lens = tgt.groupby("id").size()
-    # assert abs(1 - syn_seq_lens.mean() / tgt_seq_lens.mean()) < 0.1
+    shutil.rmtree(workspace_dir / "SyntheticData", ignore_errors=True)
+    split(
+        tgt_data=tgt_data[["id"]],
+        tgt_context_key="id",
+        tgt_encoding_types={},
+        workspace_dir=workspace_dir,
+    )
+    tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    train(max_epochs=10, workspace_dir=workspace_dir)
+    generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
+    syn_data_path = workspace_dir / "SyntheticData"
+    tgt = pd.read_parquet(tgt_data_path)
+    syn = pd.read_parquet(syn_data_path)
+    assert "id" in syn.columns
+    assert syn["id"].nunique() == n_samples
+    syn_seq_lens = syn.groupby("id").size()
+    tgt_seq_lens = tgt.groupby("id").size()
+    assert abs(1 - syn_seq_lens.mean() / tgt_seq_lens.mean()) < 0.1
 
 
 def test_sequential_zero_length_subjects_only(tmp_path):

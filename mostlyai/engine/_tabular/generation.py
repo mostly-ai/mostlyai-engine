@@ -304,8 +304,7 @@ def _continue_sequence_mask(
     else:
         # TEMPORARY: sidx/stop branch
         # calculate stop sequence mask (True=continue, False=stop)
-        # TODO: only start discontinuing when sidx >= seq_len_min
-        return syn[STOP_SUB_COLUMN_PREFIX] == 1
+        return (syn[STOP_SUB_COLUMN_PREFIX] == 1) | (syn[SIDX_SUB_COLUMN_PREFIX] <= seq_len_min)
 
 
 def _post_process_decoding(
