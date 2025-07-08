@@ -251,6 +251,9 @@ class TabularModelCheckpoint(ModelCheckpoint):
 def _calculate_sample_losses(
     model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
 ) -> torch.Tensor:
+    # FIXME randomly pick X, X<=seq_len
+    # FIXME drop out 0:X (exclusive) of the SLEN_SUB_COLUMN_PREFIX cat column.
+    # FIXME HOW do we drop out SLEN? Would 0 be problematic because some sequences are 0 length? Or is zero never input to the model anyway?
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
         output, _ = model(data, mode="trn")
@@ -272,8 +275,8 @@ def _calculate_sample_losses(
             slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         slen_mask = slen_mask.squeeze(-1)
         time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+        # FIXME set 0:X to 1, and X: to 0
         time_step_mask[:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
-
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
