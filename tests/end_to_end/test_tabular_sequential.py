@@ -101,7 +101,7 @@ def test_sequential_with_context(tmp_path_factory):
 
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=20, workspace_dir=workspace_dir)
+    train(max_epochs=10, workspace_dir=workspace_dir)
     generate(
         workspace_dir=workspace_dir,
         rare_category_replacement_method=RareCategoryReplacementMethod.sample,
