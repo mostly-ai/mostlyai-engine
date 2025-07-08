@@ -545,7 +545,7 @@ def get_slen_sidx_sdec_stop_cardinalities(max_seq_len) -> dict[str, int]:
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
         # encode slen and sidx as numeric_discrete
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
-        sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+        sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 2}
     else:
         # encode slen and sidx as numeric_digit
         digits = [int(digit) for digit in str(max_seq_len)]
@@ -561,6 +561,7 @@ def get_slen_sidx_sdec_stop_cardinalities(max_seq_len) -> dict[str, int]:
     # order is important: slen first, then sidx, as the former has highest priority
     sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
     stop_cardinalities = {f"{STOP_SUB_COLUMN_PREFIX}cat": 2}
+    # return slen_cardinalities | sdec_cardinalities | stop_cardinalities | sidx_cardinalities
     return slen_cardinalities | sidx_cardinalities | sdec_cardinalities | stop_cardinalities
 
 

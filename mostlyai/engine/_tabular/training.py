@@ -336,6 +336,7 @@ def _calculate_val_loss(
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
     val_loss_avg = torch.mean(val_sample_losses).item()
+    print(val_loss_avg)
     return val_loss_avg
 
 

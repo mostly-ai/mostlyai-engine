@@ -151,6 +151,9 @@ def _encode_partition(
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
         # pad each list with one extra item
         df = pad_horizontally(df, padding_value=0, right=True, pad_only_0seqlens=False)
+        df[f"{SIDX_SUB_COLUMN_PREFIX}cat"] = df[f"{SIDX_SUB_COLUMN_PREFIX}cat"].apply(
+            lambda x: x[:-1] + [x[-2] + 1] if len(x) >= 2 else [1]
+        )
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
@@ -391,12 +394,13 @@ def _enrich_slen_sidx_sdec_stop(
 ) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
-    sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
+    sidx = df.groupby(context_key).cumcount(ascending=True) + 1  # sequence index
     sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
     stop = (slen != 0).astype(int)  # 1 if not padding, 0 otherwise
     sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     if use_stop:
         stop = encode_stop(stop)
+        # sequence_columns = [stop, sidx]
         sequence_columns = [sidx, stop]
     else:
         slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)

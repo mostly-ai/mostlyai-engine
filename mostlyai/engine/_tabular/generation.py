@@ -1022,7 +1022,7 @@ def generate(
                     if step_size == 0:
                         break
                     # fix SIDX by incrementing ourselves instead of sampling
-                    sidx = pd.Series([seq_step] * step_size)
+                    sidx = pd.Series([seq_step + 1] * step_size)
                     sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
@@ -1057,7 +1057,7 @@ def generate(
                         fixed_values = sidx_vals | slen_vals | sdec_vals
                     else:
                         # TEMPORARY: sidx/stop branch
-                        fixed_values = sidx_vals
+                        fixed_values = {}  # sidx_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
