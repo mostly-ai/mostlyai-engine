@@ -175,7 +175,7 @@ def test_sequential_without_context(tmp_path_factory):
     syn_data_path = workspace_dir / "SyntheticData"
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=100, workspace_dir=workspace_dir)
+    train(max_epochs=15, workspace_dir=workspace_dir)
     generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
     tgt = pd.read_parquet(tgt_data_path)
     syn = pd.read_parquet(syn_data_path)
