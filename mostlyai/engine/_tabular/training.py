@@ -251,13 +251,14 @@ class TabularModelCheckpoint(ModelCheckpoint):
 def _calculate_sample_losses(
     model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
 ) -> torch.Tensor:
-    # FIXME randomly pick X, X<=seq_len
+    # FIXME randomly pick X, X<=slen
     # FIXME drop out 0:X (exclusive) of the SLEN_SUB_COLUMN_PREFIX cat column.
     # FIXME HOW do we drop out SLEN? Would 0 be problematic because some sequences are 0 length? Or is zero never input to the model anyway?
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
         output, _ = model(data, mode="trn")
     criterion = nn.CrossEntropyLoss(reduction="none")
+    # FIXME reintroduce SLEN_SUB_COLUMN_PREFIX cat column without dropout, for use in target calculation.
 
     tgt_cols = (
         list(model.tgt_cardinalities.keys())
