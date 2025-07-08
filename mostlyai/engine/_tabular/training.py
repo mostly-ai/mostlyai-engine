@@ -259,7 +259,7 @@ def _calculate_sample_losses(
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
         output, _ = model(data, mode="trn")
     criterion = nn.CrossEntropyLoss(reduction="none")
-    actual_to_predicted_seq_len = {}
+    # actual_to_predicted_seq_len = {}
 
     tgt_cols = (
         list(model.tgt_cardinalities.keys())
@@ -324,11 +324,12 @@ def _calculate_sample_losses(
                 # mask out paddings
                 mask = padding_mask
 
-            if col in stop_cols:
-                tgt_seqlens = [t.item() for t in data[col].squeeze(2).sum(dim=1)]
-                pred_zero_idx = [t.item() for t in output[col].argmax(dim=2).argmin(dim=1)]
-                for tgt_len, pred_len in zip(tgt_seqlens, pred_zero_idx):
-                    actual_to_predicted_seq_len.setdefault(tgt_len, []).append(pred_len)
+            # CODE TO CALCULATE ACTUAL SEQUENCE LENGTH vs PREDICTED SEQUENCE LENGTH
+            # if col in stop_cols:
+            #     tgt_seqlens = [t.item() for t in data[col].squeeze(2).sum(dim=1)]
+            #     pred_zero_idx = [t.item() for t in output[col].argmax(dim=2).argmin(dim=1)]
+            #     for tgt_len, pred_len in zip(tgt_seqlens, pred_zero_idx):
+            #         actual_to_predicted_seq_len.setdefault(tgt_len, []).append(pred_len)
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
@@ -337,7 +338,7 @@ def _calculate_sample_losses(
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
     losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
-    return losses, actual_to_predicted_seq_len
+    return losses  # , actual_to_predicted_seq_len
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory
@@ -348,19 +349,18 @@ def _calculate_val_loss(
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
-    mapping_all = {}
+    # mapping_all = {}
     for step_data in val_dataloader:
-        step_losses, mapping = _calculate_sample_losses(model, step_data)
-        for k, v in mapping.items():
-            mapping_all.setdefault(k, []).extend(v)
+        step_losses = _calculate_sample_losses(model, step_data)
+        # for k, v in mapping.items():
+        #     mapping_all.setdefault(k, []).extend(v)
         val_sample_losses.extend(step_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
     val_loss_avg = torch.mean(val_sample_losses).item()
-    print(val_loss_avg)
-    mapping_avg = {k: sum(v) / len(v) for k, v in mapping_all.items()}
-    mapping_avg = dict(sorted(mapping_avg.items()))
-    print(f"ACTUAL SEQUENCE LENGTH vs PREDICTED (AVG): {mapping_avg}")
+    # mapping_avg = {k: sum(v) / len(v) for k, v in mapping_all.items()}
+    # mapping_avg = dict(sorted(mapping_avg.items()))
+    # print(f"ACTUAL SEQUENCE LENGTH vs PREDICTED (AVG): {mapping_avg}")
     return val_loss_avg
 
 
