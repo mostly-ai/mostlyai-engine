@@ -292,7 +292,7 @@ def _calculate_sample_losses(
                 padding_mask |= data[stop_col]  # mask loss for padded rows, which have STOP=0
             padding_mask = padding_mask.squeeze(-1)
             stop_mask = padding_mask.clone()
-            row_idx = torch.arange(stop_mask.size(0))
+            row_idx = torch.arange(stop_mask.size(0), dtype=torch.int64)
             col_idx = stop_mask.sum(dim=1)
             valid = col_idx < stop_mask.size(1)
             stop_mask[row_idx[valid], col_idx[valid]] = 1  # don't mask loss for stop tokens
