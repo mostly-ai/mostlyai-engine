@@ -326,8 +326,9 @@ def _calculate_sample_losses(
                 for tgt_len, pred_len in zip(tgt_seqlens, pred_zero_idx):
                     mapping.setdefault(tgt_len, []).append(pred_len)
 
+            mask = mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
+            masked_loss = torch.sum(column_loss, dim=1)  # / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
