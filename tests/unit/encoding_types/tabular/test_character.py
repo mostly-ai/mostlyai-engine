@@ -75,6 +75,7 @@ def test_character_empty():
     df_encoded = encode_character(values, stats)
     df_decoded = decode_character(df_encoded, stats)
     assert all(df_decoded.isna())
+    assert df_decoded.index.is_unique
 
     values = pd.Series(["hello", None, None], name="value")
     df_encoded = encode_character(values, stats)
