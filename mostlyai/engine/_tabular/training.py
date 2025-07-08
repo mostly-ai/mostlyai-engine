@@ -199,10 +199,10 @@ class BatchCollator:
 
         # determine sampling logic for current batch
         flip = np.random.random()
-        if flip < 0.3:  # 30%
+        if flip < 0.1:  # 10%
             # pick start of the sequence to focus on the beginning
             sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
-        elif 0.3 <= flip < 0.4:  # 10%
+        elif 0.1 <= flip < 0.4:  # 30%
             # pick end of the sequence to focus on the end
             sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
         else:  # 60%
@@ -291,7 +291,10 @@ def _calculate_sample_losses(
                 padding_mask |= data[stop_col]  # mask loss for padded rows, which have STOP=0
             padding_mask = padding_mask.squeeze(-1)
             stop_mask = padding_mask.clone()
-            stop_mask[torch.arange(stop_mask.size(0)), stop_mask.sum(dim=1)] = 1  # don't mask loss for stop tokens
+            row_idx = torch.arange(stop_mask.size(0))
+            col_idx = stop_mask.sum(dim=1)
+            valid = col_idx < stop_mask.size(1)
+            stop_mask[row_idx[valid], col_idx[valid]] = 1  # don't mask loss for stop tokens
 
             # flipped = torch.flip(stop_mask, dims=[1])
             # idx = flipped.argmax(dim=1)
