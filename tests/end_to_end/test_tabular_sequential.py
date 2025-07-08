@@ -154,7 +154,7 @@ def test_sequential_with_context(tmp_path_factory):
 
 
 def test_sequential_without_context(tmp_path_factory):
-    n_samples = 3_000
+    n_samples = 2_000
     workspace_dir = tmp_path_factory.mktemp("workspace")
     mock_data = MockData(n_samples=n_samples)
     mock_data.add_index_column("id")

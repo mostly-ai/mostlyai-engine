@@ -400,8 +400,8 @@ def _enrich_slen_sidx_sdec_stop(
     sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     if use_stop:
         stop = encode_stop(stop)
-        sequence_columns = [stop, sidx]
-        # sequence_columns = [sidx, stop]
+        # sequence_columns = [stop, sidx]
+        sequence_columns = [sidx, stop]
     else:
         slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
         sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
