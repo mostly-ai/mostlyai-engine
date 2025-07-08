@@ -291,8 +291,15 @@ def _calculate_sample_losses(
                 padding_mask |= data[stop_col]  # mask loss for padded rows, which have STOP=0
             padding_mask = padding_mask.squeeze(-1)
             stop_mask = padding_mask.clone()
-            # FIXME error occurs here, some sequences are never padded.
             stop_mask[torch.arange(stop_mask.size(0)), stop_mask.sum(dim=1)] = 1  # don't mask loss for stop tokens
+
+            # flipped = torch.flip(stop_mask, dims=[1])
+            # idx = flipped.argmax(dim=1)
+            # mask_stop_0 = torch.ones_like(stop_mask)
+            # row_idx = torch.arange(stop_mask.size(0))
+            # col_idx = stop_mask.size(1) - 1 - idx
+            # mask_stop_0[row_idx, col_idx] = 1
+            # stop_mask *= mask_stop_0
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
@@ -312,14 +319,21 @@ def _calculate_sample_losses(
                 # mask out paddings
                 mask = padding_mask
 
+            if col in stop_cols:
+                tgt_seqlens = [t.item() for t in data[col].squeeze(2).sum(dim=1)]
+                pred_zero_idx = [t.item() for t in output[col].argmax(dim=2).argmin(dim=1)]
+                mapping = {}
+                for tgt_len, pred_len in zip(tgt_seqlens, pred_zero_idx):
+                    mapping.setdefault(tgt_len, []).append(pred_len)
+
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
+            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
     losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
-    return losses
+    return losses, mapping
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory
@@ -330,13 +344,19 @@ def _calculate_val_loss(
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
+    mapping_all = {}
     for step_data in val_dataloader:
-        step_losses = _calculate_sample_losses(model, step_data)
+        step_losses, mapping = _calculate_sample_losses(model, step_data)
+        for k, v in mapping.items():
+            mapping_all.setdefault(k, []).extend(v)
         val_sample_losses.extend(step_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
     val_loss_avg = torch.mean(val_sample_losses).item()
     print(val_loss_avg)
+    mapping_avg = {k: sum(v) / len(v) for k, v in mapping_all.items()}
+    mapping_avg = dict(sorted(mapping_avg.items()))
+    print(f"ACTUAL SEQUENCE LENGTH vs PREDICTED (AVG): {mapping_avg}")
     return val_loss_avg
 
 
@@ -707,7 +727,7 @@ def train(
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
+                step_losses, _ = _calculate_sample_losses(argn, step_data)
                 # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
                 #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
                 #  than the batch size in both flat and sequential case.

@@ -1057,7 +1057,7 @@ def generate(
                         fixed_values = sidx_vals | slen_vals | sdec_vals
                     else:
                         # TEMPORARY: sidx/stop branch
-                        fixed_values = {}  # sidx_vals
+                        fixed_values = sidx_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
