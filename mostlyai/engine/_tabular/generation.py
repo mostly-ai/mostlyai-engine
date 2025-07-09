@@ -78,7 +78,7 @@ from mostlyai.engine._tabular.argn import (
     get_no_of_model_parameters,
 )
 from mostlyai.engine._tabular.common import load_model_weights
-from mostlyai.engine._tabular.encoding import encode_df, encode_stop, pad_horizontally
+from mostlyai.engine._tabular.encoding import encode_df, pad_horizontally
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 from mostlyai.engine.domain import (
@@ -973,7 +973,7 @@ def generate(
                 seed_batch_encoded, _, seed_context_key_encoded = encode_df(
                     df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
                 )
-                stop_df = encode_stop(pd.Series([1] * len(seed_batch)))
+                stop_df = pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": pd.Series([1] * len(seed_batch))})
                 seed_batch_encoded = pd.concat([stop_df, seed_batch_encoded], axis=1)
             else:
                 seed_batch_encoded, _, seed_context_key_encoded = encode_df(df=seed_batch, stats=tgt_stats)
