@@ -137,17 +137,18 @@ def _encode_partition(
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
         # pad every sequence by one row
         df = pad_vertically(df, padding_value=0, context_key=tgt_context_key)
-        # enrich with sequence lengths and sequence indexes
-        df = _enrich_sidx_stop(df, tgt_context_key, max_len)
-        # flatten to list columns
-        df = flatten_frame(df, tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         if has_context:
             zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
             df_miss = pd.DataFrame({tgt_context_key: zero_seq_ids})
-            df_pads = pd.DataFrame({c: [[]] for c in df.columns if c != tgt_context_key})
+            df_pads = pd.DataFrame({c: [0] for c in df.columns if c != tgt_context_key})
             df_miss = df_miss.merge(df_pads, how="cross")
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
+        # enrich with sequence lengths and sequence indexes
+        df = _enrich_sidx_stop(df, tgt_context_key, max_len)
+        # flatten to list columns
+        df = flatten_frame(df, tgt_context_key)
+
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
