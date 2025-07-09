@@ -383,8 +383,8 @@ def _enrich_sidx_stop(df: pd.DataFrame, context_key: str, max_seq_len: int) -> p
     df = df.reset_index(drop=True)
     sidx = df.groupby(context_key).cumcount(ascending=True) + 1  # sequence index
     stop = (
-        df.groupby(context_key)[df.columns]
-        .apply(lambda x: x.index != x.index.max())
+        df.groupby(context_key)[context_key]
+        .apply(lambda x: x.index != x.index.max(), include_groups=True)
         .explode()
         .reset_index(drop=True)
         .astype(int)
