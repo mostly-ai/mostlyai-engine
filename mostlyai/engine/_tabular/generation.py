@@ -48,7 +48,6 @@ from mostlyai.engine._common import (
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
     get_sub_columns_nested_from_cardinalities,
-    is_sequential,
     persist_data_part,
     trim_sequences,
 )
@@ -103,14 +102,14 @@ def _resolve_gen_column_order(
     cardinalities: dict,
     rebalancing: RebalancingConfig | None = None,
     imputation: ImputationConfig | None = None,
-    sample_seed: pd.DataFrame | None = None,
+    seed_data: pd.DataFrame | None = None,
     fairness: FairnessConfig | None = None,
 ):
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
     # 0. SLEN/SIDX/SDEC column
-    # 1. Sample seed columns
+    # 1. Seed data columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
     # 4. Fairness sensitive columns (which are imputation columns as well)
@@ -171,16 +170,16 @@ def _resolve_gen_column_order(
             )
             column_order = [rebalance_column_argn] + [c for c in column_order if c != rebalance_column_argn]
 
-    if sample_seed is not None:
-        # sample_seed columns should be at the beginning in the generation model
-        # sample_seed has higher priority than rebalancing and imputation
+    if seed_data is not None:
+        # seed_data columns should be at the beginning in the generation model
+        # seed_data has higher priority than rebalancing and imputation
         seed_columns_argn = [
             get_argn_name(
                 argn_processor=column_stats[col][ARGN_PROCESSOR],
                 argn_table=column_stats[col][ARGN_TABLE],
                 argn_column=column_stats[col][ARGN_COLUMN],
             )
-            for col in sample_seed.columns
+            for col in seed_data.columns
             if col in column_stats
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
@@ -207,34 +206,6 @@ def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
     rows_per_batch = len(df) / no_of_batches
     running_total = pd.Series(range(len(df))) / rows_per_batch
     df = df.assign(__BATCH=running_total.astype(int) + 1)
-    return df
-
-
-def _pad_vertically(df: pd.DataFrame, batch_size: int, primary_key: str) -> pd.DataFrame:
-    """
-    Append rows with zeros so that `df` has `batch_size` rows.
-    """
-    # determine number of required padded rows
-    no_of_pad_rows = batch_size - df.shape[0]
-    if no_of_pad_rows <= 0:
-        return df
-
-    # create padded rows with zeros
-    def pad_flat(c):
-        return pd.Series(np.repeat([0], no_of_pad_rows), name=c)
-
-    def pad_seq(c):
-        return pd.Series(np.empty((no_of_pad_rows, 0)).tolist(), name=c)
-
-    pads = pd.concat(
-        [pad_seq(c) if is_sequential(df[c]) else pad_flat(c) for c in df.columns],
-        axis=1,
-    )
-    # flag padded rows by setting its key column to None
-    pads[primary_key] = None
-    # concatenate the padded rows to original data
-    df = pd.concat([df, pads], axis=0)
-    df.reset_index(drop=True, inplace=True)
     return df
 
 
@@ -772,13 +743,13 @@ def generate(
         _LOG.info(f"imputation: {imputation}")
         _LOG.info(f"rebalancing: {rebalancing}")
         _LOG.info(f"fairness: {fairness}")
-        _LOG.info(f"sample_seed: {list(seed_data.columns) if isinstance(seed_data, pd.DataFrame) else None}")
+        _LOG.info(f"seed_data: {list(seed_data.columns) if isinstance(seed_data, pd.DataFrame) else None}")
         gen_column_order = _resolve_gen_column_order(
             column_stats=tgt_stats["columns"],
             cardinalities=tgt_cardinalities,
             rebalancing=rebalancing,
             imputation=imputation,
-            sample_seed=seed_data,
+            seed_data=seed_data,
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
@@ -831,7 +802,7 @@ def generate(
             if seed_data is None:
                 trn_sample_size = tgt_stats["no_of_training_records"] + tgt_stats["no_of_validation_records"]
                 sample_size = trn_sample_size if sample_size is None else sample_size
-            else:  # sample_seed is not None
+            else:  # seed_data is not None
                 sample_size = len(seed_data)
             ctx_primary_key = tgt_context_key or DUMMY_CONTEXT_KEY
             tgt_context_key = ctx_primary_key
@@ -840,10 +811,10 @@ def generate(
             ctx_data = ctx_primary_keys.to_frame()
 
         if seed_data is None:
-            # create on-the-fly sample seed
+            # create on-the-fly seed data
             seed_data = pd.DataFrame(index=range(sample_size))
 
-        # ensure valid columns in sample_seed
+        # ensure valid columns in seed_data
         tgt_columns = list(tgt_stats["columns"].keys()) + ([tgt_primary_key] if tgt_primary_key else [])
         seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
 
@@ -940,7 +911,7 @@ def generate(
         # add __BATCH to ctx_data
         ctx_data = _batch_df(ctx_data, no_of_batches)
 
-        # add __BATCH to sample_seed
+        # add __BATCH to seed_data
         seed_data = _batch_df(seed_data, no_of_batches)
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -974,7 +945,7 @@ def generate(
             ctx_keys.rename(tgt_context_key, inplace=True)
 
             # encode seed_batch
-            _LOG.info(f"encode sample seed values {seed_batch.shape}")
+            _LOG.info(f"encode seed data values {seed_batch.shape}")
             seed_batch_encoded, _, _ = encode_df(df=seed_batch, stats=tgt_stats)
 
             # sample data from generative model
