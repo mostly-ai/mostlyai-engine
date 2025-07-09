@@ -433,14 +433,14 @@ class TestResolveGenColumnOrder:
         seq_expected = ["tgt:/"] + flat_expected
         assert gen_column_order == {"flat": flat_expected, "sequential": seq_expected}[model_type]
 
-    def test_sample_seed(self, stats_and_cards):
-        # sample seed only applies to flat model
+    def test_seed_data(self, stats_and_cards):
+        # seed data only applies to flat model
         col_stats, flat_cardinalities, _ = stats_and_cards
-        sample_seed = pd.DataFrame(columns=["sex", "age", "I_don't_exist"])
+        seed_data = pd.DataFrame(columns=["sex", "age", "I_don't_exist"])
         gen_column_order = _resolve_gen_column_order(
             column_stats=col_stats,
             cardinalities=flat_cardinalities,
-            sample_seed=sample_seed,
+            seed_data=seed_data,
         )
         assert gen_column_order == ["tgt:t1/c1", "tgt:t0/c0", "tgt:t2/c2"]
 
@@ -496,7 +496,7 @@ class TestResolveGenColumnOrder:
         gen_column_order = _resolve_gen_column_order(
             column_stats=col_stats,
             cardinalities=cardinalities,
-            sample_seed=seed,
+            seed_data=seed,
             rebalancing=rebalancing,
             fairness=fairness,
             imputation=imputation,

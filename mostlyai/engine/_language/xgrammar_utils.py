@@ -42,7 +42,7 @@ def prepend_grammar_root_with_space(grammar: str) -> str:
     return grammar.replace(start_of_grammar, start_of_grammar_with_space)
 
 
-def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:
+def ensure_seed_can_be_tokenized(seed_data: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:
     def transform(x: str | pd._libs.missing.NAType) -> str:
         if pd.isna(x):
             null = tokenizer.decode(tokenizer.encode(JSON_NULL), skip_special_tokens=True)
@@ -53,7 +53,7 @@ def ensure_seed_can_be_tokenized(sample_seed: pd.DataFrame, tokenizer: PreTraine
         # skip tokens unseen during training
         return tokenizer.decode(tokenizer.encode(x), skip_special_tokens=True)
 
-    return sample_seed.astype(STRING).map(transform)
+    return seed_data.astype(STRING).map(transform)
 
 
 def create_schemas(
