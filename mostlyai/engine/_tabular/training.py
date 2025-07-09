@@ -408,7 +408,7 @@ def train(
             del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
         if f"{SDEC_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
             del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
-            ctx_cardinalities = get_cardinalities(ctx_stats) if has_context else {}
+        ctx_cardinalities = get_cardinalities(ctx_stats) if has_context else {}
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_nested_sub_columns = get_sub_columns_nested_from_cardinalities(ctx_cardinalities, "processor")
         ctxflt_sub_columns = ctx_nested_sub_columns.get(CTXFLT, [])
