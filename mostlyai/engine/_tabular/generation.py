@@ -47,7 +47,6 @@ from mostlyai.engine._common import (
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
     get_sub_columns_nested_from_cardinalities,
-    is_sequential,
     persist_data_part,
     trim_sequences,
 )
@@ -206,34 +205,6 @@ def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
     rows_per_batch = len(df) / no_of_batches
     running_total = pd.Series(range(len(df))) / rows_per_batch
     df = df.assign(__BATCH=running_total.astype(int) + 1)
-    return df
-
-
-def _pad_vertically(df: pd.DataFrame, batch_size: int, primary_key: str) -> pd.DataFrame:
-    """
-    Append rows with zeros so that `df` has `batch_size` rows.
-    """
-    # determine number of required padded rows
-    no_of_pad_rows = batch_size - df.shape[0]
-    if no_of_pad_rows <= 0:
-        return df
-
-    # create padded rows with zeros
-    def pad_flat(c):
-        return pd.Series(np.repeat([0], no_of_pad_rows), name=c)
-
-    def pad_seq(c):
-        return pd.Series(np.empty((no_of_pad_rows, 0)).tolist(), name=c)
-
-    pads = pd.concat(
-        [pad_seq(c) if is_sequential(df[c]) else pad_flat(c) for c in df.columns],
-        axis=1,
-    )
-    # flag padded rows by setting its key column to None
-    pads[primary_key] = None
-    # concatenate the padded rows to original data
-    df = pd.concat([df, pads], axis=0)
-    df.reset_index(drop=True, inplace=True)
     return df
 
 

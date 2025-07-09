@@ -39,7 +39,6 @@ from mostlyai.engine._tabular.generation import (
     _fix_imputation_probs,
     _fix_rare_token_probs,
     _fix_rebalancing_probs,
-    _pad_vertically,
     _reshape_pt_to_pandas,
     _resolve_gen_column_order,
     _translate_fixed_probs,
@@ -250,28 +249,6 @@ def test_batch_df():
     # assert same behaviour as previous logic:
     # dask.dataframe.from_pandas(df, npartitions=no_of_batches)
     assert list(df["__BATCH"].value_counts()) == [11] * 9 + [10]
-
-
-class TestPadVertically:
-    def test_flat(self):
-        ctx = pd.DataFrame({"pk": range(20), "c1": [1] * 20, "c2": [2] * 20})
-        expected_padding = pd.DataFrame({"pk": [None] * 12, "c1": [0] * 12, "c2": [0] * 12})
-        expected = pd.concat([ctx, expected_padding]).reset_index(drop=True)
-        padded_ctx = _pad_vertically(ctx, batch_size=32, primary_key="pk")
-        pd.testing.assert_frame_equal(padded_ctx, expected)
-
-    def test_sequential(self):
-        ctx = pd.DataFrame({"pk": list(range(20)), "t1.c1": [[1, 1, 1]] * 20, "t2.c2": [[2, 2]] * 20})
-        expected_padded_ctx = pd.DataFrame(
-            {
-                "pk": list(range(20)) + [None] * 12,
-                "t1.c1": [[1, 1, 1]] * 20 + [[]] * 12,
-                "t2.c2": [[2, 2]] * 20 + [[]] * 12,
-            },
-            dtype="object",
-        )
-        padded_ctx = _pad_vertically(ctx, batch_size=32, primary_key="pk")
-        pd.testing.assert_frame_equal(padded_ctx, expected_padded_ctx)
 
 
 class TestReshapeToPandas:
