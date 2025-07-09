@@ -300,8 +300,8 @@ def _calculate_sample_losses(
             # CODE TO MULTIPLY STOP TOKEN LOSS BY 10x
             # flipped = torch.flip(stop_mask, dims=[1])
             # idx = flipped.argmax(dim=1)
-            # mask_stop_0 = torch.ones_like(stop_mask)
-            # row_idx = torch.arange(stop_mask.size(0))
+            # mask_stop_0 = torch.ones_like(stop_mask, device=stop_mask.device)
+            # row_idx = torch.arange(stop_mask.size(0), device=stop_mask.device)
             # col_idx = stop_mask.size(1) - 1 - idx
             # mask_stop_0[row_idx, col_idx] = 10
             # stop_mask *= mask_stop_0
@@ -332,7 +332,9 @@ def _calculate_sample_losses(
             #         actual_to_predicted_seq_len.setdefault(tgt_len, []).append(pred_len)
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
+            # masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
+            # TEMPORARY: no mask
+            masked_loss = torch.sum(column_loss, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
