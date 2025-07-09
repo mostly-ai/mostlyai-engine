@@ -18,7 +18,15 @@ from pathlib import Path
 
 import torch
 from peft import PeftConfig, prepare_model_for_kbit_training
-from transformers import AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig, PretrainedConfig, PreTrainedModel
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForImageTextToText,
+    BitsAndBytesConfig,
+    PretrainedConfig,
+    PreTrainedModel,
+)
 
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 
@@ -35,7 +43,7 @@ def is_bf16_supported(device: torch.device) -> bool:
 
 
 def get_attention_implementation(config: PretrainedConfig) -> str | None:
-    model_cls = AutoModelForCausalLM._model_mapping[type(config)]
+    model_cls = AutoModel._model_mapping[type(config)]
     attn_implementation = None
     if getattr(model_cls, "_supports_sdpa", False):
         attn_implementation = "sdpa"
@@ -91,13 +99,23 @@ def load_base_model_and_config(
     else:
         device_map = "auto"
 
-    model = AutoModelForCausalLM.from_pretrained(
+    if hasattr(config, "text_config") and hasattr(config, "vision_config"):
+        config.text_config.use_cache = use_cache
+        config.text_config.attn_implementation = attn_implementation
+        auto_model_cls = AutoModelForImageTextToText
+    elif hasattr(config, "use_cache"):
+        config.use_cache = use_cache
+        config.attn_implementation = attn_implementation
+        auto_model_cls = AutoModelForCausalLM
+    else:
+        raise ValueError("Unsupported model")
+
+    model = auto_model_cls.from_pretrained(
         model_id_or_path,
-        torch_dtype=torch_dtype,
-        attn_implementation=attn_implementation,
-        use_cache=use_cache,
+        config=config,
         device_map=device_map,
         quantization_config=quantization_config,
+        torch_dtype=torch_dtype,
     )
     if quantization_config:
         # convert all non-kbit layers to float32

@@ -238,7 +238,7 @@ def generate(
                     "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
                 )
 
-        # sanity check: at this point sample seed and context data should have the same number of rows
+        # sanity check: at this point seed data and context data should have the same number of rows
         assert len(seed_data) == len(ctx_data)
 
         # early exit in case generation context is empty
@@ -256,9 +256,6 @@ def generate(
         _LOG.info(f"{max_new_tokens=}")
 
         t0 = time.time()
-        # use MOSTLY_HUGGING_FACE_TOKEN if available, otherwise HF_TOKEN should be unset or with a pre-set value as is
-        if os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
-            os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
 
         is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
         is_vllm_available = importlib.util.find_spec("vllm") is not None

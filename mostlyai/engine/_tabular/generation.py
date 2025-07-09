@@ -109,7 +109,7 @@ def _resolve_gen_column_order(
 
     # Reorder columns in the following order:
     # 0. SLEN/SIDX/SDEC column
-    # 1. Sample seed columns
+    # 1. Seed data columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
     # 4. Fairness sensitive columns (which are imputation columns as well)
@@ -968,7 +968,7 @@ def generate(
             ctx_keys.rename(tgt_context_key, inplace=True)
 
             # encode seed_batch
-            _LOG.info(f"encode sample seed values {seed_batch.shape}")
+            _LOG.info(f"encode seed data values {seed_batch.shape}")
             if is_sequential:
                 seed_batch_encoded, _, seed_context_key_encoded = encode_df(
                     df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
