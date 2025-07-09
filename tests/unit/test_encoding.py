@@ -20,15 +20,13 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from mostlyai.engine._common import (
-    SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SUB_COLUMN_PREFIX,
     STOP_SUB_COLUMN_PREFIX,
 )
 from mostlyai.engine._language.encoding import format_df
 from mostlyai.engine._tabular.encoding import (
     _encode_col,
-    _enrich_slen_sidx_sdec_stop,
+    _enrich_sidx_stop,
     flatten_frame,
     pad_horizontally,
 )
@@ -53,34 +51,26 @@ def test_flatten_frame():
     assert_frame_equal(flatten_frame(df, "key"), expected_df)
 
 
-@pytest.mark.skip(reason="TODO: reconsider this test")
+# @pytest.mark.skip(reason="TODO: reconsider this test")
 def test_enrich_slen_sidx_sdec_stop():
     df = pd.DataFrame(
         {
-            "key": [1, 1, 2],
-            "product": [3, 2, 9],
-            "is_paid": [0, 1, 1],
+            "key": [1, 1, 1, 2, 2, 3],
+            "product": [3, 2, 0, 9, 0, 0],
+            "is_paid": [0, 1, 0, 1, 0, 0],
         }
     )
     expected_df = pd.DataFrame(
         {
-            f"{SLEN_SUB_COLUMN_PREFIX}cat": [2, 2, 1],
-            f"{SIDX_SUB_COLUMN_PREFIX}cat": [0, 1, 0],
-            f"{SDEC_SUB_COLUMN_PREFIX}cat": [0, 5, 0],
-            f"{STOP_SUB_COLUMN_PREFIX}cat": [0, 1, 1],
-            "key": [1, 1, 2],
-            "product": [3, 2, 9],
-            "is_paid": [0, 1, 1],
+            f"{SIDX_SUB_COLUMN_PREFIX}cat": [1, 2, 3, 1, 2, 1],
+            f"{STOP_SUB_COLUMN_PREFIX}cat": [1, 1, 0, 1, 0, 0],
+            "key": [1, 1, 1, 2, 2, 3],
+            "product": [3, 2, 0, 9, 0, 0],
+            "is_paid": [0, 1, 0, 1, 0, 0],
         }
     )
-    expected_df_with_stop = expected_df.drop(columns=[f"{SLEN_SUB_COLUMN_PREFIX}cat", f"{SDEC_SUB_COLUMN_PREFIX}cat"])
-    assert_frame_equal(
-        _enrich_slen_sidx_sdec_stop(df, context_key="key", max_seq_len=1, use_stop=True), expected_df_with_stop
-    )
-    expected_df_without_stop = expected_df.drop(columns=[f"{STOP_SUB_COLUMN_PREFIX}cat"])
-    assert_frame_equal(
-        _enrich_slen_sidx_sdec_stop(df, context_key="key", max_seq_len=1, use_stop=False), expected_df_without_stop
-    )
+    print(_enrich_sidx_stop(df, context_key="key", max_seq_len=1))
+    assert_frame_equal(_enrich_sidx_stop(df, context_key="key", max_seq_len=1), expected_df)
 
 
 def test_pad_horizontally():

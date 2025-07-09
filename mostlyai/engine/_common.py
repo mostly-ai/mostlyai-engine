@@ -513,7 +513,7 @@ def skip_if_error(func: Callable) -> Callable:
     return skip_if_error_wrapper
 
 
-def encode_slen_sidx_sdec(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
+def encode_sidx(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
     assert is_integer_dtype(vals)
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD or prefix == SDEC_SUB_COLUMN_PREFIX:
         # encode slen and sidx as numeric_discrete

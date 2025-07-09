@@ -24,14 +24,12 @@ from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
-    SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SUB_COLUMN_PREFIX,
     STOP_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
-    encode_slen_sidx_sdec,
+    encode_sidx,
     get_argn_name,
     get_sequence_length_stats,
     is_a_list,
@@ -137,9 +135,10 @@ def _encode_partition(
         # trim sequences to (privacy-protected) max_len
         max_len = seq_len_stats["max"]
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
+        # pad every sequence by one row
+        df = pad_vertically(df, padding_value=0, context_key=tgt_context_key)
         # enrich with sequence lengths and sequence indexes
-        # TODO: enrich with sidx and stop
-        df = _enrich_slen_sidx_sdec_stop(df, tgt_context_key, max_len)
+        df = _enrich_sidx_stop(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
@@ -149,11 +148,6 @@ def _encode_partition(
             df_pads = pd.DataFrame({c: [[]] for c in df.columns if c != tgt_context_key})
             df_miss = df_miss.merge(df_pads, how="cross")
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
-        # pad each list with one extra item
-        df = pad_horizontally(df, padding_value=0, right=True, pad_only_0seqlens=False)
-        df[f"{SIDX_SUB_COLUMN_PREFIX}cat"] = df[f"{SIDX_SUB_COLUMN_PREFIX}cat"].apply(
-            lambda x: x[:-1] + [x[-2] + 1] if len(x) >= 2 else [1]
-        )
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
@@ -385,29 +379,37 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def encode_stop(stop: pd.Series) -> pd.DataFrame:
-    return pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": stop})
-
-
-def _enrich_slen_sidx_sdec_stop(
-    df: pd.DataFrame, context_key: str, max_seq_len: int, use_stop: bool = True
-) -> pd.DataFrame:
+def _enrich_sidx_stop(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
-    slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True) + 1  # sequence index
-    sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
-    stop = (slen != 0).astype(int)  # 1 if not padding, 0 otherwise
-    sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
-    if use_stop:
-        stop = encode_stop(stop)
-        # sequence_columns = [stop, sidx]
-        sequence_columns = [sidx, stop]
-    else:
-        slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
-        sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
-        sequence_columns = [slen, sidx, sdec]
+    stop = (
+        df.groupby(context_key)[df.columns]
+        .apply(lambda x: x.index != x.index.max())
+        .explode()
+        .reset_index(drop=True)
+        .astype(int)
+    )
+    sidx = encode_sidx(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
+    stop = pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": stop})
+    sequence_columns = [sidx, stop]
     df = pd.concat(sequence_columns + [df], axis=1)
     return df
+
+
+def pad_vertically(df: pd.DataFrame, padding_value: int, context_key: str) -> pd.DataFrame:
+    def pad_row(x):
+        return pd.concat(
+            [
+                x,
+                pd.DataFrame(
+                    {col: [padding_value] for col in x.columns if col != context_key}
+                    | {context_key: [x.iloc[0][context_key]]}
+                ),
+            ],
+            axis=0,
+        )
+
+    return df.groupby(context_key)[df.columns].apply(pad_row).reset_index(drop=True)
 
 
 def pad_horizontally(df: pd.DataFrame, padding_value: int, right=True, pad_only_0seqlens=True) -> pd.DataFrame:

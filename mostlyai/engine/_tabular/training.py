@@ -270,22 +270,10 @@ def _calculate_sample_losses(
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
         # TODO: masks are not needed for sidx and stop
-        slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
         stop_cols = [k for k in data if k.startswith(STOP_SUB_COLUMN_PREFIX)]
 
         # generate masks for SLEN and time step
-        if slen_cols:
-            # TEMPORARY: slen/sidx/sdec branch
-            padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
-            for slen_col in slen_cols:
-                padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
-
-            padding_mask = padding_mask.squeeze(-1)
-            time_step_mask = torch.zeros_like(padding_mask)
-            time_step_mask[:, 0] = (
-                10  # mask loss for all time steps except the first one, and emphasize that one by 10x
-            )
-        elif stop_cols:
+        if stop_cols:
             # TEMPORARY: stop/sidx branch
             padding_mask = torch.zeros_like(data[stop_cols[0]], dtype=torch.int64)
             for stop_col in stop_cols:
@@ -308,13 +296,9 @@ def _calculate_sample_losses(
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
-        sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in slen_cols:
-                # mask out SLEN for steps > 1
-                mask = time_step_mask
-            elif col in sidx_cols or col in sdec_cols:
+            if col in sidx_cols:
                 # SIDX and SDEC columns need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
                 mask = torch.zeros_like(padding_mask)

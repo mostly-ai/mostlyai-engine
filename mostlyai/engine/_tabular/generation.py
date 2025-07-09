@@ -40,7 +40,7 @@ from mostlyai.engine._common import (
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
     decode_slen_sidx_sdec_stop,
-    encode_slen_sidx_sdec,
+    encode_sidx,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -1015,7 +1015,7 @@ def generate(
                         break
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step + 1] * step_size)
-                    sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    sidx_df = encode_sidx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
                             torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
