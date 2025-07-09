@@ -392,8 +392,7 @@ def _enrich_sidx_stop(df: pd.DataFrame, context_key: str, max_seq_len: int) -> p
     )
     sidx = encode_sidx(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     stop = pd.DataFrame({f"{STOP_SUB_COLUMN_PREFIX}cat": stop})
-    sequence_columns = [sidx, stop]
-    df = pd.concat(sequence_columns + [df], axis=1)
+    df = pd.concat([sidx, stop] + [df], axis=1)
     return df
 
 
