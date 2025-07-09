@@ -183,9 +183,9 @@ def generate(
         enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
         _LOG.info(f"{enable_flexible_generation=}")
 
-        # resolve potential conflict between sample_seed and sample_size
+        # resolve potential conflict between seed_data and sample_size
         if seed_data is not None:
-            assert sample_size is None, "either sample_seed or sample_size can be provided, not both"
+            assert sample_size is None, "either seed_data or sample_size can be provided, not both"
             sample_size = len(seed_data)
 
         if has_context:
@@ -222,7 +222,7 @@ def generate(
             ctx_primary_key = tgt_context_key = DUMMY_CONTEXT_KEY
             ctx_data = pd.DataFrame({ctx_primary_key: range(sample_size)})
 
-        # ensure sample_seed exists; ensure valid columns
+        # ensure seed_data exists; ensure valid columns
         if seed_data is None:
             # build dummy seed
             seed_data = pd.DataFrame(index=list(range(sample_size)))
@@ -230,7 +230,7 @@ def generate(
         _LOG.info(f"{seed_data.shape=}")
 
         if not enable_flexible_generation:
-            # validate sample_seed maintains the same column order as the one from training
+            # validate seed_data maintains the same column order as the one from training
             seed_columns = seed_data.columns.tolist()
             if seed_columns != tgt_text_columns[: len(seed_columns)]:
                 raise ValueError(
@@ -309,14 +309,14 @@ def generate(
         samples_processed = 0
         while samples_processed < sample_size:
             encoded_ctx_batch = encoded_ctx_data.iloc[samples_processed : samples_processed + batch_size]
-            sample_seed_batch = seed_data.iloc[samples_processed : samples_processed + batch_size]
+            seed_data_batch = seed_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
             if enforce_json_output and not initialize_logits_processors_once:
                 t0 = time.time()
                 schemas = create_schemas(
-                    seed_df=sample_seed_batch,
+                    seed_df=seed_data_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
@@ -331,7 +331,7 @@ def generate(
             total_tokenize_fn_time += metrics.tokenize_time
             total_generate_fn_time += metrics.generate_time
 
-            buffer.add((outputs, ctx_keys, sample_seed_batch))
+            buffer.add((outputs, ctx_keys, seed_data_batch))
             if buffer.is_full():
                 decoded_data = decode_buffered_samples(
                     buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens

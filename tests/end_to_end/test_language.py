@@ -248,7 +248,7 @@ class TestConditionalGeneration:
         )
         seed_size = 500
         # re-balance towards the females, test non-existing column and token, test nulls
-        sample_seed = pd.DataFrame(
+        seed_data = pd.DataFrame(
             {
                 "gender": ["f"] * (seed_size - 5) + ["Żf", "国", None, pd.NA, np.nan],
                 "country": ["USA"] * (seed_size - 5) + ["USA USA", "Poland", None, pd.NA, np.nan],
@@ -266,7 +266,7 @@ class TestConditionalGeneration:
         generate(
             workspace_dir=workspace_dir,
             ctx_data=ctx_data,
-            seed_data=sample_seed,
+            seed_data=seed_data,
         )
 
         syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
