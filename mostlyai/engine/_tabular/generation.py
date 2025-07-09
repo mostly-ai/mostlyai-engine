@@ -817,10 +817,25 @@ def generate(
             else:
                 seed_data = pd.DataFrame(index=range(sample_size))
 
-        if is_sequential and tgt_context_key not in seed_data.columns:
-            raise ValueError(
-                f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
-            )
+        # sequence lengths
+        seq_len_stats = get_sequence_length_stats(tgt_stats)
+        seq_len_median = seq_len_stats["median"]
+        seq_len_min = seq_len_stats["min"]
+        seq_len_max = seq_len_stats["max"]
+        ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
+
+        if is_sequential:
+            if tgt_context_key not in seed_data.columns:
+                raise ValueError(
+                    f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
+                )
+            seed_seqlens = seed_data.groupby(tgt_context_key).size()
+            if seed_seqlens.nunique() > 1:
+                raise ValueError("Seed data must contain sequences of the same length for sequential generation")
+            if seed_seqlens.max() > seq_len_max:
+                raise ValueError(
+                    f"Seed data must contain sequences of length at most `{seq_len_max}` for sequential generation"
+                )
 
         # ensure valid columns in seed_data
         tgt_columns = (
@@ -829,13 +844,6 @@ def generate(
             + ([tgt_context_key] if is_sequential else [])
         )
         seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
-
-        # sequence lengths
-        seq_len_stats = get_sequence_length_stats(tgt_stats)
-        seq_len_median = seq_len_stats["median"]
-        seq_len_min = seq_len_stats["min"]
-        seq_len_max = seq_len_stats["max"]
-        ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
         # determine batch_size for generation
         if batch_size is None:
