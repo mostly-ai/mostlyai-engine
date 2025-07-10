@@ -318,6 +318,9 @@ def _calculate_sample_losses(
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
             losses_by_column.append(masked_loss)
+            masked_loss *= data[col].shape[
+                0
+            ]  # FIXME: temporary to counteract the effect of the mean in the training loop
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
