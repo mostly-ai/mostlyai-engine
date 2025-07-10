@@ -679,13 +679,6 @@ def generate(
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
-        if is_sequential and model_configs.get("model_units"):
-            # remain backwards compatible to models trained without SDEC
-            has_sdec = any([f"{SDEC_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
-            if not has_sdec:
-                _LOG.warning("SDEC not found in model_units, removing SDEC columns from tgt_cardinalities")
-                del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
-                tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 

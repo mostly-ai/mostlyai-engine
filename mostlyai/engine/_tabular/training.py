@@ -35,7 +35,6 @@ from torch.utils.data import DataLoader
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
-    SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     TGT,
@@ -251,9 +250,10 @@ class TabularModelCheckpoint(ModelCheckpoint):
 def _calculate_sample_losses(
     model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
 ) -> torch.Tensor:
+    input_ = {k: v for k, v in data.items() if not k.startswith(SLEN_SUB_COLUMN_PREFIX)}
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
-        output, _ = model(data, mode="trn")
+        output, _ = model(input_, mode="trn")
     criterion = nn.CrossEntropyLoss(reduction="none")
 
     tgt_cols = (
@@ -271,19 +271,13 @@ def _calculate_sample_losses(
         for slen_col in slen_cols:
             slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
-        time_step_mask[:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
-        sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in slen_cols:
-                # mask out SLEN for steps > 1
-                mask = time_step_mask
-            elif col in sidx_cols or col in sdec_cols:
-                # SIDX and SDEC columns need to be present in the computation graph for DP to work
+            if col in sidx_cols:
+                # SIDX column need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
                 mask = torch.zeros_like(slen_mask, dtype=torch.int64)
             else:

@@ -36,6 +36,7 @@ from torch import nn
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
+    SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
     get_sub_columns_lookup,
@@ -237,6 +238,13 @@ class Embedders(nn.Module):
         # pass through sub column embedders
         embeddings = {}
         for sub_col in self.cardinalities:
+            if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                batch_size = x[list(self.cardinalities.keys())[0]].shape[0]
+                seq_len = x[list(self.cardinalities.keys())[0]].shape[1]
+                embedding_dim = self.get(sub_col).embedding_dim
+                xs = torch.zeros((batch_size, seq_len, embedding_dim), device=self.device)
+                embeddings[sub_col] = xs
+                continue
             xs = torch.as_tensor(x[sub_col], device=self.device)
             if xs.is_nested:  # account for nested tensors
                 xs = torch.nested.to_padded_tensor(xs, 0)

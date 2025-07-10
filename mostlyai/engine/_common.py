@@ -318,7 +318,7 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_slen_sidx_sdec_cardinalities(max_seq_len)
+        cardinalities |= get_sidx_slen_cardinalities(max_seq_len)
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -536,7 +536,7 @@ def decode_slen_sidx_sdec(df_encoded: pd.DataFrame, max_seq_len: int, prefix: st
     return vals
 
 
-def get_slen_sidx_sdec_cardinalities(max_seq_len) -> dict[str, int]:
+def get_sidx_slen_cardinalities(max_seq_len) -> dict[str, int]:
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
         # encode slen and sidx as numeric_discrete
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
@@ -553,9 +553,8 @@ def get_slen_sidx_sdec_cardinalities(max_seq_len) -> dict[str, int]:
             e_idx = len(digits) - idx - 1
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-    # order is important: slen first, then sidx, as the former has highest priority
-    sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
-    return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
+    # order is important: sidx first, then slen, as the latter should be informed by the former
+    return sidx_cardinalities | slen_cardinalities
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):
