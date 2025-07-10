@@ -699,18 +699,32 @@ def generate(
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
         has_slen = False
         if is_sequential and model_configs.get("model_units"):
-            # TODO: handle backwards compatibility later
-            has_slen = any([f"{SLEN_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
-            if has_slen:
-                # TEMPORARY: slen/sidx/sdec branch
-                del tgt_cardinalities[f"{STOP_SUB_COLUMN_PREFIX}cat"]
-                tgt_sub_columns.remove(f"{STOP_SUB_COLUMN_PREFIX}cat")
-            else:
-                # TEMPORARY: sidx/stop branch
+            # # TODO: handle backwards compatibility later
+            # has_slen = any([f"{SLEN_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
+            # if has_slen:
+            #     # TEMPORARY: slen/sidx/sdec branch
+            #     del tgt_cardinalities[f"{STOP_SUB_COLUMN_PREFIX}cat"]
+            #     tgt_sub_columns.remove(f"{STOP_SUB_COLUMN_PREFIX}cat")
+            # else:
+            #     # TEMPORARY: sidx/stop branch
+            #     del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
+            #     tgt_sub_columns.remove(f"{SLEN_SUB_COLUMN_PREFIX}cat")
+            #     del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
+            #     tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
+            if f"{SLEN_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
                 del tgt_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}cat"]
                 tgt_sub_columns.remove(f"{SLEN_SUB_COLUMN_PREFIX}cat")
+            for key in list(tgt_cardinalities.keys()):
+                if key.startswith(f"{SLEN_SUB_COLUMN_PREFIX}E"):
+                    del tgt_cardinalities[key]
+                    tgt_sub_columns.remove(key)
+            if f"{SDEC_SUB_COLUMN_PREFIX}cat" in tgt_cardinalities:
                 del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
                 tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
+            for key in list(tgt_cardinalities.keys()):
+                if key.startswith(f"{SDEC_SUB_COLUMN_PREFIX}E"):
+                    del tgt_cardinalities[key]
+                    tgt_sub_columns.remove(key)
 
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
