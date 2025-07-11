@@ -1369,7 +1369,10 @@ class SequentialModel(nn.Module):
                 outputs[sub_col] = out
 
                 # update current sub column embedding
-                tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
+                if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                    tgt_embeds[sub_col] = torch.zeros_like(tgt_embeds[sub_col])
+                else:
+                    tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
 
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:

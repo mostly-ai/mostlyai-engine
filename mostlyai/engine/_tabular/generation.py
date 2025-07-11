@@ -245,6 +245,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
+    prev_slen: pd.Series | None = None,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -257,8 +258,14 @@ def _continue_sequence_mask(
     syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    if prev_slen is not None:
+        prev_slen_mask = syn[SIDX_SUB_COLUMN_PREFIX] >= prev_slen
+        syn.loc[prev_slen_mask, SLEN_SUB_COLUMN_PREFIX] = prev_slen[prev_slen_mask].values
     # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    print(syn["tgt:/__sidx_"].value_counts())
+    print(syn["tgt:/__slen_"].value_counts())
+    continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    return continue_mask, syn[SLEN_SUB_COLUMN_PREFIX][continue_mask].reset_index(drop=True)
 
 
 def _post_process_decoding(
@@ -952,8 +959,10 @@ def generate(
                 # continue sequences until they reach their predicted length
                 step_ctx_keys = ctx_keys
                 step_size = batch_size
-                step_size_drop_threshold = max(50, batch_size // 100)
+                # step_size_drop_threshold = max(50, batch_size // 100)
+                prev_slen = None
                 for seq_step in range(seq_steps):
+                    print(f"SEQ_STEP: {seq_step}")
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
@@ -983,18 +992,19 @@ def generate(
                     # transform output dict to tensor for memory efficiency
                     out_pt = torch.stack(list(out_dct.values()), dim=0).transpose(0, 1)
                     # calculate continue sequence mask
-                    continue_mask = _continue_sequence_mask(
+                    continue_mask, prev_slen = _continue_sequence_mask(
                         step_output=out_pt,
                         sub_cols=tgt_sub_columns,
                         step_keys=step_ctx_keys,
                         key_name=tgt_context_key,
                         seq_len_min=seq_len_min,
                         seq_len_max=seq_len_max,
+                        prev_slen=prev_slen,
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
                     # or there is no more data to sample on next iteration
-                    if step_size - next_step_size > step_size_drop_threshold or next_step_size == 0:
+                    if True:  # step_size - next_step_size > step_size_drop_threshold or next_step_size == 0:
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
                         step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)
