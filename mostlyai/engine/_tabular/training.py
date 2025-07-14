@@ -37,6 +37,7 @@ from mostlyai.engine._common import (
     CTXSEQ,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    STOP_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -188,16 +189,19 @@ class BatchCollator:
 
     @staticmethod
     def _slice_sequences(batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
+        # we pad sequences with one step
+        # thus, to respect the max_sequence_window provided by the user, we need to add 1 to it
+        max_sequence_window += 1
         # determine sequence lengths of current batch
         tgt_columns = [col for col in batch.columns if col.startswith(TGT)]
         seq_lens = batch[tgt_columns[0]].copy().str.len().values
 
         # determine sampling logic for current batch
         flip = np.random.random()
-        if flip < 0.3:  # 30%
+        if flip < 0.1:  # 10%
             # pick start of the sequence to focus on the beginning
             sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
-        elif 0.3 <= flip < 0.4:  # 10%
+        elif 0.1 <= flip < 0.4:  # 30%
             # pick end of the sequence to focus on the end
             sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
         else:  # 60%
@@ -274,6 +278,12 @@ def _calculate_sample_losses(
         time_step_mask = slen_mask.clone() * 10
         # time_step_mask [:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
 
+        stop_mask = slen_mask.clone()
+        row_idx = torch.arange(stop_mask.size(0), device=stop_mask.device)
+        col_idx = stop_mask.sum(dim=1)
+        valid = col_idx < stop_mask.size(1)
+        stop_mask[row_idx[valid], col_idx[valid]] = 1  # don't mask loss for stop tokens
+
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         losses_by_column = []
@@ -281,6 +291,8 @@ def _calculate_sample_losses(
             if col in slen_cols:
                 # mask out SLEN for steps > 1
                 mask = time_step_mask
+            elif col.startswith(STOP_SUB_COLUMN_PREFIX):
+                mask = stop_mask
             elif col in sidx_cols:
                 # SIDX column need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely

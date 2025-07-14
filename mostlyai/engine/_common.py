@@ -527,7 +527,11 @@ def encode_slen_sidx_sdec(vals: pd.Series, max_seq_len: int, prefix: str = "") -
 
 
 def decode_slen_sidx_sdec(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
-    if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD or prefix == SDEC_SUB_COLUMN_PREFIX:
+    if (
+        max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD
+        or prefix == SDEC_SUB_COLUMN_PREFIX
+        or prefix == STOP_SUB_COLUMN_PREFIX
+    ):
         # decode slen and sidx as numeric_discrete
         vals = df_encoded[f"{prefix}cat"]
     else:
@@ -541,7 +545,7 @@ def get_sidx_slen_stop_cardinalities(max_seq_len) -> dict[str, int]:
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
         # encode slen and sidx as numeric_discrete
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
-        sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+        sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 2}
     else:
         # encode slen and sidx as numeric_digit
         digits = [int(digit) for digit in str(max_seq_len)]
