@@ -239,8 +239,9 @@ class Embedders(nn.Module):
         embeddings = {}
         for sub_col in self.cardinalities:
             if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
-                batch_size = x[list(self.cardinalities.keys())[0]].shape[0]
-                seq_len = x[list(self.cardinalities.keys())[0]].shape[1]
+                non_slen_sub_col = [col for col in self.cardinalities if not col.startswith(SLEN_SUB_COLUMN_PREFIX)][0]
+                batch_size = x[non_slen_sub_col].shape[0]
+                seq_len = x[non_slen_sub_col].shape[1]
                 embedding_dim = self.get(sub_col).embedding_dim
                 xs = torch.zeros((batch_size, seq_len, embedding_dim), device=self.device)
                 embeddings[sub_col] = xs
