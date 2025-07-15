@@ -559,7 +559,7 @@ def get_sidx_slen_stop_cardinalities(max_seq_len) -> dict[str, int]:
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
     stop_cardinalities = {f"{STOP_SUB_COLUMN_PREFIX}cat": 2}
-    # order is important: sidx first, then slen, then stop,as the latter should be informed by the former
+    # order is important: sidx first, then slen, then stop, as the latter should be informed by the former
     return sidx_cardinalities | slen_cardinalities | stop_cardinalities
 
 

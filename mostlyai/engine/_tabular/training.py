@@ -275,7 +275,7 @@ def _calculate_sample_losses(
         for slen_col in slen_cols:
             slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = slen_mask.clone() * 10
+        time_step_mask = slen_mask.clone() * 1
         # time_step_mask [:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
 
         stop_mask = slen_mask.clone()
@@ -302,7 +302,7 @@ def _calculate_sample_losses(
                 mask = slen_mask
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
+            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
