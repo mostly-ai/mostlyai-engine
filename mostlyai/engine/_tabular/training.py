@@ -300,15 +300,20 @@ def _calculate_sample_losses(
             else:
                 # mask out paddings
                 mask = slen_mask
+            mask = torch.ones_like(mask)
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
+            if col.startswith(STOP_SUB_COLUMN_PREFIX):
+                stop_losses = masked_loss
+            if col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                slen_losses = masked_loss
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
     losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
-    return losses
+    return losses, stop_losses, slen_losses
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory
@@ -318,13 +323,18 @@ def _calculate_val_loss(
     val_dataloader: DataLoader,
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
+    # val_stop_losses: list[torch.Tensor] = []
     model.eval()
     for step_data in val_dataloader:
-        step_losses = _calculate_sample_losses(model, step_data)
+        step_losses, stop_losses, slen_losses = _calculate_sample_losses(model, step_data)
         val_sample_losses.extend(step_losses.detach())
+        # val_stop_losses.extend(stop_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
+    # val_stop_losses: torch.Tensor = torch.stack(val_stop_losses, dim=0)
     val_loss_avg = torch.mean(val_sample_losses).item()
+    # val_stop_loss_avg = torch.mean(val_stop_losses).item()
+    # print(f"val_stop_loss_avg: {val_stop_loss_avg}")
     return val_loss_avg
 
 
@@ -691,12 +701,17 @@ def train(
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
+                step_losses, stop_losses, slen_losses = _calculate_sample_losses(argn, step_data)
                 # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
                 #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
                 #  than the batch size in both flat and sequential case.
                 # calculate total step loss
                 step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
+                stop_loss = torch.mean(stop_losses) / (1 if with_dp else gradient_accumulation_steps)
+                slen_loss = torch.mean(slen_losses) / (1 if with_dp else gradient_accumulation_steps)
+                print(f"stop_loss: {stop_loss}")
+                print(f"step_loss: {step_loss}")
+                print(f"slen_loss: {slen_loss}")
                 if with_dp:
                     # opacus handles the gradient accumulation internally
                     optimizer.zero_grad(set_to_none=True)
