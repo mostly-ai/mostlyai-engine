@@ -572,7 +572,7 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     # ensure that seq_len_min is respected
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
+    syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] <= syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
     # discarded padded context rows, ie where context key has been set to None
     syn = syn.dropna(subset=[tgt_context_key])
     # discard SLEN and SIDX columns

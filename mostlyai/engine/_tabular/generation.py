@@ -269,7 +269,7 @@ def _continue_sequence_mask(
     print(syn["tgt:/__stop_"].value_counts())
     # continue_mask = syn[STOP_SUB_COLUMN_PREFIX] == 1
     # return continue_mask
-    continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] <= syn[SLEN_SUB_COLUMN_PREFIX]
     return continue_mask, syn[SLEN_SUB_COLUMN_PREFIX][continue_mask].reset_index(drop=True)
 
 
