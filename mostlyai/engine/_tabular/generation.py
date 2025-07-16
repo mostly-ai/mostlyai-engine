@@ -259,14 +259,18 @@ def _continue_sequence_mask(
     syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[STOP_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=STOP_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    if prev_slen is not None:
-        prev_slen_mask = syn[SIDX_SUB_COLUMN_PREFIX] >= prev_slen
-        syn.loc[prev_slen_mask, SLEN_SUB_COLUMN_PREFIX] = prev_slen[prev_slen_mask].values
+    # syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    # if prev_slen is not None:
+    #     prev_slen_mask = syn[SIDX_SUB_COLUMN_PREFIX] >= prev_slen
+    #     syn.loc[prev_slen_mask, SLEN_SUB_COLUMN_PREFIX] = prev_slen[prev_slen_mask].values
     # calculate stop sequence mask (True=continue, False=stop)
     print(syn["tgt:/__sidx_"].value_counts())
     print(syn["tgt:/__slen_"].value_counts())
     print(syn["tgt:/__stop_"].value_counts())
+    print("--------------------------------")
+    log_slen = 9
+    print(len(syn[syn["tgt:/__slen_"] == log_slen]))
+    print(syn[syn["tgt:/__slen_"] == log_slen]["tgt:/__stop_"].value_counts())
     # continue_mask = syn[STOP_SUB_COLUMN_PREFIX] == 1
     # return continue_mask
     # continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] <= syn[SLEN_SUB_COLUMN_PREFIX]
@@ -990,6 +994,7 @@ def generate(
                     #     slen_vals = {}
                     fixed_values = sidx_vals  # | slen_vals
                     fixed_probs = {"tgt:/__slen_cat": {sidx: 0.0 for sidx in range(seq_step)}} if seq_step > 0 else {}
+                    fixed_probs = {}
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1018,7 +1023,7 @@ def generate(
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
                     # or there is no more data to sample on next iteration
-                    if True:  # step_size - next_step_size > step_size_drop_threshold or next_step_size == 0:
+                    if False:  # step_size - next_step_size > step_size_drop_threshold or next_step_size == 0:
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
                         step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)

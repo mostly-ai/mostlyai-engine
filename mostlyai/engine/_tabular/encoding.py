@@ -384,8 +384,8 @@ def _enrich_sidx_slen_stop(df: pd.DataFrame, context_key: str, max_seq_len: int)
     df = df.reset_index(drop=True)
     sidx = df.groupby(context_key).cumcount(ascending=True) + 1  # sequence index
     slen = df.groupby(context_key)[context_key].transform("size") - 1  # sequence length
-    last_idx = df.groupby(context_key).tail(1).index
-    slen.iloc[last_idx] = 0
+    # last_idx = df.groupby(context_key).tail(1).index
+    # slen.iloc[last_idx] = 0
     stop = (
         df.groupby(context_key)[context_key]
         .apply(lambda x: x.index != x.index.max(), include_groups=True)
