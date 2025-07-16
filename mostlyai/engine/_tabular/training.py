@@ -268,45 +268,42 @@ def _calculate_sample_losses(
     if isinstance(model, SequentialModel) or (
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
+        sidx_cols = [k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)]
+        stop_cols = [k for k in data if k.startswith(STOP_SUB_COLUMN_PREFIX)]
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
 
         # generate masks for SLEN and time step
-        slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
+        padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
         for slen_col in slen_cols:
-            slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
-        slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = slen_mask.clone() * 1
-        # time_step_mask [:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+            padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
+        padding_mask = padding_mask.squeeze(-1)
+        sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
 
-        stop_mask = slen_mask.clone()
+        stop_mask = padding_mask.clone()
         row_idx = torch.arange(stop_mask.size(0), device=stop_mask.device)
         col_idx = stop_mask.sum(dim=1)
         valid = col_idx < stop_mask.size(1)
         stop_mask[row_idx[valid], col_idx[valid]] = 1  # don't mask loss for stop tokens
 
         # calculate per column losses
-        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in slen_cols:
-                # mask out SLEN for steps > 1
-                mask = time_step_mask
-            elif col.startswith(STOP_SUB_COLUMN_PREFIX):
+            if col in stop_cols:
                 mask = stop_mask
             elif col in sidx_cols:
                 # SIDX column need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
-                mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+                mask = sidx_mask
             else:
                 # mask out paddings
-                mask = slen_mask
+                mask = padding_mask
             # mask = torch.ones_like(mask)
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
-            if col.startswith(STOP_SUB_COLUMN_PREFIX):
+            if col in stop_cols:
                 stop_losses = masked_loss
-            if col.startswith(SLEN_SUB_COLUMN_PREFIX):
+            elif col in slen_cols:
                 slen_losses = masked_loss
             losses_by_column.append(masked_loss)
     else:
@@ -709,8 +706,9 @@ def train(
                 step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
                 stop_loss = torch.mean(stop_losses) / (1 if with_dp else gradient_accumulation_steps)
                 slen_loss = torch.mean(slen_losses) / (1 if with_dp else gradient_accumulation_steps)
-                print(f"stop_loss: {stop_loss}")
+                print("--------------------------------")
                 print(f"step_loss: {step_loss}")
+                print(f"stop_loss: {stop_loss}")
                 print(f"slen_loss: {slen_loss}")
                 if with_dp:
                     # opacus handles the gradient accumulation internally
