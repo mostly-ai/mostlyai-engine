@@ -36,6 +36,7 @@ from torch import nn
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
+    SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
     get_sub_columns_lookup,
@@ -237,6 +238,14 @@ class Embedders(nn.Module):
         # pass through sub column embedders
         embeddings = {}
         for sub_col in self.cardinalities:
+            if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                non_slen_sub_col = [col for col in self.cardinalities if not col.startswith(SLEN_SUB_COLUMN_PREFIX)][0]
+                batch_size = x[non_slen_sub_col].shape[0]
+                seq_len = x[non_slen_sub_col].shape[1]
+                embedding_dim = self.get(sub_col).embedding_dim
+                xs = torch.zeros((batch_size, seq_len, embedding_dim), device=self.device)
+                embeddings[sub_col] = xs
+                continue
             xs = torch.as_tensor(x[sub_col], device=self.device)
             if xs.is_nested:  # account for nested tensors
                 xs = torch.nested.to_padded_tensor(xs, 0)
@@ -1361,7 +1370,10 @@ class SequentialModel(nn.Module):
                 outputs[sub_col] = out
 
                 # update current sub column embedding
-                tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
+                if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                    tgt_embeds[sub_col] = torch.zeros_like(tgt_embeds[sub_col])
+                else:
+                    tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
 
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:
