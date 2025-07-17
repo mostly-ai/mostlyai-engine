@@ -271,15 +271,13 @@ def _calculate_sample_losses(
         for slen_col in slen_cols:
             slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
-        time_step_mask[:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+        time_step_mask = slen_mask.copy() * 10
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
             if col in slen_cols:
-                # mask out SLEN for steps > 1
                 mask = time_step_mask
             elif col in sidx_cols:
                 # SIDX columns need to be present in the computation graph for DP to work
