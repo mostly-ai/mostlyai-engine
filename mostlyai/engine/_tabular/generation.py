@@ -245,6 +245,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
+    is_last_step_mask: pd.Series | None = None,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -258,7 +259,12 @@ def _continue_sequence_mask(
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    if is_last_step_mask is None:
+        is_last_step_mask = pd.Series(np.zeros_like(syn[SIDX_SUB_COLUMN_PREFIX], dtype=np.bool))
+    continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    continue_mask &= ~is_last_step_mask
+    is_last_step_mask |= syn[SIDX_SUB_COLUMN_PREFIX] >= syn[SLEN_SUB_COLUMN_PREFIX] - 1
+    return continue_mask, is_last_step_mask
 
 
 def _post_process_decoding(
@@ -953,6 +959,7 @@ def generate(
                 step_ctx_keys = ctx_keys
                 step_size = batch_size
                 step_size_drop_threshold = max(50, batch_size // 100)
+                is_last_step_mask = None
                 for seq_step in range(seq_steps):
                     # exit early if nothing more to sample
                     if step_size == 0:
@@ -968,11 +975,11 @@ def generate(
                         for c in sidx_df
                     }
                     # fix SLEN by propagating sampled SLEN from first step
-                    if seq_step > 0:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                    else:
-                        slen_vals = {}
-                    fixed_values = sidx_vals | slen_vals
+                    # if seq_step > 0:
+                    #     slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                    # else:
+                    #     slen_vals = {}
+                    fixed_values = sidx_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -988,13 +995,14 @@ def generate(
                     # transform output dict to tensor for memory efficiency
                     out_pt = torch.stack(list(out_dct.values()), dim=0).transpose(0, 1)
                     # calculate continue sequence mask
-                    continue_mask = _continue_sequence_mask(
+                    continue_mask, is_last_step_mask = _continue_sequence_mask(
                         step_output=out_pt,
                         sub_cols=tgt_sub_columns,
                         step_keys=step_ctx_keys,
                         key_name=tgt_context_key,
                         seq_len_min=seq_len_min,
                         seq_len_max=seq_len_max,
+                        is_last_step_mask=is_last_step_mask,
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
@@ -1014,6 +1022,7 @@ def generate(
                         ]
                         history = history[continue_mask, ...]
                         history_state = tuple(h[:, continue_mask, ...] for h in history_state)
+                        is_last_step_mask = is_last_step_mask[continue_mask].reset_index(drop=True)
                     # accumulate outputs in memory
                     buffer.add((out_pt, step_ctx_keys))
                     # increment progress by 1 for each step
