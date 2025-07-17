@@ -284,14 +284,16 @@ def _calculate_sample_losses(
         for col in tgt_cols:
             if col in stop_cols:
                 mask = padding_mask
+                mask = torch.ones_like(mask)
             elif col in sidx_cols:
                 # SIDX column need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
                 mask = sidx_mask
+                mask = torch.ones_like(mask)
             else:
                 # mask out paddings
                 mask = padding_mask
-            # mask = torch.ones_like(mask)
+                mask = torch.ones_like(mask) * 1000
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
