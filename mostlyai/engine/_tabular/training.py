@@ -279,17 +279,11 @@ def _calculate_sample_losses(
         padding_mask = padding_mask.squeeze(-1)
         sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
 
-        stop_mask = padding_mask.clone()
-        row_idx = torch.arange(stop_mask.size(0), device=stop_mask.device)
-        col_idx = stop_mask.sum(dim=1)
-        valid = col_idx < stop_mask.size(1)
-        stop_mask[row_idx[valid], col_idx[valid]] = 1  # don't mask loss for stop tokens
-
         # calculate per column losses
         losses_by_column = []
         for col in tgt_cols:
             if col in stop_cols:
-                mask = stop_mask
+                mask = padding_mask
             elif col in sidx_cols:
                 # SIDX column need to be present in the computation graph for DP to work
                 # so we're only masking them instead of skipping them completely
@@ -297,7 +291,7 @@ def _calculate_sample_losses(
             else:
                 # mask out paddings
                 mask = padding_mask
-            mask = torch.ones_like(mask)
+            # mask = torch.ones_like(mask)
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
