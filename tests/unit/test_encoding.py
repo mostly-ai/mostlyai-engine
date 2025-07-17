@@ -19,11 +19,11 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from mostlyai.engine._common import SDEC_SUB_COLUMN_PREFIX, SIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX
+from mostlyai.engine._common import SIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX
 from mostlyai.engine._language.encoding import format_df
 from mostlyai.engine._tabular.encoding import (
     _encode_col,
-    _enrich_slen_sidx_sdec,
+    _enrich_for_seq,
     flatten_frame,
     pad_horizontally,
 )
@@ -48,7 +48,7 @@ def test_flatten_frame():
     assert_frame_equal(flatten_frame(df, "key"), expected_df)
 
 
-def test_enrich_slen_sidx_sdec():
+def test_enrich_slen_sidx():
     df = pd.DataFrame(
         {
             "key": [1, 1, 2],
@@ -60,13 +60,12 @@ def test_enrich_slen_sidx_sdec():
         {
             f"{SLEN_SUB_COLUMN_PREFIX}cat": [2, 2, 1],
             f"{SIDX_SUB_COLUMN_PREFIX}cat": [0, 1, 0],
-            f"{SDEC_SUB_COLUMN_PREFIX}cat": [0, 5, 0],
             "key": [1, 1, 2],
             "product": [3, 2, 9],
             "is_paid": [0, 1, 1],
         }
     )
-    assert_frame_equal(_enrich_slen_sidx_sdec(df, context_key="key", max_seq_len=1), expected_df)
+    assert_frame_equal(_enrich_for_seq(df, context_key="key", max_seq_len=1), expected_df)
 
 
 def test_pad_horizontally():
