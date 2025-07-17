@@ -184,7 +184,7 @@ def _resolve_gen_column_order(
 
     if ENRICHED_COLUMN in column_order:
         # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [ENRICHED_COLUMN] + [c for c in column_order if c != ENRICHED_COLUMN]
+        column_order = [c for c in column_order if c != ENRICHED_COLUMN] + [ENRICHED_COLUMN]
 
     return column_order
 
