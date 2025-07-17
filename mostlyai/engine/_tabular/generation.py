@@ -39,6 +39,7 @@ from mostlyai.engine._common import (
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
     decode_slen_sidx,
+    encode_slen_sidx,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -184,7 +185,8 @@ def _resolve_gen_column_order(
 
     if ENRICHED_COLUMN in column_order:
         # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [ENRICHED_COLUMN] + [c for c in column_order if c != ENRICHED_COLUMN]
+        # column_order = [ENRICHED_COLUMN] + [c for c in column_order if c != ENRICHED_COLUMN]
+        column_order = [c for c in column_order if c != ENRICHED_COLUMN] + [ENRICHED_COLUMN]
 
     return column_order
 
@@ -973,18 +975,18 @@ def generate(
                         break
 
                     # fix SIDX by incrementing ourselves instead of sampling
-                    # sidx = pd.Series([seq_step] * step_size)
-                    # sidx_df = encode_slen_sidx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
-                    # sidx_vals = {
-                    #     c: torch.unsqueeze(
-                    #         torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
-                    #         dim=-1,
-                    #     )
-                    #     for c in sidx_df
-                    # }
-                    # fixed_values = sidx_vals
+                    sidx = pd.Series([seq_step] * step_size)
+                    sidx_df = encode_slen_sidx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    sidx_vals = {
+                        c: torch.unsqueeze(
+                            torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
+                            dim=-1,
+                        )
+                        for c in sidx_df
+                    }
+                    fixed_values = sidx_vals
 
-                    fixed_values = {}
+                    # fixed_values = {}
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",

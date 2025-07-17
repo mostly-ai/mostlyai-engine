@@ -35,7 +35,7 @@ from torch.utils.data import DataLoader
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
-    # SIDX_SUB_COLUMN_PREFIX,
+    SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
@@ -264,7 +264,9 @@ def _calculate_sample_losses(
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
-        # sidx_cols = [k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)]
+        sidx_cols = [k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)]
+        slen_loss_weight = 1.0  # (len(tgt_cols) - len(slen_cols) - len(sidx_cols)) / len(slen_cols)  # 50% for slen, 50% for other columns
+        print(f"{slen_loss_weight = }")
 
         # generate masks for SLEN and time step
         padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
@@ -275,17 +277,17 @@ def _calculate_sample_losses(
         # calculate per column losses
         losses_by_column = []
         for col in tgt_cols:
-            # if col in sidx_cols:
-            #     mask = torch.zeros_like(padding_mask, dtype=torch.int64)
-            # else:
-            #     # mask out paddings
-            #     mask = padding_mask
+            if col in sidx_cols:
+                continue
             mask = padding_mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             # masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1, dim=1), min=1)
             masked_loss = (
                 torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1) * mask.shape[0]
             )
+            if col in slen_cols:
+                masked_loss *= slen_loss_weight
+
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]

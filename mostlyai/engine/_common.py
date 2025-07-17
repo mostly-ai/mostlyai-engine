@@ -316,9 +316,13 @@ def get_argn_name(
 
 def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
+
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_enriched_cardinalities(max_seq_len)
+        enriched_cardinalities = get_enriched_cardinalities(max_seq_len)
+    else:
+        enriched_cardinalities = {}
+    # cardinalities |= {k: v for k, v in enriched_cardinalities.items() if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -333,7 +337,10 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
             ): v
             for k, v in column_stats["cardinalities"].items()
         }
-        cardinalities = cardinalities | sub_columns
+        cardinalities |= sub_columns
+
+    # cardinalities |= {k: v for k, v in enriched_cardinalities.items() if k.startswith(SLEN_SUB_COLUMN_PREFIX)}
+    cardinalities |= enriched_cardinalities
     return cardinalities
 
 
@@ -553,8 +560,7 @@ def get_enriched_cardinalities(max_seq_len) -> dict[str, int]:
             e_idx = len(digits) - idx - 1
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-    # order is important: slen first, then sidx, as the former has highest priority
-    return slen_cardinalities | sidx_cardinalities
+    return sidx_cardinalities | slen_cardinalities
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):
