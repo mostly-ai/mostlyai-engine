@@ -39,7 +39,6 @@ from mostlyai.engine._common import (
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
     decode_slen_sidx_sdec,
-    encode_slen_sidx_sdec,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -246,6 +245,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
+    is_last_step_mask: np.ndarray | None = None,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -259,7 +259,12 @@ def _continue_sequence_mask(
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    if is_last_step_mask is None:
+        is_last_step_mask = pd.Series(np.zeros_like(syn[SIDX_SUB_COLUMN_PREFIX], dtype=np.bool))
+    continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    continue_mask &= ~is_last_step_mask
+    is_last_step_mask |= syn[SIDX_SUB_COLUMN_PREFIX] >= syn[SLEN_SUB_COLUMN_PREFIX] - 1
+    return continue_mask, is_last_step_mask
 
 
 def _post_process_decoding(
@@ -684,8 +689,8 @@ def generate(
             has_sdec = any([f"{SDEC_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
             if not has_sdec:
                 _LOG.warning("SDEC not found in model_units, removing SDEC columns from tgt_cardinalities")
-                del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
-                tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
+                tgt_cardinalities.pop(f"{SDEC_SUB_COLUMN_PREFIX}cat", None)
+                tgt_sub_columns = [col for col in tgt_sub_columns if col != f"{SDEC_SUB_COLUMN_PREFIX}cat"]
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
@@ -961,40 +966,44 @@ def generate(
                 step_ctx_keys = ctx_keys
                 step_size = batch_size
                 step_size_drop_threshold = max(50, batch_size // 100)
+                is_last_step_mask = None
                 for seq_step in range(seq_steps):
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
+
                     # fix SIDX by incrementing ourselves instead of sampling
-                    sidx = pd.Series([seq_step] * step_size)
-                    sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
-                    sidx_vals = {
-                        c: torch.unsqueeze(
-                            torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
-                            dim=-1,
-                        )
-                        for c in sidx_df
-                    }
-                    # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
-                    if seq_step > 0:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                        slen = decode_slen_sidx_sdec(
-                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}),
-                            max_seq_len=seq_steps,
-                            prefix=SLEN_SUB_COLUMN_PREFIX,
-                        )
-                        sdec = (
-                            (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                        )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
-                    else:
-                        slen_vals = {}
-                        sdec = pd.Series([0] * step_size)  # initial sequence index decile
-                    sdec_vals = {
-                        f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                            torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
-                        )
-                    }
-                    fixed_values = sidx_vals | slen_vals | sdec_vals
+                    # sidx = pd.Series([seq_step] * step_size)
+                    # sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    # sidx_vals = {
+                    #     c: torch.unsqueeze(
+                    #         torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
+                    #         dim=-1,
+                    #     )
+                    #     for c in sidx_df
+                    # }
+                    # # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
+                    # if seq_step > 0:
+                    #     slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                    #     slen = decode_slen_sidx_sdec(
+                    #         pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}),
+                    #         max_seq_len=seq_steps,
+                    #         prefix=SLEN_SUB_COLUMN_PREFIX,
+                    #     )
+                    #     # sdec = (
+                    #     #     (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                    #     # )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                    # else:
+                    #     slen_vals = {}
+                    # sdec = pd.Series([0] * step_size)  # initial sequence index decile
+                    # sdec_vals = {
+                    #     f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
+                    #         torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
+                    #     )
+                    # }
+                    # fixed_values = sidx_vals | slen_vals | sdec_vals
+                    # fixed_values = slen_vals | sidx_vals
+                    fixed_values = {}
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1010,13 +1019,14 @@ def generate(
                     # transform output dict to tensor for memory efficiency
                     out_pt = torch.stack(list(out_dct.values()), dim=0).transpose(0, 1)
                     # calculate continue sequence mask
-                    continue_mask = _continue_sequence_mask(
+                    continue_mask, is_last_step_mask = _continue_sequence_mask(
                         step_output=out_pt,
                         sub_cols=tgt_sub_columns,
                         step_keys=step_ctx_keys,
                         key_name=tgt_context_key,
                         seq_len_min=seq_len_min,
                         seq_len_max=seq_len_max,
+                        is_last_step_mask=is_last_step_mask,
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
@@ -1036,6 +1046,7 @@ def generate(
                         ]
                         history = history[continue_mask, ...]
                         history_state = tuple(h[:, continue_mask, ...] for h in history_state)
+                        is_last_step_mask = is_last_step_mask[continue_mask].reset_index(drop=True)
                     # accumulate outputs in memory
                     buffer.add((out_pt, step_ctx_keys))
                     # increment progress by 1 for each step

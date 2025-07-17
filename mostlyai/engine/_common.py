@@ -554,8 +554,9 @@ def get_slen_sidx_sdec_cardinalities(max_seq_len) -> dict[str, int]:
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
     # order is important: slen first, then sidx, as the former has highest priority
-    sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
-    return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
+    # sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
+    # return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
+    return slen_cardinalities | sidx_cardinalities
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):

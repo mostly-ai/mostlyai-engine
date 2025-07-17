@@ -36,6 +36,7 @@ from torch import nn
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
+    SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
     get_sub_columns_lookup,
@@ -237,11 +238,18 @@ class Embedders(nn.Module):
         # pass through sub column embedders
         embeddings = {}
         for sub_col in self.cardinalities:
-            xs = torch.as_tensor(x[sub_col], device=self.device)
-            if xs.is_nested:  # account for nested tensors
-                xs = torch.nested.to_padded_tensor(xs, 0)
-            xs = self.get(sub_col)(xs)
-            xs = torch.squeeze(xs, -2)
+            if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                # set embeddings to zero for slen
+                non_slen_sub_col = next(col for col in self.cardinalities if not col.startswith(SLEN_SUB_COLUMN_PREFIX))
+                batch_size, seq_len = x[non_slen_sub_col].shape[:2]
+                embedding_dim = self.get(sub_col).embedding_dim
+                xs = torch.zeros((batch_size, seq_len, embedding_dim), device=self.device)
+            else:
+                xs = torch.as_tensor(x[sub_col], device=self.device)
+                if xs.is_nested:  # account for nested tensors
+                    xs = torch.nested.to_padded_tensor(xs, 0)
+                xs = self.get(sub_col)(xs)
+                xs = torch.squeeze(xs, -2)
             embeddings[sub_col] = xs
         return embeddings
 
@@ -1232,6 +1240,10 @@ class SequentialModel(nn.Module):
         history_state=None,
         context=None,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+        # ignore slen
+        if x is not None:
+            x = {k: v for k, v in x.items() if not k.startswith(SLEN_SUB_COLUMN_PREFIX)}
+
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         if context is None:
