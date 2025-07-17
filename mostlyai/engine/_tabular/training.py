@@ -310,7 +310,8 @@ def _calculate_sample_losses(
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
     # sum up column level losses to get overall losses at sample level
     losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
-    return losses, stop_losses, slen_losses
+    return losses, stop_losses, stop_losses
+    # return losses, stop_losses, slen_losses
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory

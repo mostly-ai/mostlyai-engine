@@ -257,7 +257,7 @@ def _continue_sequence_mask(
     )
     # decode SLEN/SIDX columns
     syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+    # syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[STOP_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=STOP_SUB_COLUMN_PREFIX)
     # syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # if prev_slen is not None:
@@ -265,17 +265,18 @@ def _continue_sequence_mask(
     #     syn.loc[prev_slen_mask, SLEN_SUB_COLUMN_PREFIX] = prev_slen[prev_slen_mask].values
     # calculate stop sequence mask (True=continue, False=stop)
     print(syn["tgt:/__sidx_"].value_counts())
-    print(syn["tgt:/__slen_"].value_counts())
+    # print(syn["tgt:/__slen_"].value_counts())
     print(syn["tgt:/__stop_"].value_counts())
     print("--------------------------------")
     log_slen = 9
-    print(len(syn[syn["tgt:/__slen_"] == log_slen]))
-    print(syn[syn["tgt:/__slen_"] == log_slen]["tgt:/__stop_"].value_counts())
+    # print(len(syn[syn["tgt:/__slen_"] == log_slen]))
+    # print(syn[syn["tgt:/__slen_"] == log_slen]["tgt:/__stop_"].value_counts())
     # continue_mask = syn[STOP_SUB_COLUMN_PREFIX] == 1
     # return continue_mask
     # continue_mask = syn[SIDX_SUB_COLUMN_PREFIX] <= syn[SLEN_SUB_COLUMN_PREFIX]
     # return continue_mask, syn[SLEN_SUB_COLUMN_PREFIX][continue_mask].reset_index(drop=True)
     continue_mask = (syn[STOP_SUB_COLUMN_PREFIX] == 1) | (syn[SIDX_SUB_COLUMN_PREFIX] <= seq_len_min)
+    return continue_mask, syn[SIDX_SUB_COLUMN_PREFIX][continue_mask].reset_index(drop=True)
     return continue_mask, syn[SLEN_SUB_COLUMN_PREFIX][continue_mask].reset_index(drop=True)
 
 
