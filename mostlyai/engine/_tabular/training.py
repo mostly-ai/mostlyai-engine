@@ -271,7 +271,7 @@ def _calculate_sample_losses(
         for slen_col in slen_cols:
             slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = slen_mask.copy() * 10
+        time_step_mask = slen_mask.clone() * 10
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
