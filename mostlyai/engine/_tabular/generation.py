@@ -957,7 +957,7 @@ def generate(
                 # continue sequences until they reach their predicted length
                 step_ctx_keys = ctx_keys
                 step_size = batch_size
-                step_size_drop_threshold = max(50, batch_size // 100)
+                step_size_drop_threshold = 0  # max(50, batch_size // 100)
                 is_last_step_mask = None
                 for seq_step in range(seq_steps):
                     # exit early if nothing more to sample
