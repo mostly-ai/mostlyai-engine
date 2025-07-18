@@ -258,7 +258,7 @@ def _continue_sequence_mask(
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    return syn[SIDX_SUB_COLUMN_PREFIX] < (syn[SLEN_SUB_COLUMN_PREFIX] + 10_000)
 
 
 def _post_process_decoding(
@@ -967,12 +967,7 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    # fix SLEN by propagating sampled SLEN from first step
-                    if seq_step > 0:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                    else:
-                        slen_vals = {}
-                    fixed_values = sidx_vals | slen_vals
+                    fixed_values = sidx_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
