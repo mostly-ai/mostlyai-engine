@@ -264,6 +264,8 @@ def _calculate_sample_losses(
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
+        sidx_cols = [k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)]
+        slen_loss_weight = 1.0  # (len(tgt_cols) - len(slen_cols) - len(sidx_cols)) / len(slen_cols)  # 50% for slen, 50% for other columns
 
         # generate masks for SLEN and time step
         padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
@@ -272,7 +274,6 @@ def _calculate_sample_losses(
         padding_mask = padding_mask.squeeze(-1)
 
         # calculate per column losses
-        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
             if col in sidx_cols:
@@ -280,8 +281,9 @@ def _calculate_sample_losses(
             mask = padding_mask
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            # masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
+            if col in slen_cols:
+                masked_loss *= slen_loss_weight
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]

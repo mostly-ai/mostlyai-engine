@@ -1257,8 +1257,10 @@ class SequentialModel(nn.Module):
         history_state=None,
         context=None,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+        # ignore slen
         if x is not None:
             x = {k: v for k, v in x.items() if not k.startswith(SLEN_SUB_COLUMN_PREFIX)}
+
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         if context is None:

@@ -30,8 +30,8 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
-    ENRICHED_COLUMN,
     SIDX_SUB_COLUMN_PREFIX,
+    SLEN_SIDX_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
@@ -182,9 +182,8 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if ENRICHED_COLUMN in column_order:
-        # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [c for c in column_order if c != ENRICHED_COLUMN] + [ENRICHED_COLUMN]
+    if SLEN_SIDX_COLUMN in column_order:
+        column_order = [c for c in column_order if c != SLEN_SIDX_COLUMN] + [SLEN_SIDX_COLUMN]
 
     return column_order
 
