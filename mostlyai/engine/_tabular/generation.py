@@ -984,9 +984,13 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    fixed_values = sidx_vals
+                    # fix SLEN by propagating sampled SLEN from first step
+                    if seq_step > 0:
+                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                    else:
+                        slen_vals = {}
+                    fixed_values = sidx_vals | slen_vals
 
-                    # fixed_values = {}
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
