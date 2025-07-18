@@ -30,9 +30,8 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
-    ENRICHED_COLUMN,
-    SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
+    SLEN_SIDX_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
@@ -183,10 +182,8 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if ENRICHED_COLUMN in column_order:
-        # SLEN/SIDX column needs to be the first one in the generation model
-        # column_order = [ENRICHED_COLUMN] + [c for c in column_order if c != ENRICHED_COLUMN]
-        column_order = [c for c in column_order if c != ENRICHED_COLUMN] + [ENRICHED_COLUMN]
+    if SLEN_SIDX_COLUMN in column_order:
+        column_order = [c for c in column_order if c != SLEN_SIDX_COLUMN] + [SLEN_SIDX_COLUMN]
 
     return column_order
 
@@ -247,7 +244,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
-    is_last_step_mask: np.ndarray | None = None,
+    is_last_step_mask: pd.Series | None = None,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -686,13 +683,6 @@ def generate(
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
-        if is_sequential and model_configs.get("model_units"):
-            # remain backwards compatible to models trained without SDEC
-            has_sdec = any([f"{SDEC_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
-            if not has_sdec:
-                _LOG.warning("SDEC not found in model_units, removing SDEC columns from tgt_cardinalities")
-                tgt_cardinalities.pop(f"{SDEC_SUB_COLUMN_PREFIX}cat", None)
-                tgt_sub_columns = [col for col in tgt_sub_columns if col != f"{SDEC_SUB_COLUMN_PREFIX}cat"]
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
@@ -973,7 +963,6 @@ def generate(
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
-
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
                     sidx_df = encode_slen_sidx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
@@ -990,7 +979,6 @@ def generate(
                     else:
                         slen_vals = {}
                     fixed_values = sidx_vals | slen_vals
-
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",

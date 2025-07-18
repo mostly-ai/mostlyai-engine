@@ -48,11 +48,10 @@ ARGN_COLUMN = "argn_column"
 PREFIX_TABLE = ":"
 PREFIX_COLUMN = "/"
 PREFIX_SUB_COLUMN = "__"
-ENRICHED_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
+SLEN_SIDX_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
 SLEN_SIDX_DIGIT_ENCODING_THRESHOLD = 100
-SLEN_SUB_COLUMN_PREFIX = f"{ENRICHED_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
-SIDX_SUB_COLUMN_PREFIX = f"{ENRICHED_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
-SDEC_SUB_COLUMN_PREFIX = f"{ENRICHED_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
+SLEN_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
+SIDX_SUB_COLUMN_PREFIX = f"{SLEN_SIDX_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
@@ -317,13 +316,6 @@ def get_argn_name(
 def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
 
-    if stats.get("is_sequential", False):
-        max_seq_len = get_sequence_length_stats(stats)["max"]
-        enriched_cardinalities = get_enriched_cardinalities(max_seq_len)
-    else:
-        enriched_cardinalities = {}
-    # cardinalities |= {k: v for k, v in enriched_cardinalities.items() if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
-
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
         if "cardinalities" not in column_stats:
@@ -338,9 +330,9 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
             for k, v in column_stats["cardinalities"].items()
         }
         cardinalities |= sub_columns
-
-    # cardinalities |= {k: v for k, v in enriched_cardinalities.items() if k.startswith(SLEN_SUB_COLUMN_PREFIX)}
-    cardinalities |= enriched_cardinalities
+    if stats.get("is_sequential", False):
+        max_seq_len = get_sequence_length_stats(stats)["max"]
+        cardinalities |= get_slen_sidx_cardinalities(max_seq_len)
     return cardinalities
 
 
@@ -543,7 +535,7 @@ def decode_slen_sidx(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "
     return vals
 
 
-def get_enriched_cardinalities(max_seq_len) -> dict[str, int]:
+def get_slen_sidx_cardinalities(max_seq_len) -> dict[str, int]:
     if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
         # encode slen and sidx as numeric_discrete
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
@@ -577,7 +569,7 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
     syn = syn.dropna(subset=[tgt_context_key])
     # discard SLEN and SIDX columns
     syn.drop(
-        [c for c in syn.columns if c.startswith(ENRICHED_COLUMN)],
+        [c for c in syn.columns if c.startswith(SLEN_SIDX_COLUMN)],
         axis=1,
         inplace=True,
     )

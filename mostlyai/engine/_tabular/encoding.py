@@ -136,7 +136,7 @@ def _encode_partition(
         max_len = seq_len_stats["max"]
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
         # enrich with sequence lengths and sequence indexes
-        df = _enrich_for_seq(df, tgt_context_key, max_len)
+        df = _enrich_slen_sidx(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
@@ -379,7 +379,7 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def _enrich_for_seq(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def _enrich_slen_sidx(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index

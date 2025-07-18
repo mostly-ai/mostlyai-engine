@@ -23,7 +23,7 @@ from mostlyai.engine._common import SIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREF
 from mostlyai.engine._language.encoding import format_df
 from mostlyai.engine._tabular.encoding import (
     _encode_col,
-    _enrich_for_seq,
+    _enrich_slen_sidx,
     flatten_frame,
     pad_horizontally,
 )
@@ -65,7 +65,7 @@ def test_enrich_slen_sidx():
             "is_paid": [0, 1, 1],
         }
     )
-    assert_frame_equal(_enrich_for_seq(df, context_key="key", max_seq_len=1), expected_df)
+    assert_frame_equal(_enrich_slen_sidx(df, context_key="key", max_seq_len=1), expected_df)
 
 
 def test_pad_horizontally():
