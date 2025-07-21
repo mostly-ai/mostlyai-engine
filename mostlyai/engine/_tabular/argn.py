@@ -728,8 +728,8 @@ def _make_permutation_mask(
         order = torch.tensor([columns.index(c) for c in column_order], dtype=torch.int32)
     elif is_sequential and n_cols >= 1:
         # create mask in random order, but keep SLEN/SIDX column at last position
-        order = torch.randperm(n_cols - 1)
-        order = torch.cat((order, torch.tensor([n_cols - 1], dtype=torch.int32)), dim=0)
+        order = torch.randperm(n_cols - 1) + 1
+        order = torch.cat((torch.zeros(1, dtype=torch.int32), order), dim=0)
     else:
         # create mask in random order
         order = torch.randperm(n_cols)

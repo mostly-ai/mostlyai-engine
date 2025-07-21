@@ -183,7 +183,7 @@ def _resolve_gen_column_order(
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
     if SLEN_SIDX_COLUMN in column_order:
-        column_order = [c for c in column_order if c != SLEN_SIDX_COLUMN] + [SLEN_SIDX_COLUMN]
+        column_order = [SLEN_SIDX_COLUMN] + [c for c in column_order if c != SLEN_SIDX_COLUMN]
 
     return column_order
 

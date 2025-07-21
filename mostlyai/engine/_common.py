@@ -316,6 +316,9 @@ def get_argn_name(
 def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
 
+    if stats.get("is_sequential", False):
+        max_seq_len = get_sequence_length_stats(stats)["max"]
+        cardinalities |= get_slen_sidx_cardinalities(max_seq_len)
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
         if "cardinalities" not in column_stats:
@@ -330,9 +333,6 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
             for k, v in column_stats["cardinalities"].items()
         }
         cardinalities |= sub_columns
-    if stats.get("is_sequential", False):
-        max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_slen_sidx_cardinalities(max_seq_len)
     return cardinalities
 
 
@@ -552,7 +552,7 @@ def get_slen_sidx_cardinalities(max_seq_len) -> dict[str, int]:
             e_idx = len(digits) - idx - 1
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-    return sidx_cardinalities | slen_cardinalities
+    return slen_cardinalities | sidx_cardinalities
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):
