@@ -316,10 +316,10 @@ def get_argn_name(
 
 def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
-
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
         cardinalities |= get_slen_sidx_sdec_cardinalities(max_seq_len)
+
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
         if "cardinalities" not in column_stats:
@@ -333,7 +333,7 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
             ): v
             for k, v in column_stats["cardinalities"].items()
         }
-        cardinalities |= sub_columns
+        cardinalities = cardinalities | sub_columns
     return cardinalities
 
 
