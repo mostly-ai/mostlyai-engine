@@ -35,6 +35,7 @@ from torch.utils.data import DataLoader
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
+    SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     TGT,
@@ -274,9 +275,11 @@ def _calculate_sample_losses(
         padding_mask = padding_mask.squeeze(-1)
 
         # calculate per column losses
+        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
+        sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in sidx_cols:
+            if col in sidx_cols or col in sdec_cols:
                 continue
             mask = padding_mask
 
