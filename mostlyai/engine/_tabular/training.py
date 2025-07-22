@@ -273,6 +273,8 @@ def _calculate_sample_losses(
         for slen_col in slen_cols:
             padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         padding_mask = padding_mask.squeeze(-1)
+        padding_mask_for_empty_seqs = torch.zeros_like(padding_mask, dtype=torch.int64)
+        padding_mask_for_empty_seqs[:, 0] = 1
 
         # calculate per column losses
         losses_by_column = []
@@ -280,6 +282,9 @@ def _calculate_sample_losses(
             if col in sidx_cols or col in sdec_cols:
                 continue
             mask = padding_mask
+            # make sure SLEN of empty sequences are taken into account
+            if col in slen_cols:
+                mask = padding_mask | padding_mask_for_empty_seqs
 
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
