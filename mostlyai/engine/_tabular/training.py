@@ -249,7 +249,10 @@ class TabularModelCheckpoint(ModelCheckpoint):
 
 
 def _calculate_sample_losses(
-    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
+    model: FlatModel | SequentialModel | GradSampleModule,
+    data: dict[str, torch.Tensor],
+    steps: int | None = None,
+    total_steps: int | None = None,
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
@@ -273,8 +276,17 @@ def _calculate_sample_losses(
         for slen_col in slen_cols:
             padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         padding_mask = padding_mask.squeeze(-1)
-        padding_mask_for_empty_seqs = torch.zeros_like(padding_mask, dtype=torch.int64)
-        padding_mask_for_empty_seqs[:, 0] = 1
+        # padding_mask_for_empty_seqs = torch.zeros_like(padding_mask, dtype=torch.int64)
+        # padding_mask_for_empty_seqs[:, 0] = 1
+
+        seq_len = padding_mask.shape[1]
+        inv_weights = 1.0 / (torch.arange(seq_len, device=padding_mask.device) + 1)
+        uniform_weights = torch.ones(seq_len, device=padding_mask.device)
+        steps = 1.0 if steps is None else steps
+        total_steps = 1.0 if total_steps is None else total_steps
+        alpha = min(1.0, steps / total_steps)
+        blended_weights = (1 - alpha) * inv_weights + alpha * uniform_weights
+        time_step_mask = padding_mask * blended_weights
 
         # calculate per column losses
         losses_by_column = []
@@ -283,7 +295,7 @@ def _calculate_sample_losses(
                 continue
             elif col in slen_cols:
                 # make sure SLEN of empty sequences are taken into account
-                mask = padding_mask | padding_mask_for_empty_seqs
+                mask = time_step_mask  # | padding_mask_for_empty_seqs
             else:
                 mask = padding_mask
 
@@ -677,7 +689,7 @@ def train(
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
+                step_losses = _calculate_sample_losses(argn, step_data, steps, trn_steps)
                 # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
                 #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
                 #  than the batch size in both flat and sequential case.
