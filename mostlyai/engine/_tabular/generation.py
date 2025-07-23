@@ -185,7 +185,7 @@ def _resolve_gen_column_order(
 
     if SLEN_SIDX_SDEC_COLUMN in column_order:
         # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [SLEN_SIDX_SDEC_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_COLUMN]
+        column_order = [c for c in column_order if c != SLEN_SIDX_SDEC_COLUMN] + [SLEN_SIDX_SDEC_COLUMN]
 
     return column_order
 
@@ -246,6 +246,7 @@ def _continue_sequence_mask(
     key_name: str,
     seq_len_min: int,
     seq_len_max: int,
+    n_seeded_steps: int,
 ):
     # reshape tensor to pandas
     syn = _reshape_pt_to_pandas(
@@ -259,7 +260,7 @@ def _continue_sequence_mask(
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
+    return (syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
 
 
 def _post_process_decoding(
@@ -580,6 +581,7 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
+    n_seeded_steps: int | None = None,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -602,6 +604,7 @@ def decode_buffered_samples(
             tgt_context_key=tgt_context_key,
             seq_len_min=seq_len_min,
             seq_len_max=seq_len_max,
+            n_seeded_steps=n_seeded_steps,
         )
     else:
         (data,) = zip(*buffer.buffer)
@@ -1016,27 +1019,11 @@ def generate(
                         else 0
                     )
                     # fix SLEN by propagating sampled SLEN from first step after seeded part of sequence
-                    if seq_step > n_seeded_steps:
+                    if seq_step >= n_seeded_steps:
                         slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
                     else:
                         slen_vals = {}
-                    # update SDEC accordingly
-                    if seq_step > 0:
-                        slen_vals_ = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                        slen = decode_slen_sidx_sdec(
-                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals_.items()}),
-                            max_seq_len=seq_steps,
-                            prefix=SLEN_SUB_COLUMN_PREFIX,
-                        )
-                        sdec = (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                    else:
-                        sdec = pd.Series([0] * step_size)  # initial sequence index decile
-                    sdec_vals = {
-                        f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                            torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
-                        )
-                    }
-                    fixed_values = sidx_vals | slen_vals | sdec_vals
+                    fixed_values = sidx_vals | slen_vals
                     for col in seed_batch_encoded.columns:
                         if col == seed_context_key_encoded:
                             continue
@@ -1072,6 +1059,7 @@ def generate(
                         key_name=tgt_context_key,
                         seq_len_min=seq_len_min,
                         seq_len_max=seq_len_max,
+                        n_seeded_steps=n_seeded_steps,
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
@@ -1104,6 +1092,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
+                            n_seeded_steps=n_seeded_steps,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1172,6 +1161,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
+                    n_seeded_steps=n_seeded_steps,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1187,6 +1177,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
+                n_seeded_steps=n_seeded_steps,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()

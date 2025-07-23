@@ -316,9 +316,6 @@ def get_argn_name(
 
 def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
-    if stats.get("is_sequential", False):
-        max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_slen_sidx_sdec_cardinalities(max_seq_len)
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -334,6 +331,10 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
             for k, v in column_stats["cardinalities"].items()
         }
         cardinalities = cardinalities | sub_columns
+
+    if stats.get("is_sequential", False):
+        max_seq_len = get_sequence_length_stats(stats)["max"]
+        cardinalities |= get_slen_sidx_sdec_cardinalities(max_seq_len)
     return cardinalities
 
 
@@ -558,7 +559,7 @@ def get_slen_sidx_sdec_cardinalities(max_seq_len) -> dict[str, int]:
     return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
 
 
-def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int):
+def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int, n_seeded_steps: int):
     if syn.empty:
         return syn
 
@@ -567,7 +568,13 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
     # ensure that seq_len_min is respected
     syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
+    if n_seeded_steps > 0:
+        syn = syn[
+            (syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX])
+            | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
+        ].reset_index(drop=True)
+    else:
+        syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
     # discarded padded context rows, ie where context key has been set to None
     syn = syn.dropna(subset=[tgt_context_key])
     # discard SLEN and SIDX columns
