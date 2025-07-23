@@ -806,8 +806,10 @@ def generate(
                 )
             seed_seqlens = seed_data.groupby(tgt_context_key).size()
             if seed_seqlens.nunique() > 1:
+                # TODO: allow different sequence lengths in seed_data
                 raise ValueError("Seed data must contain sequences of the same length for sequential generation")
             if seed_seqlens.max() > seq_len_max:
+                # TODO: should we allow sequences longer than seq_len_max and just silently truncate them?
                 raise ValueError(
                     f"Seed data must contain sequences of length at most `{seq_len_max}` for sequential generation"
                 )
@@ -920,7 +922,12 @@ def generate(
             ctx_batch = apply_encoding_type_dtypes(ctx_batch, ctx_encoding_types)
             batch_size = len(ctx_batch)
 
-            seed_batch = seed_data[seed_data["__BATCH"] == batch]
+            # TODO: try unifying sequential and flat handling of seed_data
+            if is_sequential:
+                seed_batch = seed_data[seed_data[tgt_context_key].isin(ctx_batch[ctx_primary_key])]
+            else:
+                seed_batch = seed_data[seed_data["__BATCH"] == batch]
+
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -941,7 +948,12 @@ def generate(
 
             # encode seed_batch
             _LOG.info(f"encode seed data values {seed_batch.shape}")
-            seed_batch_encoded, _, _ = encode_df(df=seed_batch, stats=tgt_stats)
+            if is_sequential:
+                seed_batch_encoded, _, seed_context_key_encoded = encode_df(
+                    df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
+                )
+            else:
+                seed_batch_encoded, _, seed_context_key_encoded = encode_df(df=seed_batch, stats=tgt_stats)
 
             # sample data from generative model
             _LOG.info(f"sample data from model with context {ctx_batch.shape}")
@@ -996,19 +1008,28 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
-                    if seq_step > 0:
+                    grouped_seed = seed_batch_encoded.groupby(seed_context_key_encoded)
+                    # WARNING: assumption is that all seeded sequences have the same length
+                    n_seeded_steps = (
+                        seed_lengths[0]
+                        if len(seed_lengths := list(grouped_seed[seed_context_key_encoded].size())) > 0
+                        else 0
+                    )
+                    # fix SLEN by propagating sampled SLEN from first step after seeded part of sequence
+                    if seq_step > n_seeded_steps:
                         slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                    else:
+                        slen_vals = {}
+                    # update SDEC accordingly
+                    if seq_step > 0:
+                        slen_vals_ = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
                         slen = decode_slen_sidx_sdec(
-                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}),
+                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals_.items()}),
                             max_seq_len=seq_steps,
                             prefix=SLEN_SUB_COLUMN_PREFIX,
                         )
-                        sdec = (
-                            (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                        )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                        sdec = (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
                     else:
-                        slen_vals = {}
                         sdec = pd.Series([0] * step_size)  # initial sequence index decile
                     sdec_vals = {
                         f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
@@ -1016,6 +1037,19 @@ def generate(
                         )
                     }
                     fixed_values = sidx_vals | slen_vals | sdec_vals
+                    for col in seed_batch_encoded.columns:
+                        if col == seed_context_key_encoded:
+                            continue
+                        if seq_step >= n_seeded_steps:
+                            continue
+                        fixed_values |= {
+                            col: torch.unsqueeze(
+                                torch.as_tensor(grouped_seed[col].nth(seq_step).to_numpy(), device=model.device).type(
+                                    torch.int
+                                ),
+                                dim=-1,
+                            )
+                        }
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
