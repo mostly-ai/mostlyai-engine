@@ -381,7 +381,7 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
 
 def _enrich_sidx_slen(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
-    slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
+    slen = df.groupby(context_key).cumcount(ascending=False) + 1  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     slen = encode_sidx_slen(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
     sidx = encode_sidx_slen(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)

@@ -257,9 +257,9 @@ def _continue_sequence_mask(
     # decode SLEN/SIDX columns
     syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
     syn[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    # syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # calculate stop sequence mask (True=continue, False=stop)
-    return (syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
+    return (syn[SLEN_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
 
 
 def _post_process_decoding(
@@ -1012,7 +1012,11 @@ def generate(
                     )
                     # fix SLEN by propagating sampled SLEN from first step after seeded part of sequence
                     if seq_step >= n_seeded_steps:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                        slen_vals = {
+                            c: torch.clamp(v - 1, min=0)
+                            for c, v in out_dct.items()
+                            if c.startswith(SLEN_SUB_COLUMN_PREFIX)
+                        }
                     else:
                         slen_vals = {}
                     fixed_values = sidx_vals | slen_vals

@@ -281,7 +281,7 @@ def _calculate_sample_losses(
         total_steps = 1.0 if total_steps is None else total_steps
         alpha = min(1.0, steps / total_steps)
         blended_weights = (1 - alpha) * inv_weights + alpha * uniform_weights
-        time_step_mask = slen_mask * blended_weights
+        time_step_mask = slen_mask
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
