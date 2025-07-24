@@ -48,10 +48,11 @@ ARGN_COLUMN = "argn_column"
 PREFIX_TABLE = ":"
 PREFIX_COLUMN = "/"
 PREFIX_SUB_COLUMN = "__"
-SIDX_SLEN_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
-SLEN_SIDX_DIGIT_ENCODING_THRESHOLD = 100
-SLEN_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
-SIDX_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
+SIDX_SLEN_SREM_DIGIT_ENCODING_THRESHOLD = 100
+SIDX_SLEN_SREM_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
+SIDX_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_SREM_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
+SLEN_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_SREM_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
+SREM_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_SREM_COLUMN}{PREFIX_SUB_COLUMN}srem_"  # sequence remainder
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
@@ -333,7 +334,7 @@ def get_cardinalities(stats: dict) -> dict[str, int]:
 
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_sidx_slen_cardinalities(max_seq_len)
+        cardinalities |= get_sidx_slen_srem_cardinalities(max_seq_len)
     return cardinalities
 
 
@@ -512,40 +513,42 @@ def skip_if_error(func: Callable) -> Callable:
     return skip_if_error_wrapper
 
 
-def encode_sidx_slen(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
+def encode_sidx_slen_srem(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
     assert is_integer_dtype(vals)
-    if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
-        # encode slen and sidx as numeric_discrete
+    if max_seq_len < SIDX_SLEN_SREM_DIGIT_ENCODING_THRESHOLD:
+        # encode sidx, slen, srem as numeric_discrete
         df = pd.DataFrame({f"{prefix}cat": vals})
     else:
-        # encode as numeric_digit
+        # encode sidx, slen, srem as numeric_digit
         n_digits = len(str(max_seq_len))
         df = pd.DataFrame(vals.astype(str).str.pad(width=n_digits, fillchar="0").apply(list).tolist()).astype(int)
         df.columns = [f"{prefix}E{i}" for i in range(n_digits - 1, -1, -1)]
     return df
 
 
-def decode_sidx_slen(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
-    if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
-        # decode slen and sidx as numeric_discrete
+def decode_sidx_slen_srem(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
+    if max_seq_len < SIDX_SLEN_SREM_DIGIT_ENCODING_THRESHOLD:
+        # decode sidx, slen, srem as numeric_discrete
         vals = df_encoded[f"{prefix}cat"]
     else:
-        # decode slen and sidx as numeric_digit
+        # decode sidx, slen, srem as numeric_digit
         n_digits = len(str(max_seq_len))
         vals = sum([df_encoded[f"{prefix}E{d}"] * 10 ** int(d) for d in list(range(n_digits))])
     return vals
 
 
-def get_sidx_slen_cardinalities(max_seq_len) -> dict[str, int]:
-    if max_seq_len < SLEN_SIDX_DIGIT_ENCODING_THRESHOLD:
-        # encode slen and sidx as numeric_discrete
-        slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+def get_sidx_slen_srem_cardinalities(max_seq_len) -> dict[str, int]:
+    if max_seq_len < SIDX_SLEN_SREM_DIGIT_ENCODING_THRESHOLD:
+        # encode sidx, slen, srem as numeric_discrete
         sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+        slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+        srem_cardinalities = {f"{SREM_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
     else:
-        # encode slen and sidx as numeric_digit
+        # encode sidx, slen, srem as numeric_digit
         digits = [int(digit) for digit in str(max_seq_len)]
-        slen_cardinalities = {}
         sidx_cardinalities = {}
+        slen_cardinalities = {}
+        srem_cardinalities = {}
         for idx, digit in enumerate(digits):
             # cap cardinality of the most significant position
             # less significant positions allow any digit
@@ -553,8 +556,8 @@ def get_sidx_slen_cardinalities(max_seq_len) -> dict[str, int]:
             e_idx = len(digits) - idx - 1
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-    # order is important: sidx first, then slen, as the latter depends on the former
-    return sidx_cardinalities | slen_cardinalities
+            srem_cardinalities[f"{SREM_SUB_COLUMN_PREFIX}E{e_idx}"] = card
+    return sidx_cardinalities | slen_cardinalities | srem_cardinalities
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int, n_seeded_steps: int):
@@ -562,21 +565,22 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
         return syn
 
     # use SIDX and SLEN to determine sequence length
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+    syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+    syn[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+    syn[SREM_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX)
     # ensure that seq_len_min is respected
-    # syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     if n_seeded_steps > 0:
-        syn = syn[(syn[SLEN_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)].reset_index(
+        syn = syn[(syn[SREM_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)].reset_index(
             drop=True
         )
     else:
-        syn = syn[syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]].reset_index(drop=True)
+        syn = syn[syn[SREM_SUB_COLUMN_PREFIX] > 0].reset_index(drop=True)
     # discarded padded context rows, ie where context key has been set to None
     syn = syn.dropna(subset=[tgt_context_key])
-    # discard SLEN and SIDX columns
+    # discard SIDX, SLEN, SREM columns
     syn.drop(
-        [c for c in syn.columns if c.startswith(SIDX_SLEN_COLUMN)],
+        [c for c in syn.columns if c.startswith(SIDX_SLEN_SREM_COLUMN)],
         axis=1,
         inplace=True,
     )

@@ -30,15 +30,16 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
-    SIDX_SLEN_COLUMN,
+    SIDX_SLEN_SREM_COLUMN,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    SREM_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
-    decode_sidx_slen,
-    encode_sidx_slen,
+    decode_sidx_slen_srem,
+    encode_sidx_slen_srem,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -182,9 +183,9 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SIDX_SLEN_COLUMN in column_order:
+    if SIDX_SLEN_SREM_COLUMN in column_order:
         # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [c for c in column_order if c != SIDX_SLEN_COLUMN] + [SIDX_SLEN_COLUMN]
+        column_order = [c for c in column_order if c != SIDX_SLEN_SREM_COLUMN] + [SIDX_SLEN_SREM_COLUMN]
 
     return column_order
 
@@ -255,11 +256,12 @@ def _continue_sequence_mask(
         key_name=key_name,
     )
     # decode SLEN/SIDX columns
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    # syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
+    syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
+    syn[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+    syn[SREM_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX)
+    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
     # calculate stop sequence mask (True=continue, False=stop)
-    return (syn[SLEN_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
+    return (syn[SREM_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
 
 
 def _post_process_decoding(
@@ -995,7 +997,7 @@ def generate(
                         break
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
-                    sidx_df = encode_sidx_slen(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    sidx_df = encode_sidx_slen_srem(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
                             torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
@@ -1010,16 +1012,20 @@ def generate(
                         if len(seed_lengths := list(grouped_seed[seed_context_key_encoded].size())) > 0
                         else 0
                     )
-                    # fix SLEN by propagating sampled SLEN from first step after seeded part of sequence
+                    # fix SLEN and SREM by propagating sampled SLEN and SREM from first step after seeded part of sequence
                     if seq_step >= n_seeded_steps:
                         slen_vals = {
+                            c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)
+                        }
+                        srem_vals = {
                             c: torch.clamp(v - 1, min=0)
                             for c, v in out_dct.items()
-                            if c.startswith(SLEN_SUB_COLUMN_PREFIX)
+                            if c.startswith(SREM_SUB_COLUMN_PREFIX)
                         }
                     else:
                         slen_vals = {}
-                    fixed_values = sidx_vals | slen_vals
+                        srem_vals = {}
+                    fixed_values = sidx_vals | slen_vals | srem_vals
                     for col in seed_batch_encoded.columns:
                         if col == seed_context_key_encoded:
                             continue

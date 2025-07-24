@@ -26,10 +26,11 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
+    SREM_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
-    encode_sidx_slen,
+    encode_sidx_slen_srem,
     get_argn_name,
     get_sequence_length_stats,
     is_a_list,
@@ -136,7 +137,7 @@ def _encode_partition(
         max_len = seq_len_stats["max"]
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
         # enrich with sequence lengths and sequence indexes
-        df = _enrich_sidx_slen(df, tgt_context_key, max_len)
+        df = _enrich_sidx_slen_srem(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
@@ -379,13 +380,15 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def _enrich_sidx_slen(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def _enrich_sidx_slen_srem(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
-    slen = df.groupby(context_key).cumcount(ascending=False) + 1  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
-    slen = encode_sidx_slen(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
-    sidx = encode_sidx_slen(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
-    df = pd.concat([sidx, slen, df], axis=1)
+    slen = df.groupby(context_key)[context_key].transform("size") # sequence length
+    srem = df.groupby(context_key).cumcount(ascending=False) + 1  # sequence remainder
+    sidx = encode_sidx_slen_srem(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
+    slen = encode_sidx_slen_srem(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
+    srem = encode_sidx_slen_srem(srem, max_seq_len=max_seq_len, prefix=SREM_SUB_COLUMN_PREFIX)
+    df = pd.concat([sidx, slen, srem, df], axis=1)
     return df
 
 
