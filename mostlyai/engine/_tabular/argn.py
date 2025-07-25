@@ -623,37 +623,24 @@ class Regressors(nn.Module):
         super().__init__()
 
         self.model_size = model_size
-        self.cardinalities_output = cardinalities
-        self.cardinalities_input = {
-            k: v for k, v in cardinalities.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))
-        }
+        self.cardinalities = cardinalities
         self.context_dim = context_dim
         self.history_dim = history_dim
         self.column_embedding_dims = column_embedding_dims
         self.embedding_dims = embedding_dims
         self.device = device
 
-        self.column_sub_columns_output = get_sub_columns_nested_from_cardinalities(
-            self.cardinalities_output, groupby="columns"
-        )
-        self.sub_columns_lookup_output = get_sub_columns_lookup(self.column_sub_columns_output)
-        self.column_sub_columns_input = get_sub_columns_nested_from_cardinalities(
-            self.cardinalities_input, groupby="columns"
-        )
-        self.sub_columns_lookup_input = get_sub_columns_lookup(self.column_sub_columns_input)
+        self.column_sub_columns = get_sub_columns_nested_from_cardinalities(self.cardinalities, groupby="columns")
+        self.sub_columns_lookup = get_sub_columns_lookup(self.column_sub_columns)
 
         self.dims_output = {}
 
         self.regressors = nn.ModuleDict()
         self.dropout = nn.Dropout(p=0.25)
 
-        for sub_column, _ in self.sub_columns_lookup_output.items():
-            if sub_column in self.sub_columns_lookup_input:
-                lookup_input = self.sub_columns_lookup_input[sub_column]
-                # collect previous sub column embedding dims for current column
-                prev_embedding_dims = self.embedding_dims[lookup_input.sub_col_offset : lookup_input.sub_col_cum]
-            else:
-                prev_embedding_dims = []
+        for sub_column, lookup in self.sub_columns_lookup.items():
+            # collect previous sub column embedding dims for current column
+            prev_embedding_dims = self.embedding_dims[lookup.sub_col_offset : lookup.sub_col_cum]
 
             dim_input = (
                 self.context_dim
@@ -667,7 +654,7 @@ class Regressors(nn.Module):
                 id=self.id(sub_column),
                 model_size=self.model_size,
                 dim_input=dim_input,
-                cardinality=self.cardinalities_output[sub_column],
+                cardinality=self.cardinalities[sub_column],
             )
             regressor_layers = nn.ModuleList()
             for dim_in, dim_out in zip([dim_input] + dims[:-1], dims):
@@ -730,9 +717,9 @@ def _make_permutation_mask(
         # create mask in provided order
         order = torch.tensor([columns.index(c) for c in column_order], dtype=torch.int32)
     elif is_sequential and n_cols >= 1:
-        # create mask in random order, but keep SIDX/SLEN/SREM column at last position
-        order = torch.randperm(n_cols - 1)
-        order = torch.cat((order, torch.tensor([n_cols - 1], dtype=torch.int32)), dim=0)
+        # create mask in random order, but keep SIDX/SLEN/SREM column at first position
+        order = torch.randperm(n_cols - 1) + 1
+        order = torch.cat((torch.zeros(1, dtype=torch.int32), order), dim=0)
     else:
         # create mask in random order
         order = torch.randperm(n_cols)
@@ -1156,27 +1143,12 @@ class SequentialModel(nn.Module):
         super().__init__()
 
         self.tgt_cardinalities = tgt_cardinalities
-        self.tgt_columns_output = get_columns_from_cardinalities(tgt_cardinalities)
-        self.tgt_column_sub_columns_output = get_sub_columns_nested_from_cardinalities(
-            tgt_cardinalities, groupby="columns"
-        )
-        self.tgt_sub_columns_output = get_sub_columns_from_cardinalities(tgt_cardinalities)
-        self.tgt_sub_columns_lookup_output = get_sub_columns_lookup(self.tgt_column_sub_columns_output)
-
-        self.tgt_cardinalities_input = {
-            k: v
-            for k, v in tgt_cardinalities.items()
-            if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))
-        }
-        self.tgt_columns_input = get_columns_from_cardinalities(self.tgt_cardinalities_input)
-        self.tgt_column_sub_columns_input = get_sub_columns_nested_from_cardinalities(
-            self.tgt_cardinalities_input, groupby="columns"
-        )
-        self.tgt_sub_columns_input = get_sub_columns_from_cardinalities(self.tgt_cardinalities_input)
-        self.tgt_sub_columns_lookup_input = get_sub_columns_lookup(self.tgt_column_sub_columns_input)
-
+        self.tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
+        self.tgt_columns = get_columns_from_cardinalities(tgt_cardinalities)
+        self.tgt_column_sub_columns = get_sub_columns_nested_from_cardinalities(tgt_cardinalities, groupby="columns")
+        self.tgt_sub_columns_lookup = get_sub_columns_lookup(self.tgt_column_sub_columns)
         self.tgt_seq_len_median = tgt_seq_len_median
-        self.tgt_last_sub_cols_input = [sub_cols[-1] for sub_cols in self.tgt_column_sub_columns_input.values()]
+        self.tgt_last_sub_cols = [sub_cols[-1] for sub_cols in self.tgt_column_sub_columns.values()]
 
         self.model_size = model_size
         self.column_order = column_order
@@ -1196,14 +1168,14 @@ class SequentialModel(nn.Module):
         # sub column embeddings
         self.embedders = Embedders(
             model_size=self.model_size,
-            cardinalities=self.tgt_cardinalities_input,
+            cardinalities=self.tgt_cardinalities,
             device=self.device,
         )
 
         # column embeddings
         self.column_embedders = ColumnEmbedders(
             model_size=self.model_size,
-            cardinalities=self.tgt_cardinalities_input,
+            cardinalities=self.tgt_cardinalities,
             embedding_dims=self.embedders.dims,
             device=self.device,
         )
@@ -1262,10 +1234,6 @@ class SequentialModel(nn.Module):
         history_state=None,
         context=None,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
-        # ignore slen
-        if x is not None:
-            x = {k: v for k, v in x.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))}
-
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         if context is None:
@@ -1275,6 +1243,11 @@ class SequentialModel(nn.Module):
         if mode == "trn":
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
+            dropout = nn.Dropout(p=1.0)
+            tgt_embeds = {
+                k: dropout(v) if k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX)) else v
+                for k, v in tgt_embeds.items()
+            }
 
             # forward pass through column embedders
             tgt_col_embeds = self.column_embedders(tgt_embeds)
@@ -1297,25 +1270,20 @@ class SequentialModel(nn.Module):
             col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
             col_mask = _make_permutation_mask(
                 col_embedding_dims=self.column_embedders.dims,
-                columns=self.tgt_columns_output,
+                columns=self.tgt_columns,
                 column_order=self.column_order,
                 is_sequential=True,
                 device=self.device,
             )
 
-            for sub_col, lookup_output in self.tgt_sub_columns_lookup_output.items():
+            for sub_col, lookup in self.tgt_sub_columns_lookup.items():
                 # mask concatenated column embeddings
-                masked_col_embeds = [torch.mul(col_mask[lookup_output.col_idx, :].int(), col_embeddings)]
+                masked_col_embeds = [torch.mul(col_mask[lookup.col_idx, :].int(), col_embeddings)]
 
                 # collect previous sub column embeddings for current column
-                if sub_col in self.tgt_sub_columns_lookup_input:
-                    lookup_input = self.tgt_sub_columns_lookup_input[sub_col]
-                    prev_sub_col_embeds = [
-                        tgt_embeds[c]
-                        for c in self.tgt_sub_columns_input[lookup_input.sub_col_offset : lookup_input.sub_col_cum]
-                    ]
-                else:
-                    prev_sub_col_embeds = []
+                prev_sub_col_embeds = [
+                    tgt_embeds[sub_col] for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                ]
 
                 # regressor
                 regressor_in = context_history + masked_col_embeds + prev_sub_col_embeds
@@ -1338,7 +1306,7 @@ class SequentialModel(nn.Module):
                             (batch_size, 1, self.embedders.dims[i]),
                             device=self.device,
                         )
-                        for i in range(len(self.tgt_cardinalities_input))
+                        for i in range(len(self.tgt_cardinalities))
                     ],
                     dim=-1,
                 )
@@ -1362,15 +1330,11 @@ class SequentialModel(nn.Module):
             col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # take sub columns in the specified generation order
-            column_order = self.column_order or self.tgt_columns_output
-            sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns_output[col]]
+            column_order = self.column_order or self.tgt_columns
+            sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
 
             for sub_col in sub_column_order:
-                lookup_output = self.tgt_sub_columns_lookup_output[sub_col]
-                if sub_col in self.tgt_sub_columns_lookup_input:
-                    lookup_input = self.tgt_sub_columns_lookup_input[sub_col]
-                else:
-                    lookup_input = None
+                lookup = self.tgt_sub_columns_lookup[sub_col]
 
                 # if sub column is fixed, skip sampling and use that value
                 if sub_col in fixed_values:
@@ -1378,13 +1342,10 @@ class SequentialModel(nn.Module):
 
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
-                    if lookup_input is not None:
-                        prev_sub_col_embeds = [
-                            tgt_embeds[c]
-                            for c in self.tgt_sub_columns_input[lookup_input.sub_col_offset : lookup_input.sub_col_cum]
-                        ]
-                    else:
-                        prev_sub_col_embeds = []
+                    prev_sub_col_embeds = [
+                        tgt_embeds[sub_col]
+                        for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                    ]
 
                     # regressor
                     regressor_in = context_history + [col_embeddings] + prev_sub_col_embeds
@@ -1407,16 +1368,13 @@ class SequentialModel(nn.Module):
                 outputs[sub_col] = out
 
                 # update current sub column embedding
-                if sub_col in tgt_embeds:
-                    tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
+                tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
 
                 # update current column embedding
-                if sub_col in self.tgt_last_sub_cols_input:
-                    col_sub_cols = self.tgt_column_sub_columns_input[lookup_input.col_name]
+                if sub_col in self.tgt_last_sub_cols:
+                    col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
                     col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
-                    tgt_col_embeds[lookup_input.col_name] = self.column_embedders.get(lookup_input.col_name)(
-                        col_embed_in
-                    )
+                    tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # update history and hidden state

@@ -184,8 +184,8 @@ def _resolve_gen_column_order(
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
     if SIDX_SLEN_SREM_COLUMN in column_order:
-        # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [c for c in column_order if c != SIDX_SLEN_SREM_COLUMN] + [SIDX_SLEN_SREM_COLUMN]
+        # SIDX/SLEN/SREM column needs to be the first one in the generation model
+        column_order = [SIDX_SLEN_SREM_COLUMN] + [c for c in column_order if c != SIDX_SLEN_SREM_COLUMN]
 
     return column_order
 
@@ -1013,10 +1013,8 @@ def generate(
                         else 0
                     )
                     # fix SLEN and SREM by propagating sampled SLEN and SREM from first step after seeded part of sequence
-                    if seq_step >= n_seeded_steps:
-                        slen_vals = {
-                            c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)
-                        }
+                    if seq_step > n_seeded_steps:
+                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
                         srem_vals = {
                             c: torch.clamp(v - 1, min=0)
                             for c, v in out_dct.items()
