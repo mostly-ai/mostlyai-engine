@@ -624,7 +624,9 @@ class Regressors(nn.Module):
 
         self.model_size = model_size
         self.cardinalities_output = cardinalities
-        self.cardinalities_input = {k: v for k, v in cardinalities.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))}
+        self.cardinalities_input = {
+            k: v for k, v in cardinalities.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))
+        }
         self.context_dim = context_dim
         self.history_dim = history_dim
         self.column_embedding_dims = column_embedding_dims
@@ -728,7 +730,7 @@ def _make_permutation_mask(
         # create mask in provided order
         order = torch.tensor([columns.index(c) for c in column_order], dtype=torch.int32)
     elif is_sequential and n_cols >= 1:
-        # create mask in random order, but keep SIDX/SLEN column at last position
+        # create mask in random order, but keep SIDX/SLEN/SREM column at last position
         order = torch.randperm(n_cols - 1)
         order = torch.cat((order, torch.tensor([n_cols - 1], dtype=torch.int32)), dim=0)
     else:
@@ -1162,7 +1164,9 @@ class SequentialModel(nn.Module):
         self.tgt_sub_columns_lookup_output = get_sub_columns_lookup(self.tgt_column_sub_columns_output)
 
         self.tgt_cardinalities_input = {
-            k: v for k, v in tgt_cardinalities.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))
+            k: v
+            for k, v in tgt_cardinalities.items()
+            if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))
         }
         self.tgt_columns_input = get_columns_from_cardinalities(self.tgt_cardinalities_input)
         self.tgt_column_sub_columns_input = get_sub_columns_nested_from_cardinalities(

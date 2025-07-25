@@ -248,10 +248,7 @@ class TabularModelCheckpoint(ModelCheckpoint):
 
 
 def _calculate_sample_losses(
-    model: FlatModel | SequentialModel | GradSampleModule,
-    data: dict[str, torch.Tensor],
-    steps: int | None = None,
-    total_steps: int | None = None,
+    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
@@ -266,24 +263,22 @@ def _calculate_sample_losses(
     if isinstance(model, SequentialModel) or (
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
+        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
 
-        # generate masks for SLEN and time step
+        # generate masks
         padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
         for slen_col in slen_cols:
             padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         padding_mask = padding_mask.squeeze(-1)
+        sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
 
         # calculate per column losses
-        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in sidx_cols:
-                continue
+            mask = sidx_mask if col in sidx_cols else padding_mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * padding_mask, dim=1) / torch.clamp(
-                torch.sum(padding_mask >= 1), min=1
-            )
+            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
