@@ -37,6 +37,7 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     SLEN_SUB_COLUMN_PREFIX,
+    SREM_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
     get_sub_columns_lookup,
@@ -623,7 +624,7 @@ class Regressors(nn.Module):
 
         self.model_size = model_size
         self.cardinalities_output = cardinalities
-        self.cardinalities_input = {k: v for k, v in cardinalities.items() if not k.startswith(SLEN_SUB_COLUMN_PREFIX)}
+        self.cardinalities_input = {k: v for k, v in cardinalities.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))}
         self.context_dim = context_dim
         self.history_dim = history_dim
         self.column_embedding_dims = column_embedding_dims
@@ -1161,7 +1162,7 @@ class SequentialModel(nn.Module):
         self.tgt_sub_columns_lookup_output = get_sub_columns_lookup(self.tgt_column_sub_columns_output)
 
         self.tgt_cardinalities_input = {
-            k: v for k, v in tgt_cardinalities.items() if not k.startswith(SLEN_SUB_COLUMN_PREFIX)
+            k: v for k, v in tgt_cardinalities.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))
         }
         self.tgt_columns_input = get_columns_from_cardinalities(self.tgt_cardinalities_input)
         self.tgt_column_sub_columns_input = get_sub_columns_nested_from_cardinalities(
@@ -1259,7 +1260,7 @@ class SequentialModel(nn.Module):
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         # ignore slen
         if x is not None:
-            x = {k: v for k, v in x.items() if not k.startswith(SLEN_SUB_COLUMN_PREFIX)}
+            x = {k: v for k, v in x.items() if not k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX))}
 
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
