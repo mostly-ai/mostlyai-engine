@@ -269,37 +269,21 @@ def _calculate_sample_losses(
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
 
         # generate masks for SLEN and time step
-        slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
+        padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
         for slen_col in slen_cols:
-            slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
-        slen_mask = slen_mask.squeeze(-1)
-
-        seq_len = slen_mask.shape[1]
-        inv_weights = 1.0 / (torch.arange(seq_len, device=slen_mask.device) + 1)
-        uniform_weights = torch.ones(seq_len, device=slen_mask.device)
-        steps = 1.0 if steps is None else steps
-        total_steps = 1.0 if total_steps is None else total_steps
-        alpha = min(1.0, steps / total_steps)
-        blended_weights = (1 - alpha) * inv_weights + alpha * uniform_weights
-        time_step_mask = slen_mask
+            padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
+        padding_mask = padding_mask.squeeze(-1)
 
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in slen_cols:
-                # mask out SLEN for steps > 1
-                mask = time_step_mask
-            elif col in sidx_cols:
-                # SIDX column need to be present in the computation graph for DP to work
-                # so we're only masking them instead of skipping them completely
-                mask = torch.zeros_like(slen_mask, dtype=torch.int64)
-            else:
-                # mask out paddings
-                mask = slen_mask
-
+            if col in sidx_cols:
+                continue
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
+            masked_loss = torch.sum(column_loss * padding_mask, dim=1) / torch.clamp(
+                torch.sum(padding_mask >= 1), min=1
+            )
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
