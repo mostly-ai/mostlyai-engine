@@ -239,31 +239,6 @@ def _reshape_pt_to_pandas(
     return pd.concat([keys, df], axis=1)
 
 
-def _continue_sequence_mask(
-    step_output: torch.Tensor,
-    sub_cols: list[str],
-    step_keys: pd.Series,
-    key_name: str,
-    seq_len_min: int,
-    seq_len_max: int,
-    n_seeded_steps: int,
-):
-    # reshape tensor to pandas
-    syn = _reshape_pt_to_pandas(
-        data=[step_output],
-        sub_cols=sub_cols,
-        keys=[step_keys],
-        key_name=key_name,
-    )
-    # decode SLEN/SIDX columns
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    syn[SREM_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(syn, seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    # calculate stop sequence mask (True=continue, False=stop)
-    return (syn[SREM_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)
-
-
 def _post_process_decoding(
     syn: pd.DataFrame,
     tgt_primary_key: str | None = None,
@@ -985,7 +960,7 @@ def generate(
                 # process context just once for all sequence steps
                 context = model.context_compressor(ctxflt_inputs | ctxseq_inputs)
                 # loop over sequence steps, and pass forward history to keep model state-less
-                out_dct: dict[str, torch.Tensor] = {}
+                out_df: pd.DataFrame | None = None
                 decode_prev_steps = {}
                 # continue sequences until they reach their predicted length
                 step_ctx_keys = ctx_keys
@@ -1013,12 +988,24 @@ def generate(
                         else 0
                     )
                     # fix SLEN and SREM by propagating sampled SLEN and SREM from first step after seeded part of sequence
-                    if seq_step > n_seeded_steps:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
+                    if seq_step > 0 and seq_step >= n_seeded_steps:
+                        slen = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
+                        srem = (out_df[SREM_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
+                        slen = encode_sidx_slen_srem(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+                        srem = encode_sidx_slen_srem(srem, max_seq_len=seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX)
+                        slen_vals = {
+                            col: torch.unsqueeze(
+                                torch.as_tensor(slen[col], dtype=torch.int64, device=model.device),
+                                dim=-1,
+                            )
+                            for col in slen
+                        }
                         srem_vals = {
-                            c: torch.clamp(v - 1, min=0)
-                            for c, v in out_dct.items()
-                            if c.startswith(SREM_SUB_COLUMN_PREFIX)
+                            col: torch.unsqueeze(
+                                torch.as_tensor(srem[col], dtype=torch.int64, device=model.device),
+                                dim=-1,
+                            )
+                            for col in srem
                         }
                     else:
                         slen_vals = {}
@@ -1051,15 +1038,27 @@ def generate(
                     )
                     # transform output dict to tensor for memory efficiency
                     out_pt = torch.stack(list(out_dct.values()), dim=0).transpose(0, 1)
-                    # calculate continue sequence mask
-                    continue_mask = _continue_sequence_mask(
-                        step_output=out_pt,
+                    # reshape tensor to pandas
+                    out_df = _reshape_pt_to_pandas(
+                        data=[out_pt],
                         sub_cols=tgt_sub_columns,
-                        step_keys=step_ctx_keys,
+                        keys=[step_ctx_keys],
                         key_name=tgt_context_key,
-                        seq_len_min=seq_len_min,
-                        seq_len_max=seq_len_max,
-                        n_seeded_steps=n_seeded_steps,
+                    )
+                    # decode SIDX, SLEN, SREM columns
+                    out_df[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(
+                        out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
+                    )
+                    out_df[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(
+                        out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
+                    )
+                    out_df[SREM_SUB_COLUMN_PREFIX] = decode_sidx_slen_srem(
+                        out_df, seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX
+                    )
+                    out_df[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, out_df[SLEN_SUB_COLUMN_PREFIX])
+                    # calculate stop sequence mask (True=continue, False=stop)
+                    continue_mask = (out_df[SREM_SUB_COLUMN_PREFIX] > 0) | (
+                        out_df[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
@@ -1068,7 +1067,7 @@ def generate(
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
                         step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)
-                        out_dct = {k: v[continue_mask, ...] for k, v in out_dct.items()}
+                        out_df = out_df[continue_mask]
                         out_pt = out_pt[continue_mask, ...]
                         # filter context, if it is a sequential context then filter the list of contexts
                         context = [
