@@ -1067,7 +1067,7 @@ def generate(
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
                         step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)
-                        out_df = out_df[continue_mask]
+                        out_df = out_df[continue_mask].reset_index(drop=True)
                         out_pt = out_pt[continue_mask, ...]
                         # filter context, if it is a sequential context then filter the list of contexts
                         context = [
