@@ -36,7 +36,6 @@ from torch import nn
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
-    SLEN_SUB_COLUMN_PREFIX,
     SREM_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
@@ -717,7 +716,7 @@ def _make_permutation_mask(
         # create mask in provided order
         order = torch.tensor([columns.index(c) for c in column_order], dtype=torch.int32)
     elif is_sequential and n_cols >= 1:
-        # create mask in random order, but keep SIDX/SLEN/SREM column at first position
+        # create mask in random order, but keep SIDX/SREM column at first position
         order = torch.randperm(n_cols - 1) + 1
         order = torch.cat((torch.zeros(1, dtype=torch.int32), order), dim=0)
     else:
@@ -1244,10 +1243,7 @@ class SequentialModel(nn.Module):
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
             dropout = nn.Dropout(p=1.0)
-            tgt_embeds = {
-                k: dropout(v) if k.startswith((SLEN_SUB_COLUMN_PREFIX, SREM_SUB_COLUMN_PREFIX)) else v
-                for k, v in tgt_embeds.items()
-            }
+            tgt_embeds = {k: dropout(v) if k.startswith(SREM_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()}
 
             # forward pass through column embedders
             tgt_col_embeds = self.column_embedders(tgt_embeds)
