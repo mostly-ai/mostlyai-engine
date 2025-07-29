@@ -37,7 +37,6 @@ from mostlyai.engine._common import (
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -265,13 +264,12 @@ def _calculate_sample_losses(
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
-        slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
         ridx_cols = [k for k in data if k.startswith(RIDX_SUB_COLUMN_PREFIX)]
 
         # generate masks
-        padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
-        for slen_col in slen_cols:
-            padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
+        padding_mask = torch.zeros_like(data[ridx_cols[0]], dtype=torch.int64)
+        for ridx_col in ridx_cols:
+            padding_mask |= data[ridx_col] != 0  # mask loss for padded rows, which have RIDX=0
         padding_mask = padding_mask.squeeze(-1)
         padding_mask_for_empty_seqs = torch.zeros_like(padding_mask, dtype=torch.int64)
         padding_mask_for_empty_seqs[:, 0] = 1
