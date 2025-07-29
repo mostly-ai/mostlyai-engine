@@ -1242,16 +1242,16 @@ class SequentialModel(nn.Module):
         if mode == "trn":
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
-            tgt_embeds_pos_masked = {
+            tgt_embeds_ridx_masked = {
                 k: nn.Dropout(p=1.0)(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()
             }
 
             # forward pass through column embedders
-            tgt_col_embeds = self.column_embedders(tgt_embeds_pos_masked)
+            tgt_col_embeds = self.column_embedders(tgt_embeds_ridx_masked)
 
             # history
             # time shift: remove last time step; add zeros for first time step; add randoms for all others
-            embeddings = torch.cat(list(tgt_embeds_pos_masked.values()), dim=-1)
+            embeddings = torch.cat(list(tgt_embeds_ridx_masked.values()), dim=-1)
             history_in = embeddings[:, :-1, :]
             history_in = nn.ConstantPad2d((0, 0, 1, 0), 0)(history_in)
             history, _ = self.history_compressor(history_in)
