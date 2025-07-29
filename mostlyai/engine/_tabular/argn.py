@@ -1242,11 +1242,13 @@ class SequentialModel(nn.Module):
         if mode == "trn":
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
-            dropout = nn.Dropout(p=1.0)
-            tgt_embeds = {k: dropout(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()}
 
             # forward pass through column embedders
             tgt_col_embeds = self.column_embedders(tgt_embeds)
+            dropout = nn.Dropout(p=1.0)
+            tgt_col_embeds = {
+                k: dropout(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_col_embeds.items()
+            }
 
             # history
             # time shift: remove last time step; add zeros for first time step; add randoms for all others
