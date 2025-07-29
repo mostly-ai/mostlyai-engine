@@ -30,15 +30,15 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
-    SIDX_SREM_COLUMN,
+    RIDX_SUB_COLUMN_PREFIX,
+    SIDX_RIDX_COLUMN,
     SIDX_SUB_COLUMN_PREFIX,
-    SREM_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
-    decode_sidx_srem,
-    encode_sidx_srem,
+    decode_sidx_ridx,
+    encode_sidx_ridx,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -106,7 +106,7 @@ def _resolve_gen_column_order(
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
-    # 0. SIDX/SREM column
+    # 0. SIDX/RIDX column
     # 1. Seed data columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
@@ -182,9 +182,9 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SIDX_SREM_COLUMN in column_order:
-        # SIDX/SREM column needs to be the first one in the generation model
-        column_order = [SIDX_SREM_COLUMN] + [c for c in column_order if c != SIDX_SREM_COLUMN]
+    if SIDX_RIDX_COLUMN in column_order:
+        # SIDX/RIDX column needs to be the first one in the generation model
+        column_order = [SIDX_RIDX_COLUMN] + [c for c in column_order if c != SIDX_RIDX_COLUMN]
 
     return column_order
 
@@ -970,7 +970,7 @@ def generate(
                         break
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
-                    sidx_df = encode_sidx_srem(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    sidx_df = encode_sidx_ridx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
                             torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
@@ -985,20 +985,20 @@ def generate(
                         if len(seed_lengths := list(grouped_seed[seed_context_key_encoded].size())) > 0
                         else 0
                     )
-                    # fix SREM by propagating sampled SREM from first step after seeded part of sequence
+                    # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
                     if seq_step > 0 and seq_step >= n_seeded_steps:
-                        srem = (out_df[SREM_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
-                        srem = encode_sidx_srem(srem, max_seq_len=seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX)
-                        srem_vals = {
+                        ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
+                        ridx = encode_sidx_ridx(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
+                        ridx_vals = {
                             col: torch.unsqueeze(
-                                torch.as_tensor(srem[col], dtype=torch.int64, device=model.device),
+                                torch.as_tensor(ridx[col], dtype=torch.int64, device=model.device),
                                 dim=-1,
                             )
-                            for col in srem
+                            for col in ridx
                         }
                     else:
-                        srem_vals = {}
-                    fixed_values = sidx_vals | srem_vals
+                        ridx_vals = {}
+                    fixed_values = sidx_vals | ridx_vals
                     for col in seed_batch_encoded.columns:
                         if col == seed_context_key_encoded:
                             continue
@@ -1033,16 +1033,16 @@ def generate(
                         keys=[step_ctx_keys],
                         key_name=tgt_context_key,
                     )
-                    # decode SIDX, SREM columns
-                    out_df[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_srem(
+                    # decode SIDX, RIDX columns
+                    out_df[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
                         out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
                     )
-                    out_df[SREM_SUB_COLUMN_PREFIX] = decode_sidx_srem(
-                        out_df, seq_len_max, prefix=SREM_SUB_COLUMN_PREFIX
+                    out_df[RIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
+                        out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
                     )
-                    out_df[SREM_SUB_COLUMN_PREFIX] = np.minimum(seq_len_max, out_df[SREM_SUB_COLUMN_PREFIX])
+                    out_df[RIDX_SUB_COLUMN_PREFIX] = np.minimum(seq_len_max, out_df[RIDX_SUB_COLUMN_PREFIX])
                     # calculate stop sequence mask (True=continue, False=stop)
-                    continue_mask = (out_df[SREM_SUB_COLUMN_PREFIX] > 0) | (
+                    continue_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
                         out_df[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps
                     )
                     next_step_size = continue_mask.sum()
