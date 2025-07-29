@@ -1047,7 +1047,7 @@ def generate(
                     )
                     # calculate stop sequence mask (True=continue, False=stop)
                     continue_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
-                        out_df[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps
+                        out_df[SIDX_SUB_COLUMN_PREFIX] < n_seeded_steps
                     )
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
