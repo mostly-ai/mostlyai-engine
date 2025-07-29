@@ -35,6 +35,7 @@ from torch.utils.data import DataLoader
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
+    RIDX_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     TGT,
@@ -265,18 +266,25 @@ def _calculate_sample_losses(
     ):
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
+        ridx_cols = [k for k in data if k.startswith(RIDX_SUB_COLUMN_PREFIX)]
 
         # generate masks
         padding_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
         for slen_col in slen_cols:
             padding_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
         padding_mask = padding_mask.squeeze(-1)
-        sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+        padding_mask_for_empty_seqs = torch.zeros_like(padding_mask, dtype=torch.int64)
+        padding_mask_for_empty_seqs[:, 0] = 1
 
         # calculate per column losses
         losses_by_column = []
         for col in tgt_cols:
-            mask = sidx_mask if col in sidx_cols else padding_mask
+            if col in sidx_cols:
+                continue
+            elif col in ridx_cols:
+                mask = padding_mask | padding_mask_for_empty_seqs
+            else:
+                mask = padding_mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask >= 1), min=1)
             losses_by_column.append(masked_loss)
