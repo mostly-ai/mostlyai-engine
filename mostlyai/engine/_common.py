@@ -560,16 +560,6 @@ def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, se
     if syn.empty:
         return syn
 
-    # use SIDX and RIDX to determine sequence length
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[RIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(syn, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
-    if n_seeded_steps > 0:
-        syn = syn[(syn[RIDX_SUB_COLUMN_PREFIX] > 0) | (syn[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps)].reset_index(
-            drop=True
-        )
-    else:
-        syn = syn[syn[RIDX_SUB_COLUMN_PREFIX] > 0].reset_index(drop=True)
-    # discarded padded context rows, ie where context key has been set to None
     syn = syn.dropna(subset=[tgt_context_key])
     # discard SIDX, RIDX columns
     syn.drop(

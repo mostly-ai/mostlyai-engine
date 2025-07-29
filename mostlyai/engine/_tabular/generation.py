@@ -934,6 +934,8 @@ def generate(
                 syn = ctx_keys.to_frame().reset_index(drop=True)
                 buffer.add((syn,))
             elif isinstance(model, SequentialModel):
+                seq_stats = get_sequence_length_stats(tgt_stats)
+                seq_len_min = seq_stats["min"]
                 ctxflt_inputs = {
                     col: torch.unsqueeze(
                         torch.as_tensor(ctx_batch_encoded[col].to_numpy(), device=model.device).type(torch.int),
@@ -964,7 +966,6 @@ def generate(
                 # continue sequences until they reach their predicted length
                 step_ctx_keys = ctx_keys
                 step_size = batch_size
-                step_size_drop_threshold = max(50, batch_size // 100)
                 for seq_step in range(seq_steps):
                     # exit early if nothing more to sample
                     if step_size == 0:
@@ -1041,7 +1042,9 @@ def generate(
                     out_df[RIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
                         out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
                     )
-                    out_df[RIDX_SUB_COLUMN_PREFIX] = np.minimum(seq_len_max, out_df[RIDX_SUB_COLUMN_PREFIX])
+                    out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
+                        lower=seq_len_min - seq_step, upper=seq_len_max
+                    )
                     # calculate stop sequence mask (True=continue, False=stop)
                     continue_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
                         out_df[SIDX_SUB_COLUMN_PREFIX] <= n_seeded_steps
@@ -1049,7 +1052,7 @@ def generate(
                     next_step_size = continue_mask.sum()
                     # filter next iteration inputs only when threshold is passed
                     # or there is no more data to sample on next iteration
-                    if step_size - next_step_size > step_size_drop_threshold or next_step_size == 0:
+                    if step_size > next_step_size or next_step_size == 0:
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
                         step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)
