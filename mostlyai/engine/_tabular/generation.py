@@ -880,6 +880,7 @@ def generate(
 
         # add __BATCH to seed_data
         seed_data = _batch_df(seed_data, no_of_batches)
+        n_seeded_steps = None
 
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)
