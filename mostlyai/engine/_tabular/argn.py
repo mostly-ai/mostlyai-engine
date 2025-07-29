@@ -1243,7 +1243,7 @@ class SequentialModel(nn.Module):
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
             tgt_embeds_ridx_masked = {
-                k: nn.Dropout(p=1.0)(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()
+                k: torch.zeros_like(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()
             }
 
             # forward pass through column embedders
@@ -1366,16 +1366,19 @@ class SequentialModel(nn.Module):
 
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
+                tgt_embeds_ridx_masked = {
+                    k: torch.zeros_like(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()
+                }
 
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:
                     col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
-                    col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
+                    col_embed_in = torch.cat([tgt_embeds_ridx_masked[sc] for sc in col_sub_cols], dim=-1)
                     tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # update history and hidden state
-            history_in = torch.cat([v for v in tgt_embeds.values()], dim=-1)
+            history_in = torch.cat([v for v in tgt_embeds_ridx_masked.values()], dim=-1)
             history, history_state = self.history_compressor(history_in, history_state=history_state)
 
             # order outputs according to tgt_sub_columns
