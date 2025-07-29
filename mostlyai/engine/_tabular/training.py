@@ -266,21 +266,24 @@ def _calculate_sample_losses(
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         ridx_cols = [k for k in data if k.startswith(RIDX_SUB_COLUMN_PREFIX)]
 
-        # generate masks
+        # mask for all the columns except for sidx
         padding_mask = torch.zeros_like(data[ridx_cols[0]], dtype=torch.int64)
         for ridx_col in ridx_cols:
             padding_mask |= data[ridx_col] != 0  # mask loss for padded rows, which have RIDX=0
         padding_mask = padding_mask.squeeze(-1)
-        padding_mask_for_empty_seqs = torch.zeros_like(padding_mask, dtype=torch.int64)
-        padding_mask_for_empty_seqs[:, 0] = 1
+        # mask for sidx columns
+        sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+        # extra mask for ridx columns, which will take ridx of empty sequences into account
+        ridx_empty_seq_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+        ridx_empty_seq_mask[:, 0] = 1
 
         # calculate per column losses
         losses_by_column = []
         for col in tgt_cols:
             if col in sidx_cols:
-                continue
+                mask = sidx_mask
             elif col in ridx_cols:
-                mask = padding_mask | padding_mask_for_empty_seqs
+                mask = padding_mask | ridx_empty_seq_mask
             else:
                 mask = padding_mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
