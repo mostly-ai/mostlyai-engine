@@ -762,6 +762,10 @@ def generate(
             else:
                 seed_data = pd.DataFrame(index=range(sample_size))
 
+        if not is_sequential:
+            # link seed data to dummy context for flat data generation
+            seed_data = pd.concat([ctx_data[ctx_primary_key].to_frame(tgt_context_key), seed_data], axis=1)
+
         # sequence lengths
         seq_len_stats = get_sequence_length_stats(tgt_stats)
         seq_len_median = seq_len_stats["median"]
@@ -786,9 +790,7 @@ def generate(
 
         # ensure valid columns in seed_data
         tgt_columns = (
-            list(tgt_stats["columns"].keys())
-            + ([tgt_primary_key] if tgt_primary_key else [])
-            + ([tgt_context_key] if is_sequential else [])
+            list(tgt_stats["columns"].keys()) + [tgt_context_key] + ([tgt_primary_key] if tgt_primary_key else [])
         )
         seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
 
@@ -878,10 +880,6 @@ def generate(
         # add __BATCH to ctx_data
         ctx_data = _batch_df(ctx_data, no_of_batches)
 
-        # add __BATCH to seed_data
-        seed_data = _batch_df(seed_data, no_of_batches)
-        n_seeded_steps = None
-
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)
 
@@ -893,12 +891,7 @@ def generate(
             ctx_batch = apply_encoding_type_dtypes(ctx_batch, ctx_encoding_types)
             batch_size = len(ctx_batch)
 
-            # TODO: try unifying sequential and flat handling of seed_data
-            if is_sequential:
-                seed_batch = seed_data[seed_data[tgt_context_key].isin(ctx_batch[ctx_primary_key])]
-            else:
-                seed_batch = seed_data[seed_data["__BATCH"] == batch]
-
+            seed_batch = seed_data[seed_data[tgt_context_key].isin(ctx_batch[ctx_primary_key])]
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -919,12 +912,12 @@ def generate(
 
             # encode seed_batch
             _LOG.info(f"encode seed data values {seed_batch.shape}")
-            if is_sequential:
-                seed_batch_encoded, _, seed_context_key_encoded = encode_df(
-                    df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
-                )
-            else:
-                seed_batch_encoded, _, seed_context_key_encoded = encode_df(df=seed_batch, stats=tgt_stats)
+            seed_batch_encoded, _, seed_context_key_encoded = encode_df(
+                df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
+            )
+            seed_batch_encoded_grouped = seed_batch_encoded.groupby(seed_context_key_encoded)
+            # WARNING: assumption is that all seeded sequences have the same length
+            n_seeded_steps = max(list(seed_batch_encoded_grouped.size()), default=0)
 
             # sample data from generative model
             _LOG.info(f"sample data from model with context {ctx_batch.shape}")
@@ -980,9 +973,6 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    grouped_seed = seed_batch_encoded.groupby(seed_context_key_encoded)
-                    # WARNING: assumption is that all seeded sequences have the same length
-                    n_seeded_steps = max(list(grouped_seed[seed_context_key_encoded].size()), default=0)
                     # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
                     if seq_step > 0 and seq_step > n_seeded_steps:
                         ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
@@ -997,18 +987,17 @@ def generate(
                     else:
                         ridx_vals = {}
                     fixed_values = sidx_vals | ridx_vals
-                    for col in seed_batch_encoded.columns:
-                        if col == seed_context_key_encoded:
-                            continue
-                        if seq_step >= n_seeded_steps:
-                            continue
+                    if seq_step < n_seeded_steps:
+                        seed_batch_step_encoded = seed_batch_encoded_grouped.nth(seq_step)
                         fixed_values |= {
                             col: torch.unsqueeze(
-                                torch.as_tensor(grouped_seed[col].nth(seq_step).to_numpy(), device=model.device).type(
+                                torch.as_tensor(seed_batch_step_encoded[col].to_numpy(), device=model.device).type(
                                     torch.int
                                 ),
                                 dim=-1,
                             )
+                            for col in seed_batch_encoded.columns
+                            if col in tgt_sub_columns
                         }
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
@@ -1104,6 +1093,7 @@ def generate(
                 fixed_values = {
                     col: torch.as_tensor(seed_batch_encoded[col].to_numpy(), device=model.device).type(torch.int)
                     for col in seed_batch_encoded.columns
+                    if col in tgt_sub_columns
                 }
 
                 out_dct, _ = model(
