@@ -603,6 +603,7 @@ def decode_buffered_samples(
             seq_len_min=seq_len_min,
             seq_len_max=seq_len_max,
         )
+        df_seed = pd.DataFrame()
     else:
         (data, seed_data) = zip(*buffer.buffer)
         df_syn = pd.concat(data, axis=0).reset_index(drop=True)
