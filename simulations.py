@@ -35,7 +35,7 @@ parser.add_argument("--max_epochs", type=int, default=5)
 parser.add_argument("--branch", type=str, default="sequence-continuation")
 parser.add_argument("--random_state", type=int, default=42)
 parser.add_argument("--dataset", type=str, default="toy")
-parser.add_argument("--seed_data", type=str, default="first_step")
+parser.add_argument("--seed_data", type=str, default="None")
 args = parser.parse_args()
 branch = args.branch
 max_epochs = args.max_epochs
