@@ -396,7 +396,7 @@ def test_seed_generation_for_pk_only_flat_table(tmp_path_factory):
     seed_data = pd.DataFrame({tgt_primary_key: [f"seed_{i:04d}" for i in range(100)]})
     generate(workspace_dir=ws, seed_data=seed_data)
     syn = pd.read_parquet(ws / "SyntheticData")
-    pd.testing.assert_frame_equal(seed_data, syn, check_dtype=False)
+    pd.testing.assert_frame_equal(seed_data, syn)
 
 
 class TestTabularFlatWithContext:
