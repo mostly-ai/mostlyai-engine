@@ -25,7 +25,8 @@ from mostlyai.engine._tabular.encoding import (
     _encode_col,
     _enrich_sidx_ridx,
     flatten_frame,
-    pad_horizontally,
+    pad_ctx_sequences,
+    pad_tgt_sequences,
 )
 from mostlyai.engine.domain import ModelEncodingType
 
@@ -51,24 +52,44 @@ def test_flatten_frame():
 def test_enrich_sidx_ridx():
     df = pd.DataFrame(
         {
-            "key": [1, 1, 2],
-            "product": [3, 2, 9],
-            "is_paid": [0, 1, 1],
+            "key": [1, 1, 1, 2, 2],
+            "product": [3, 2, 0, 9, 0],
+            "is_paid": [0, 1, 0, 1, 0],
         }
     )
+    df = _enrich_sidx_ridx(df, context_key="key", max_seq_len=2)
     expected_df = pd.DataFrame(
         {
-            f"{SIDX_SUB_COLUMN_PREFIX}cat": [0, 1, 0],
-            f"{RIDX_SUB_COLUMN_PREFIX}cat": [2, 1, 1],
+            f"{SIDX_SUB_COLUMN_PREFIX}cat": [0, 1, 2, 0, 1],
+            f"{RIDX_SUB_COLUMN_PREFIX}cat": [2, 1, 0, 1, 0],
+            "key": [1, 1, 1, 2, 2],
+            "product": [3, 2, 0, 9, 0],
+            "is_paid": [0, 1, 0, 1, 0],
+        }
+    )
+    assert_frame_equal(df, expected_df)
+
+
+def test_pad_tgt_sequences():
+    df = pd.DataFrame(
+        {
             "key": [1, 1, 2],
             "product": [3, 2, 9],
             "is_paid": [0, 1, 1],
         }
     )
-    assert_frame_equal(_enrich_sidx_ridx(df, context_key="key", max_seq_len=1), expected_df)
+    df = pad_tgt_sequences(df, context_key="key")
+    expected_df = pd.DataFrame(
+        {
+            "key": [1, 1, 1, 2, 2],
+            "product": [3, 2, 0, 9, 0],
+            "is_paid": [0, 1, 0, 1, 0],
+        }
+    )
+    assert_frame_equal(df, expected_df)
 
 
-def test_pad_horizontally():
+def test_pad_ctx_sequences():
     df = pd.DataFrame(
         {
             "key": [1, 2],
@@ -76,24 +97,13 @@ def test_pad_horizontally():
             "is_paid": [[], []],
         }
     )
-    right_padded = pad_horizontally(df.copy(), padding_value=0, right=True)
-    left_padded = pad_horizontally(df.copy(), padding_value=0, right=False)
+    padded = pad_ctx_sequences(df.copy(), padding_value=0)
     assert_frame_equal(
-        right_padded,
+        padded,
         pd.DataFrame(
             {
                 "key": [1, 2],
-                "product": [[3, 2], [0]],
-                "is_paid": [[0], [0]],
-            }
-        ),
-    )
-    assert_frame_equal(
-        left_padded,
-        pd.DataFrame(
-            {
-                "key": [1, 2],
-                "product": [[3, 2], [0]],
+                "product": [[3, 2, 0], [0]],
                 "is_paid": [[0], [0]],
             }
         ),

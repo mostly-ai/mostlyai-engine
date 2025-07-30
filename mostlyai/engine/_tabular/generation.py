@@ -76,7 +76,7 @@ from mostlyai.engine._tabular.argn import (
     get_no_of_model_parameters,
 )
 from mostlyai.engine._tabular.common import load_model_weights
-from mostlyai.engine._tabular.encoding import encode_df, pad_horizontally
+from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 from mostlyai.engine.domain import (
@@ -913,7 +913,7 @@ def generate(
                 df=ctx_batch, stats=ctx_stats, ctx_primary_key=ctx_primary_key
             )
             # pad left context sequences to ensure non-empty sequences
-            ctx_batch_encoded = pad_horizontally(ctx_batch_encoded, padding_value=0, right=False)
+            ctx_batch_encoded = pad_ctx_sequences(ctx_batch_encoded)
             ctx_keys = ctx_batch_encoded[ctx_primary_key_encoded]
             ctx_keys.rename(tgt_context_key, inplace=True)
 
@@ -988,7 +988,7 @@ def generate(
                         else 0
                     )
                     # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
-                    if seq_step > 0 and seq_step >= n_seeded_steps:
+                    if seq_step > 0 and seq_step > n_seeded_steps:
                         ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
                         ridx = encode_sidx_ridx(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
                         ridx_vals = {

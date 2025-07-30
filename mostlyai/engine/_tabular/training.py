@@ -188,6 +188,9 @@ class BatchCollator:
 
     @staticmethod
     def _slice_sequences(batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
+        # we pad sequences with one step
+        # thus, to respect the max_sequence_window provided by the user, we need to add 1 to it
+        max_sequence_window += 1
         # determine sequence lengths of current batch
         tgt_columns = [col for col in batch.columns if col.startswith(TGT)]
         seq_lens = batch[tgt_columns[0]].copy().str.len().values
@@ -266,16 +269,15 @@ def _calculate_sample_losses(
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         ridx_cols = [k for k in data if k.startswith(RIDX_SUB_COLUMN_PREFIX)]
 
-        # mask for all the columns except for sidx
+        # mask for all the columns other than sidx and ridx
         padding_mask = torch.zeros_like(data[ridx_cols[0]], dtype=torch.int64)
         for ridx_col in ridx_cols:
             padding_mask |= data[ridx_col] != 0  # mask loss for padded rows, which have RIDX=0
         padding_mask = padding_mask.squeeze(-1)
+        # mask for ridx columns: this takes the sequence padding into account to learn the stopping with ridx=0
+        ridx_mask = torch.nn.functional.pad(padding_mask, (1, 0), value=1)[:, :-1]
         # mask for sidx columns
         sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
-        # extra mask for ridx columns, which will take ridx of empty sequences into account
-        ridx_empty_seq_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
-        ridx_empty_seq_mask[:, 0] = 1
 
         # calculate per column losses
         losses_by_column = []
@@ -283,7 +285,7 @@ def _calculate_sample_losses(
             if col in sidx_cols:
                 mask = sidx_mask
             elif col in ridx_cols:
-                mask = padding_mask | ridx_empty_seq_mask
+                mask = ridx_mask
             else:
                 mask = padding_mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
