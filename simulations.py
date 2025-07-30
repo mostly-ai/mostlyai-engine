@@ -45,6 +45,7 @@ seed_data = args.seed_data
 experiment_name = (
     f"branch={branch}_max_epochs={max_epochs}_random_state={random_state}_dataset={dataset}_seed_data={seed_data}"
 )
+print(experiment_name)
 engine.set_random_state(random_state)
 
 match dataset:
@@ -77,7 +78,14 @@ match dataset:
 
 match (dataset, seed_data):
     case (dataset, "first_step"):
+        # the seed will be the first step of each subject
         seed_data = tgt.groupby(tgt_context_key, as_index=False).first()
+    case (dataset, "first_item"):
+        # the seed will be the first step of the first subject
+        first_item = tgt.iloc[0]
+        print(f"sequence length of the first item: {(tgt[tgt_context_key] == first_item[tgt_context_key]).sum()}")
+        first_item = first_item.drop(tgt_context_key)
+        seed_data = tgt.groupby(tgt_context_key, as_index=False).apply(lambda x: first_item)
     case _:
         seed_data = None
 
