@@ -757,14 +757,11 @@ def generate(
 
         if seed_data is None:
             # create on-the-fly seed data
-            if is_sequential:
-                seed_data = pd.DataFrame(columns=[tgt_context_key])
-            else:
-                seed_data = pd.DataFrame(index=range(sample_size))
+            seed_data = pd.DataFrame(columns=[tgt_context_key])
 
         if not is_sequential:
             # link seed data to dummy context for flat data generation
-            seed_data = pd.concat([ctx_data[ctx_primary_key].to_frame(tgt_context_key), seed_data], axis=1)
+            seed_data[tgt_context_key] = ctx_data[ctx_primary_key].values
 
         # sequence lengths
         seq_len_stats = get_sequence_length_stats(tgt_stats)
