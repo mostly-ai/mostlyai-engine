@@ -590,34 +590,28 @@ def decode_buffered_samples(
 
     if is_sequential:
         data, keys = zip(*buffer.buffer) if buffer.buffer else ([], [])
-        syn = _reshape_pt_to_pandas(
+        df_syn = _reshape_pt_to_pandas(
             data=data,
             sub_cols=tgt_sub_columns,
             keys=keys,
             key_name=tgt_context_key,
         )
         # trim sequences to min and max length
-        syn = trim_sequences(
-            syn=syn,
+        df_syn = trim_sequences(
+            syn=df_syn,
             tgt_context_key=tgt_context_key,
             seq_len_min=seq_len_min,
             seq_len_max=seq_len_max,
         )
     else:
-        (data,) = zip(*buffer.buffer)
-        syn = pd.concat(data, axis=0).reset_index(drop=True)
-
-    # extract pre-defined seed columns, if provided
-    seed_columns = [col for col in syn.columns if col.startswith("__seed:")]
-    if seed_columns:
-        df_seed = syn[seed_columns].rename(columns=lambda col: col.replace("__seed:", "", 1))
-    else:
-        df_seed = pd.DataFrame()
+        (data, seed_data) = zip(*buffer.buffer)
+        df_syn = pd.concat(data, axis=0).reset_index(drop=True)
+        df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
 
     # decode generated data
-    _LOG.info(f"decode generated data {syn.shape}")
-    syn = _decode_df(
-        df_encoded=syn,
+    _LOG.info(f"decode generated data {df_syn.shape}")
+    df_syn = _decode_df(
+        df_encoded=df_syn,
         stats=tgt_stats,
         context_key=tgt_context_key,
         prev_steps=decode_prev_steps,
@@ -625,15 +619,15 @@ def decode_buffered_samples(
 
     # preserve all seed columns
     for col in df_seed.columns:
-        syn[col] = df_seed[col]
+        df_syn[col] = df_seed[col]
 
     # postprocess generated data
-    _LOG.info(f"post-process generated data {syn.shape}")
-    syn = _post_process_decoding(
-        syn,
+    _LOG.info(f"post-process generated data {df_syn.shape}")
+    df_syn = _post_process_decoding(
+        df_syn,
         tgt_primary_key=tgt_primary_key,
     )
-    return syn
+    return df_syn
 
 
 ##################
@@ -895,11 +889,11 @@ def generate(
 
         _LOG.info(f"generate {no_of_batches} batches")
         for batch in range(1, no_of_batches + 1):
-            ctx_batch = ctx_data[ctx_data["__BATCH"] == batch]
+            ctx_batch = ctx_data[ctx_data["__BATCH"] == batch].drop(columns="__BATCH")
             ctx_batch = apply_encoding_type_dtypes(ctx_batch, ctx_encoding_types)
             batch_size = len(ctx_batch)
 
-            seed_batch = seed_data[seed_data["__BATCH"] == batch]
+            seed_batch = seed_data[seed_data["__BATCH"] == batch].drop(columns="__BATCH")
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -925,10 +919,10 @@ def generate(
             # sample data from generative model
             _LOG.info(f"sample data from model with context {ctx_batch.shape}")
             if not tgt_sub_columns:
-                # there are no columns to sample, emit warning and continue to batch decoding
+                # there are no columns to sample, emit warning and continue to batch decoding; this case can only happen for flat tables
                 _LOG.warning("no target columns to sample")
                 syn = ctx_keys.to_frame().reset_index(drop=True)
-                buffer.add((syn,))
+                buffer.add((syn, seed_batch))
             elif isinstance(model, SequentialModel):
                 ctxflt_inputs = {
                     col: torch.unsqueeze(
@@ -1097,13 +1091,8 @@ def generate(
                     ],
                     axis=1,
                 )
-                seed_cols_df = seed_batch.loc[:, seed_batch.columns != "__BATCH"].add_prefix("__seed:")
-                if not seed_cols_df.empty:
-                    # keep original seed values, in order to preserve them
-                    seed_cols_df.reset_index(drop=True, inplace=True)
-                    syn = pd.concat([syn, seed_cols_df], axis=1)
                 syn.reset_index(drop=True, inplace=True)
-                buffer.add((syn,))
+                buffer.add((syn, seed_batch))
 
             # send number of processed batches / steps
             progress.update(completed=batch * (seq_len_max + 1) - 1)

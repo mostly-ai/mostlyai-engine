@@ -131,6 +131,7 @@ class TestTabularFlatWithoutContext:
         workspace_dir = workspace_after_training
         seed_data = pd.DataFrame(
             {
+                "id": [f"seed_{i:04d}" for i in range(5_000)],
                 "product_type": ["A"] * 2500 + ["B"] * 2500,
                 "amount": [10.0, 20.0, 30.0, 40.0, 50.0] * 1000,
             }
@@ -138,7 +139,7 @@ class TestTabularFlatWithoutContext:
         generate(seed_data=seed_data, workspace_dir=workspace_dir)
         syn = pd.read_parquet(workspace_dir / "SyntheticData")
         # the content of seed should remain in the synthetic data
-        pd.testing.assert_frame_equal(seed_data, syn[["product_type", "amount"]], check_dtype=False)
+        pd.testing.assert_frame_equal(seed_data, syn[["id", "product_type", "amount"]], check_dtype=False)
         syn_a = syn[syn["product_type"] == "A"].reset_index(drop=True)
         syn_b = syn[syn["product_type"] == "B"].reset_index(drop=True)
         # given the fixed amount values, the price of product A should be ~70% of the price of product B
@@ -382,6 +383,20 @@ def test_reproducibility(input_data, tmp_path_factory):
     assert ws_1_artifacts["synthetic_data"].equals(ws_2_artifacts["synthetic_data"]), (
         "reproducibility of generate step failed"
     )
+
+
+def test_seed_generation_for_pk_only_flat_table(tmp_path_factory):
+    ws = tmp_path_factory.mktemp("ws")
+    tgt_primary_key = "id"
+    df = pd.DataFrame({tgt_primary_key: range(1_000)})
+    split(tgt_data=df, workspace_dir=ws, tgt_primary_key=tgt_primary_key)
+    analyze(workspace_dir=ws)
+    encode(workspace_dir=ws)
+    train(workspace_dir=ws, max_epochs=1)
+    seed_data = pd.DataFrame({tgt_primary_key: [f"seed_{i:04d}" for i in range(100)]})
+    generate(workspace_dir=ws, seed_data=seed_data)
+    syn = pd.read_parquet(ws / "SyntheticData")
+    pd.testing.assert_frame_equal(seed_data, syn, check_dtype=False)
 
 
 class TestTabularFlatWithContext:
