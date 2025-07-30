@@ -775,9 +775,9 @@ def generate(
                     f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
                 )
             seed_seqlens = seed_data.groupby(tgt_context_key).size()
-            if seed_seqlens.nunique() > 1:
-                # TODO: allow different sequence lengths in seed_data
-                raise ValueError("Seed data must contain sequences of the same length for sequential generation")
+            # if seed_seqlens.nunique() > 1:
+            #     # TODO: allow different sequence lengths in seed_data
+            #     raise ValueError("Seed data must contain sequences of the same length for sequential generation")
             if seed_seqlens.max() > seq_len_max:
                 # TODO: should we allow sequences longer than seq_len_max and just silently truncate them?
                 raise ValueError(
@@ -982,11 +982,7 @@ def generate(
                     }
                     grouped_seed = seed_batch_encoded.groupby(seed_context_key_encoded)
                     # WARNING: assumption is that all seeded sequences have the same length
-                    n_seeded_steps = (
-                        seed_lengths[0]
-                        if len(seed_lengths := list(grouped_seed[seed_context_key_encoded].size())) > 0
-                        else 0
-                    )
+                    n_seeded_steps = max(list(grouped_seed[seed_context_key_encoded].size()), default=0)
                     # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
                     if seq_step > 0 and seq_step > n_seeded_steps:
                         ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)

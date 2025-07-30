@@ -80,6 +80,9 @@ match (dataset, seed_data):
     case (dataset, "first_step"):
         # the seed will be the first step of each subject
         seed_data = tgt.groupby(tgt_context_key, as_index=False).first()
+    case (dataset, "first_1_or_2_steps"):
+        # the seed will be the first one or two steps of each subject
+        seed_data = tgt.groupby(tgt_context_key, as_index=False).apply(lambda x: x.iloc[: np.random.choice([1, 2])])
     case (dataset, "first_item"):
         # the seed will be the first step of the first subject
         first_item = tgt.iloc[0]
