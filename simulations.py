@@ -57,9 +57,16 @@ match dataset:
         ctx_primary_key = "id"
     case "physio":
         url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/physio"
-        ctx = pd.read_csv(f"{url}/patients.csv.gz")[:10000]
+        ctx = pd.read_csv(f"{url}/patients.csv.gz")[:10_000]
         tgt = pd.read_csv(f"{url}/measures.csv.gz")[["patients_id", "Temp", "Urine"]]
         tgt_context_key = "patients_id"
+        ctx_primary_key = "id"
+        tgt = tgt[tgt[tgt_context_key].isin(ctx[ctx_primary_key])]
+    case "cdnow":
+        url = "https://github.com/mostly-ai/public-demo-data/raw/dev/cdnow"
+        ctx = pd.read_csv(f"{url}/users.csv.gz")[:10_000]
+        tgt = pd.read_csv(f"{url}/purchases.csv.gz")
+        tgt_context_key = "users_id"
         ctx_primary_key = "id"
         tgt = tgt[tgt[tgt_context_key].isin(ctx[ctx_primary_key])]
     case "toy":
