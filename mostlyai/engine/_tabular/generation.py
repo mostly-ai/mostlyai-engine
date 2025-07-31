@@ -207,6 +207,28 @@ def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
     return df
 
 
+def _regroup_partial_sequences_by_length(
+    ctx_data: pd.DataFrame, seed_data: pd.DataFrame, ctx_primary_key: str, tgt_context_key: str
+) -> tuple[pd.DataFrame, int]:
+    # add temporary __PARTIAL_SEQUENCE_LENGTH column to ctx_data
+    partial_seq_lens = seed_data.groupby(tgt_context_key).size().rename("__PARTIAL_SEQUENCE_LENGTH")
+    ctx_data = ctx_data.assign(
+        __PARTIAL_SEQUENCE_LENGTH=ctx_data[ctx_primary_key].map(partial_seq_lens).fillna(0).astype(int)
+    )
+
+    # regroup batches so that partial sequences of equal length are together
+    new_batches = []
+    for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
+        for _, new_batch_df in old_batch_df.groupby("__PARTIAL_SEQUENCE_LENGTH", sort=False):
+            new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
+            new_batches.append(new_batch_df)
+
+    # rebuild ctx_data; drop temporary __PARTIAL_SEQUENCE_LENGTH column
+    ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__PARTIAL_SEQUENCE_LENGTH"]).reset_index(drop=True)
+
+    return ctx_data, len(new_batches)
+
+
 def _reshape_pt_to_pandas(
     data: list[torch.Tensor], sub_cols: list[str], keys: list[pd.Series], key_name: str
 ) -> pd.DataFrame:
@@ -775,11 +797,7 @@ def generate(
                 raise ValueError(
                     f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
                 )
-            seed_seqlens = seed_data.groupby(tgt_context_key).size()
-            # if seed_seqlens.nunique() > 1:
-            #     # TODO: allow different sequence lengths in seed_data
-            #     raise ValueError("Seed data must contain sequences of the same length for sequential generation")
-            if seed_seqlens.max() > seq_len_max:
+            if seed_data.groupby(tgt_context_key).size().max() > seq_len_max:
                 # TODO: should we allow sequences longer than seq_len_max and just silently truncate them?
                 raise ValueError(
                     f"Seed data must contain sequences of length at most `{seq_len_max}` for sequential generation"
@@ -876,6 +894,12 @@ def generate(
 
         # add __BATCH to ctx_data
         ctx_data = _batch_df(ctx_data, no_of_batches)
+
+        # update __BATCH to ensure that, partial sequences of the same length are grouped within the same batch
+        if is_sequential:
+            ctx_data, no_of_batches = _regroup_partial_sequences_by_length(
+                ctx_data, seed_data, ctx_primary_key, tgt_context_key
+            )
 
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)
