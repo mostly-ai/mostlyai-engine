@@ -761,7 +761,7 @@ def generate(
 
         if not is_sequential:
             # link seed data to dummy context for flat data generation
-            seed_data[tgt_context_key] = ctx_data[ctx_primary_key].values
+            seed_data = seed_data.assign(**{tgt_context_key: ctx_data[ctx_primary_key].values})
 
         # sequence lengths
         seq_len_stats = get_sequence_length_stats(tgt_stats)
