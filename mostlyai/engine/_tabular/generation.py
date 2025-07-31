@@ -1027,28 +1027,28 @@ def generate(
                     out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
                         lower=seq_len_min - seq_step, upper=seq_len_max
                     )
-                    # calculate stop sequence mask (True=continue, False=stop)
-                    continue_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
+                    # calculate include step mask (True: include current step, False: exclude current step)
+                    include_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
                         out_df[SIDX_SUB_COLUMN_PREFIX] < n_seeded_steps
                     )
-                    next_step_size = continue_mask.sum()
+                    next_step_size = include_mask.sum()
                     # filter next iteration inputs only when threshold is passed
                     # or there is no more data to sample on next iteration
                     if step_size > next_step_size or next_step_size == 0:
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
-                        step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)
-                        out_df = out_df[continue_mask].reset_index(drop=True)
-                        out_pt = out_pt[continue_mask, ...]
+                        step_ctx_keys = step_ctx_keys[include_mask].reset_index(drop=True)
+                        out_df = out_df[include_mask].reset_index(drop=True)
+                        out_pt = out_pt[include_mask, ...]
                         # filter context, if it is a sequential context then filter the list of contexts
                         context = [
-                            c[continue_mask, ...]
+                            c[include_mask, ...]
                             if isinstance(c, torch.Tensor)
-                            else [sub_c[continue_mask, ...] for sub_c in c]
+                            else [sub_c[include_mask, ...] for sub_c in c]
                             for c in context
                         ]
-                        history = history[continue_mask, ...]
-                        history_state = tuple(h[:, continue_mask, ...] for h in history_state)
+                        history = history[include_mask, ...]
+                        history_state = tuple(h[:, include_mask, ...] for h in history_state)
                     # accumulate outputs in memory
                     buffer.add((out_pt, step_ctx_keys))
                     # increment progress by 1 for each step
