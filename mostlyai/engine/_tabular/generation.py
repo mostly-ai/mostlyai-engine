@@ -916,6 +916,10 @@ def generate(
                     index=ctx_batch.index,
                 )
 
+            # align ctx_batch and seed_batch by their respective keys
+            ctx_batch = ctx_batch.sort_values(ctx_primary_key).reset_index(drop=True)
+            seed_batch = seed_batch.sort_values(tgt_context_key).reset_index(drop=True)
+
             # encode ctx_batch
             _LOG.info(f"encode context {ctx_batch.shape}")
             ctx_batch_encoded, ctx_primary_key_encoded, _ = encode_df(
@@ -931,7 +935,7 @@ def generate(
             seed_batch_encoded, _, seed_context_key_encoded = encode_df(
                 df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
             )
-            seed_batch_encoded_grouped = seed_batch_encoded.groupby(seed_context_key_encoded)
+            seed_batch_encoded_grouped = seed_batch_encoded.groupby(seed_context_key_encoded, sort=False)
             # WARNING: assumption is that all seeded sequences have the same length
             n_seeded_steps = max(list(seed_batch_encoded_grouped.size()), default=0)
 
