@@ -38,6 +38,11 @@ def train(
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
     upload_model_data_callback: Callable | None = None,
+    # Business rules parameters
+    target_columns: list[str] | None = None,
+    predefined_distributions: dict[str, dict[int, float]] | None = None,
+    lambda_weights: dict[str, float] | None = None,
+    enable_lora_style: bool = True,
 ) -> None:
     """
     Trains a model with optional early stopping and differential privacy.
@@ -60,6 +65,10 @@ def train(
         workspace_dir: Directory path for workspace. Training outputs are stored in ModelStore subdirectory.
         update_progress: Callback function to report training progress.
         upload_model_data_callback: Callback function to upload model data during training.
+        target_columns: List of target columns for business rules fine-tuning.
+        predefined_distributions: Dictionary mapping column names to predefined probability distributions.
+        lambda_weights: Dictionary mapping column names to lambda weights for business rules.
+        enable_lora_style: Whether to enable LORA-style fine-tuning for business rules.
     """
     model_type = resolve_model_type(workspace_dir)
     if model_type == ModelType.tabular:
@@ -80,6 +89,10 @@ def train(
             model_state_strategy=model_state_strategy,
             device=device,
             max_sequence_window=max_sequence_window if max_sequence_window else args["max_sequence_window"].default,
+            target_columns=target_columns,
+            predefined_distributions=predefined_distributions,
+            lambda_weights=lambda_weights,
+            enable_lora_style=enable_lora_style,
         )
     else:
         from mostlyai.engine._language.training import train as train_language

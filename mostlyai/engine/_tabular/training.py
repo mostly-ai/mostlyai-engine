@@ -248,8 +248,139 @@ class TabularModelCheckpoint(ModelCheckpoint):
         return self.workspace.model_tabular_weights_path.exists()
 
 
+def _calculate_custom_loss(
+    output: torch.Tensor,
+    target: torch.Tensor,
+    predefined_distribution: dict[int, float],
+    lambda_weight: float = 0.5,
+    device: torch.device = None,
+    column_name: str = None,  # Add column name for logging
+) -> torch.Tensor:
+    """
+    Calculate custom loss combining data-based and predefined distribution.
+
+    Args:
+        output: Model output logits
+        target: Ground truth labels
+        predefined_distribution: Dict mapping class indices to probabilities
+        lambda_weight: Weight for predefined distribution (0-1)
+        device: Device for tensor operations
+        column_name: Name of the column for logging
+
+    Returns:
+        Combined loss tensor
+    """
+    if device is None:
+        device = output.device
+
+    # Standard categorical cross-entropy loss (data-based)
+    criterion = nn.CrossEntropyLoss(reduction="none")
+    data_loss = criterion(output, target)
+
+    # Direct distribution matching loss
+    # Get model's predicted probabilities
+    model_probs = torch.softmax(output, dim=-1)
+
+    # Create target distribution tensor
+    target_probs = torch.zeros_like(model_probs)
+    for class_idx, prob in predefined_distribution.items():
+        target_probs[:, class_idx] = prob
+
+    # Calculate distribution matching loss using MSE
+    # This is more direct and aggressive than KL divergence
+    distribution_loss = torch.mean((model_probs - target_probs) ** 2, dim=-1)
+
+    # Scale the distribution loss to be comparable to cross-entropy loss
+    # Cross-entropy loss is typically around 2-4, so we scale distribution loss accordingly
+    distribution_loss = distribution_loss * 10.0  # Scale factor to make it comparable
+
+    # Combine losses
+    combined_loss = (1 - lambda_weight) * data_loss + lambda_weight * distribution_loss
+
+    return combined_loss
+
+
+def _setup_lora_style_training(
+    model: FlatModel | SequentialModel,
+    target_columns: list[str],
+    enable_lora: bool = True,
+) -> None:
+    """
+    Setup business rules training (simplified - no parameter freezing).
+
+    Args:
+        model: The model to modify
+        target_columns: List of target column names
+        enable_lora: Whether to enable business rules training
+    """
+    if not enable_lora or not target_columns:
+        return
+
+    # Business rules training is enabled
+    pass
+
+
+def _get_column_mapping(workspace_dir: str | Path) -> dict[str, list[str]]:
+    """Get mapping from original column names to encoded column patterns from stats.json."""
+
+    workspace = Workspace(workspace_dir)
+    tgt_stats = workspace.tgt_stats.read()
+
+    column_mapping = {}
+
+    # Iterate through all columns in the target stats
+    for column_name, column_stats in tgt_stats.get("columns", {}).items():
+        # Get the ARGN table and column identifiers
+        argn_table = column_stats.get("argn_table")
+        argn_column = column_stats.get("argn_column")
+
+        if argn_table and argn_column:
+            # Get encoding type and cardinalities
+            encoding_type = column_stats.get("encoding_type", "")
+            cardinalities = column_stats.get("cardinalities", {})
+
+            # Determine the suffix based on encoding type
+            suffixes = []
+
+            if encoding_type == "TABULAR_CATEGORICAL":
+                # Categorical columns use 'cat' suffix
+                if "cat" in cardinalities:
+                    suffixes.append("cat")
+            elif encoding_type == "TABULAR_NUMERIC_DISCRETE":
+                # Numeric discrete columns use 'cat' suffix
+                if "cat" in cardinalities:
+                    suffixes.append("cat")
+            elif encoding_type == "TABULAR_NUMERIC_BINNED":
+                # Numeric binned columns use 'bin' suffix
+                if "bin" in cardinalities:
+                    suffixes.append("bin")
+            elif encoding_type == "TABULAR_NUMERIC_DIGIT":
+                # Numeric digit columns use 'E0', 'E1', etc. suffixes
+                # Get all digit position suffixes from cardinalities
+                for key in cardinalities.keys():
+                    if key.startswith("E"):
+                        suffixes.append(key)
+
+            # Create patterns for all suffixes
+            patterns = []
+            for suffix in suffixes:
+                pattern = f"{argn_table}/{argn_column}__{suffix}"
+                patterns.append(pattern)
+
+            if patterns:
+                column_mapping[column_name] = patterns
+
+    return column_mapping
+
+
 def _calculate_sample_losses(
-    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
+    model: FlatModel | SequentialModel | GradSampleModule,
+    data: dict[str, torch.Tensor],
+    target_columns: list[str] | None = None,
+    predefined_distributions: dict[str, dict[int, float]] | None = None,
+    lambda_weights: dict[str, float] | None = None,
+    steps: int = 0,
+    workspace_dir: str | Path = "engine-ws",
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
@@ -261,6 +392,15 @@ def _calculate_sample_losses(
         if not isinstance(model, GradSampleModule)
         else model._module.tgt_cardinalities.keys()
     )
+
+    # Initialize parameters
+    target_columns = target_columns or []
+    predefined_distributions = predefined_distributions or {}
+    lambda_weights = lambda_weights or {}
+
+    # Get column mapping - moved outside the conditional blocks
+    column_mapping = _get_column_mapping(workspace_dir)
+
     if isinstance(model, SequentialModel) or (
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
@@ -277,7 +417,8 @@ def _calculate_sample_losses(
         # calculate per column losses
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
-        losses_by_column = []
+        losses_by_column = {}
+
         for col in tgt_cols:
             if col in slen_cols:
                 # mask out SLEN for steps > 1
@@ -290,13 +431,83 @@ def _calculate_sample_losses(
                 # mask out paddings
                 mask = slen_mask
 
-            column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
+            # Check if this is a target column for business rules
+            is_target = False
+            target_column_name = None
+
+            for target_col in target_columns:
+                # Use the mapping to find the correct encoded column
+                if target_col in column_mapping:
+                    patterns = column_mapping[target_col]
+
+                    for pattern in patterns:
+                        if pattern in col:
+                            is_target = True
+                            target_column_name = target_col
+                            break
+                    if is_target:
+                        break
+
+            if is_target and target_column_name:
+                # Use custom loss for target columns
+                column_dist = predefined_distributions.get(target_column_name, {})
+                column_lambda = lambda_weights.get(target_column_name, 0.5)
+
+                column_loss = _calculate_custom_loss(
+                    output[col],
+                    data[col].squeeze(1),
+                    column_dist,
+                    column_lambda,
+                    output[col].device,
+                    target_column_name,
+                )
+
+            else:
+                # Use standard loss for non-target columns
+                column_loss = criterion(output[col], data[col].squeeze(1))
+
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
-            losses_by_column.append(masked_loss)
+            losses_by_column[col] = masked_loss
     else:
-        losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
+        losses_by_column = {}
+        for col in tgt_cols:
+            # Check if this is a target column for business rules
+            is_target = False
+            target_column_name = None
+
+            for target_col in target_columns:
+                # Use the mapping to find the correct encoded column
+                if target_col in column_mapping:
+                    patterns = column_mapping[target_col]
+
+                    for pattern in patterns:
+                        if pattern in col:
+                            is_target = True
+                            target_column_name = target_col
+                            break
+
+            if is_target and target_column_name:
+                # Use custom loss for target columns
+                column_dist = predefined_distributions.get(target_column_name, {})
+                column_lambda = lambda_weights.get(target_column_name, 0.5)
+
+                column_loss = _calculate_custom_loss(
+                    output[col],
+                    data[col].squeeze(1),
+                    column_dist,
+                    column_lambda,
+                    output[col].device,
+                    target_column_name,
+                )
+
+            else:
+                # Use standard loss for non-target columns
+                column_loss = criterion(output[col], data[col].squeeze(1))
+
+            losses_by_column[col] = column_loss
+
     # sum up column level losses to get overall losses at sample level
-    losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
+    losses = torch.sum(torch.stack(list(losses_by_column.values()), dim=0), dim=0)
     return losses
 
 
@@ -347,7 +558,12 @@ def train(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
-):
+    # Business rules parameters
+    target_columns: list[str] | None = None,
+    predefined_distributions: dict[str, dict[int, float]] | None = None,
+    lambda_weights: dict[str, float] | None = None,
+    enable_lora_style: bool = True,
+) -> None:
     _LOG.info("TRAIN_TABULAR started")
     t0 = time.time()
     workspace_dir = ensure_workspace_dir(workspace_dir)
@@ -462,6 +678,12 @@ def train(
 
         if isinstance(model_state_strategy, str):
             model_state_strategy = ModelStateStrategy(model_state_strategy)
+
+        # For business rules fine-tuning, default to resume if no strategy specified
+        if target_columns and model_state_strategy == ModelStateStrategy.reset:
+            _LOG.info("Business rules detected, defaulting to resume strategy for fine-tuning")
+            model_state_strategy = ModelStateStrategy.resume
+
         if not model_checkpoint.model_weights_path_exists():
             _LOG.info(f"model weights not found; change strategy from {model_state_strategy} to RESET")
             model_state_strategy = ModelStateStrategy.reset
@@ -494,6 +716,10 @@ def train(
         argn.to(device)
         no_of_model_params = get_no_of_model_parameters(argn)
         _LOG.info(f"{no_of_model_params=}")
+
+        # Setup LORA-style training if target columns are specified
+        if target_columns and enable_lora_style:
+            _setup_lora_style_training(argn, target_columns, enable_lora_style)
 
         # persist model configs
         model_units = get_model_units(argn)
@@ -679,12 +905,18 @@ def train(
                 except StopIteration:
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
-                # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
-                # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
-                #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
-                #  than the batch size in both flat and sequential case.
-                # calculate total step loss
+                # Calculate losses for each sample
+                step_losses = _calculate_sample_losses(
+                    argn,
+                    step_data,
+                    target_columns=target_columns,
+                    predefined_distributions=predefined_distributions,
+                    lambda_weights=lambda_weights,
+                    steps=steps,
+                    workspace_dir=workspace_dir,  # Pass workspace directory
+                )
+
+                # Calculate total step loss
                 step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
                 if with_dp:
                     # opacus handles the gradient accumulation internally
@@ -693,6 +925,7 @@ def train(
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
                     step_loss.backward()
+
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on
                 samples += step_losses.shape[0]

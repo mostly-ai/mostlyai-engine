@@ -709,8 +709,27 @@ def _make_permutation_mask(
     column_order: list[str] | None,
     is_sequential: bool,
     device: torch.device,
+    target_columns: list[str] | None = None,
+    mask_type: str = "data_loss",  # "data_loss" or "kl_loss"
 ) -> torch.Tensor:
+    """
+    Create permutation mask for column embeddings.
+
+    Args:
+        col_embedding_dims: Dimensions of column embeddings
+        columns: List of column names
+        column_order: Specific column order (if None, random)
+        is_sequential: Whether this is sequential data
+        device: Device to create tensors on
+        target_columns: List of target columns for business rules (not used for masking)
+        mask_type: Type of mask - "data_loss" or "kl_loss"
+
+    Returns:
+        Binary mask tensor for column embeddings
+    """
     n_cols = len(columns)
+
+    # Use normal masking for all columns (no zero masking for target columns)
     if column_order is not None:
         # create mask in provided order
         order = torch.tensor([columns.index(c) for c in column_order], dtype=torch.int32)
@@ -727,6 +746,7 @@ def _make_permutation_mask(
     ones = torch.ones(n_cols, n_cols, dtype=torch.int32, device=device)
     mask = torch.tril(ones, diagonal=-1)  # strict lower triangular matrix
     mask = mask[idx, :][:, idx].bool()  # re-order rows and columns
+
     reps = torch.as_tensor(col_embedding_dims, dtype=torch.int32, device=device)
     mask = torch.repeat_interleave(mask, repeats=reps, dim=1)  # expand columns
     return mask
@@ -949,6 +969,8 @@ class FlatModel(nn.Module):
         top_p: float | None = None,
         return_probs: list[str] | None = None,
         fairness_transforms: dict[str, Any] | None = None,
+        target_columns: list[str] | None = None,
+        mask_type: str = "data_loss",  # "data_loss" or "kl_loss"
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -976,6 +998,8 @@ class FlatModel(nn.Module):
                 column_order=self.column_order,
                 is_sequential=False,
                 device=self.device,
+                target_columns=target_columns,
+                mask_type=mask_type,
             )
 
             for sub_col, lookup in self.tgt_sub_columns_lookup.items():

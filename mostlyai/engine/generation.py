@@ -40,6 +40,8 @@ def generate(
     rebalancing: RebalancingConfig | dict | None = None,
     imputation: ImputationConfig | dict | None = None,
     fairness: FairnessConfig | dict | None = None,
+    priority_columns: list[str] | None = None,
+    target_column_positions: dict[str, int] | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ) -> None:
@@ -83,6 +85,8 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
+            priority_columns=priority_columns,
+            target_column_positions=target_column_positions,
         )
     else:
         from mostlyai.engine._language.generation import generate as generate_language

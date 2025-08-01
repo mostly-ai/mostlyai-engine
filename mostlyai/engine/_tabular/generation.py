@@ -32,7 +32,6 @@ from mostlyai.engine._common import (
     CTXSEQ,
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SIDX_SDEC_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
@@ -103,18 +102,21 @@ def _resolve_gen_column_order(
     imputation: ImputationConfig | None = None,
     seed_data: pd.DataFrame | None = None,
     fairness: FairnessConfig | None = None,
+    priority_columns: list[str] | None = None,
+    target_column_positions: dict[str, int] | None = None,
 ):
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
     # 0. SLEN/SIDX column
-    # 1. Seed data columns
-    # 2. Rebalancing column
-    # 3. Fairness sensitive columns (which are not imputation columns)
-    # 4. Fairness sensitive columns (which are imputation columns as well)
-    # 5. The rest of the columns
-    # 6. Imputation columns (which are not fairness sensitive columns)
-    # 7. Fairness target column
+    # 1. Priority columns (if specified)
+    # 2. Seed data columns
+    # 3. Rebalancing column
+    # 4. Fairness sensitive columns (which are not imputation columns)
+    # 5. Fairness sensitive columns (which are imputation columns as well)
+    # 6. The rest of the columns
+    # 7. Imputation columns (which are not fairness sensitive columns)
+    # 8. Fairness target column
 
     if imputation:
         # imputed columns should be at the end in the generation model
@@ -183,9 +185,70 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SLEN_SIDX_SDEC_COLUMN in column_order:
-        # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [SLEN_SIDX_SDEC_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_COLUMN]
+    if priority_columns:
+        # priority columns should be at the beginning in the generation model
+        # priority columns have higher priority than seed_data, rebalancing, and imputation
+        priority_columns_argn = [
+            get_argn_name(
+                argn_processor=column_stats[col][ARGN_PROCESSOR],
+                argn_table=column_stats[col][ARGN_TABLE],
+                argn_column=column_stats[col][ARGN_COLUMN],
+            )
+            for col in priority_columns
+            if col in column_stats
+        ]
+        column_order = priority_columns_argn + [c for c in column_order if c not in priority_columns_argn]
+
+    # Handle target column positioning
+    if target_column_positions:
+        # Convert target column names to ARGN patterns
+        target_column_argn_map = {}
+        for target_col, position in target_column_positions.items():
+            if target_col in column_stats:
+                argn_pattern = get_argn_name(
+                    argn_processor=column_stats[target_col][ARGN_PROCESSOR],
+                    argn_table=column_stats[target_col][ARGN_TABLE],
+                    argn_column=column_stats[target_col][ARGN_COLUMN],
+                )
+                # Handle -1 as "last position"
+                if position == -1:
+                    position = len(column_order) - 1
+                target_column_argn_map[argn_pattern] = position
+
+        # Remove target columns from their current positions
+        remaining_columns = [c for c in column_order if c not in target_column_argn_map.keys()]
+
+        # Sort target columns by their desired positions
+        sorted_target_columns = sorted(target_column_argn_map.items(), key=lambda x: x[1])
+
+        # Handle multiple columns with the same position by adjusting positions
+        adjusted_target_columns = []
+        for i, (col_pattern, position) in enumerate(sorted_target_columns):
+            # If this position is already taken by a previous column, increment it
+            while any(pos == position for _, pos in adjusted_target_columns):
+                position += 1
+            adjusted_target_columns.append((col_pattern, position))
+
+        # Sort by adjusted positions
+        adjusted_target_columns.sort(key=lambda x: x[1])
+
+        # Insert target columns at their specified positions
+        final_column_order = []
+        target_col_idx = 0
+
+        for i in range(len(remaining_columns)):
+            # Check if we need to insert target columns before this position
+            while target_col_idx < len(adjusted_target_columns) and adjusted_target_columns[target_col_idx][1] <= i:
+                final_column_order.append(adjusted_target_columns[target_col_idx][0])
+                target_col_idx += 1
+            final_column_order.append(remaining_columns[i])
+
+        # Add any remaining target columns at the end
+        while target_col_idx < len(adjusted_target_columns):
+            final_column_order.append(adjusted_target_columns[target_col_idx][0])
+            target_col_idx += 1
+
+        column_order = final_column_order
 
     return column_order
 
@@ -654,6 +717,8 @@ def generate(
     rebalancing: RebalancingConfig | dict | None = None,
     imputation: ImputationConfig | dict | None = None,
     fairness: FairnessConfig | dict | None = None,
+    priority_columns: list[str] | None = None,
+    target_column_positions: dict[str, int] | None = None,
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
@@ -725,6 +790,8 @@ def generate(
             imputation=imputation,
             seed_data=seed_data,
             fairness=fairness,
+            priority_columns=priority_columns,
+            target_column_positions=target_column_positions,
         )
         _LOG.info(f"{gen_column_order=}")
         if not enable_flexible_generation:
