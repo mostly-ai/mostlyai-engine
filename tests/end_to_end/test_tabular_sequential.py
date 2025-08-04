@@ -590,3 +590,75 @@ class TestTabularTrainingStrategy:
         # it's actually a fresh training, so the progress will look different
         with pytest.raises(AssertionError):
             pd.testing.assert_frame_equal(progress_resume.iloc[:2], progress_resume_without_checkpoint.iloc[:2])
+
+
+def test_seed_generation(tmp_path):
+    workspace_dir = tmp_path / "ws"
+
+    # training data has 2000 sequences, up to 40 steps each
+    # sequence lengths are inversely correlated with the number of MINUS steps
+    # the probability of current step being EOS is higher if the sequence has more MINUS steps
+    n_sequences = 2_000
+    keys = list(range(n_sequences))
+    key_col = "sequence_id"
+    val_col = "value"
+    p_plus = 0.8
+    base_eos_prob, eos_prob_increment_per_minus = 0.05, 0.05
+    max_seq_len = 40
+    choices = np.random.choice(["PLUS", "MINUS"], size=(n_sequences, max_seq_len), p=[p_plus, 1 - p_plus])
+    rand_eos = np.random.rand(n_sequences, max_seq_len)
+    num_minuses = np.cumsum(choices == "MINUS", axis=1)
+    eos_probs = base_eos_prob + num_minuses * eos_prob_increment_per_minus
+    eos_mask = rand_eos < eos_probs
+    eos_any = eos_mask.any(axis=1)
+    eos_idx = np.where(eos_any, eos_mask.argmax(axis=1), max_seq_len - 1)
+    seq_lens = np.where(eos_any, eos_idx + 1, max_seq_len)
+    sequence_ids = np.repeat(np.arange(n_sequences), seq_lens)
+    values = np.concatenate([choices[i, : seq_lens[i]] for i in range(n_sequences)])
+    ctx = pd.DataFrame({key_col: keys})
+    tgt = pd.DataFrame({key_col: sequence_ids, val_col: values})
+
+    split(
+        tgt_data=tgt,
+        tgt_context_key=key_col,
+        ctx_data=ctx,
+        ctx_primary_key=key_col,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    train(workspace_dir=workspace_dir, max_epochs=10)
+
+    # we expect that the more MINUS steps provided in seed data, the shorter the sequences in synthetic data
+    n_seed_steps = 6
+    seed_ctx = pd.DataFrame({key_col: keys})
+    seed_minuses = pd.DataFrame(
+        {key_col: keys * n_seed_steps, val_col: ["MINUS"] * n_seed_steps * n_sequences}
+    )  # 6 MINUS steps
+    seed_balanced = pd.DataFrame(
+        {key_col: keys * n_seed_steps, val_col: ["MINUS", "PLUS"] * (n_seed_steps // 2) * n_sequences}
+    )  # 3 MINUS, 3 PLUS steps
+    seed_pluses = pd.DataFrame(
+        {key_col: keys * n_seed_steps, val_col: ["PLUS"] * n_seed_steps * n_sequences}
+    )  # 6 PLUS steps
+
+    seed_data_dict = {
+        "minuses": seed_minuses,
+        "balanced": seed_balanced,
+        "pluses": seed_pluses,
+    }
+    syn_dict = {}
+
+    for name, seed_data in seed_data_dict.items():
+        generate(workspace_dir=workspace_dir, ctx_data=seed_ctx, seed_data=seed_data)
+        syn_dict[name] = pd.read_parquet(workspace_dir / "SyntheticData")
+
+    # check that the first steps of each sequence in synthetic data match the seed
+    for name, seed_data in seed_data_dict.items():
+        pd.testing.assert_series_equal(
+            syn_dict[name].groupby(key_col).head(n_seed_steps)[val_col], seed_data[val_col], check_dtype=False
+        )
+
+    # check that the sequence lengths are inversely correlated with the number of MINUS steps
+    avg_seq_lens = {name: syn_dict[name].groupby(key_col).size().mean() for name in seed_data_dict.keys()}
+    assert avg_seq_lens["minuses"] < avg_seq_lens["balanced"] < avg_seq_lens["pluses"]

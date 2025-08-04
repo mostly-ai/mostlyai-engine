@@ -556,10 +556,9 @@ def get_sidx_ridx_cardinalities(max_seq_len) -> dict[str, int]:
     return sidx_cardinalities | ridx_cardinalities
 
 
-def trim_sequences(syn: pd.DataFrame, tgt_context_key: str, seq_len_min: int, seq_len_max: int, n_seeded_steps: int):
+def trim_sequences(syn: pd.DataFrame, tgt_context_key: str):
     if syn.empty:
         return syn
-
     syn = syn.dropna(subset=[tgt_context_key])
     # discard SIDX, RIDX columns
     syn.drop(

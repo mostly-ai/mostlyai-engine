@@ -578,17 +578,16 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
-    n_seeded_steps: int | None = None,
+    n_seed_steps: int | None = None,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
-    seq_len_min = seq_len_stats["min"]
     seq_len_max = seq_len_stats["max"]
 
     assert not buffer.is_empty() or seq_len_max == 0
 
     if is_sequential:
-        data, keys = zip(*buffer.buffer) if buffer.buffer else ([], [])
+        data, keys, seed_data = zip(*buffer.buffer) if buffer.buffer else ([], [], [])
         df_syn = _reshape_pt_to_pandas(
             data=data,
             sub_cols=tgt_sub_columns,
@@ -599,15 +598,10 @@ def decode_buffered_samples(
         df_syn = trim_sequences(
             syn=df_syn,
             tgt_context_key=tgt_context_key,
-            seq_len_min=seq_len_min,
-            seq_len_max=seq_len_max,
-            n_seeded_steps=n_seeded_steps,
         )
-        df_seed = pd.DataFrame()
     else:
-        (data, seed_data) = zip(*buffer.buffer)
+        data, seed_data = zip(*buffer.buffer)
         df_syn = pd.concat(data, axis=0).reset_index(drop=True)
-        df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
 
     # decode generated data
     _LOG.info(f"decode generated data {df_syn.shape}")
@@ -618,9 +612,28 @@ def decode_buffered_samples(
         prev_steps=decode_prev_steps,
     )
 
-    # preserve all seed columns
-    for col in df_seed.columns:
-        df_syn[col] = df_seed[col]
+    # preserve all seed values
+    df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
+    seed_columns = [col for col in df_seed.columns]
+    if is_sequential:
+        # overwrite first steps of each sequence in synthetic data with values from seed data
+        df_syn["_SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
+        df_seed["_SEQ_IDX"] = df_seed.groupby(tgt_context_key).cumcount()
+        # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
+        df_overwrite = pd.merge(
+            df_syn[[tgt_context_key, "_SEQ_IDX"]].copy(),
+            df_seed.assign(_SEED_IDX=df_seed.index),
+            on=[tgt_context_key, "_SEQ_IDX"],
+            how="left",
+        )
+        # project df_overwrite onto df_syn
+        seed_rows = df_overwrite["_SEED_IDX"].notna()
+        df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
+        df_syn.drop(columns=["_SEQ_IDX"], inplace=True)
+        df_seed.drop(columns=["_SEQ_IDX"], inplace=True)
+    else:
+        # for flat data, just overwrite all seed columns
+        df_syn[seed_columns] = df_seed[seed_columns].values
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
@@ -935,9 +948,10 @@ def generate(
             seed_batch_encoded, _, seed_context_key_encoded = encode_df(
                 df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
             )
+            seed_batch_grouped = seed_batch.groupby(tgt_context_key, sort=False)
             seed_batch_encoded_grouped = seed_batch_encoded.groupby(seed_context_key_encoded, sort=False)
-            # WARNING: assumption is that all seeded sequences have the same length
-            n_seeded_steps = max(list(seed_batch_encoded_grouped.size()), default=0)
+            # it is assumed that all seeded sequences have the same length
+            n_seed_steps = max(list(seed_batch_encoded_grouped.size()), default=0)
 
             # sample data from generative model
             _LOG.info(f"sample data from model with context {ctx_batch.shape}")
@@ -983,6 +997,11 @@ def generate(
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
+                    # get seed data for current step
+                    seed_step = seed_batch_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
+                    seed_step_encoded = (
+                        seed_batch_encoded_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
+                    )
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
                     sidx_df = encode_sidx_ridx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
@@ -994,7 +1013,7 @@ def generate(
                         for c in sidx_df
                     }
                     # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
-                    if seq_step > 0 and seq_step > n_seeded_steps:
+                    if seq_step > 0 and seq_step > n_seed_steps:
                         ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
                         ridx = encode_sidx_ridx(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
                         ridx_vals = {
@@ -1006,19 +1025,19 @@ def generate(
                         }
                     else:
                         ridx_vals = {}
-                    fixed_values = sidx_vals | ridx_vals
-                    if seq_step < n_seeded_steps:
-                        seed_batch_step_encoded = seed_batch_encoded_grouped.nth(seq_step)
-                        fixed_values |= {
+                    # fix seeded columns
+                    if len(seed_step_encoded) > 0:
+                        seed_vals = {
                             col: torch.unsqueeze(
-                                torch.as_tensor(seed_batch_step_encoded[col].to_numpy(), device=model.device).type(
-                                    torch.int
-                                ),
+                                torch.as_tensor(seed_step_encoded[col].to_numpy(), device=model.device).type(torch.int),
                                 dim=-1,
                             )
                             for col in seed_batch_encoded.columns
                             if col in tgt_sub_columns
                         }
+                    else:
+                        seed_vals = {}
+                    fixed_values = sidx_vals | ridx_vals | seed_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1052,7 +1071,7 @@ def generate(
                     )
                     # calculate include step mask (True: include current step, False: exclude current step)
                     include_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
-                        out_df[SIDX_SUB_COLUMN_PREFIX] < n_seeded_steps
+                        out_df[SIDX_SUB_COLUMN_PREFIX] < n_seed_steps
                     )
                     next_step_size = include_mask.sum()
                     # filter next iteration inputs only when threshold is passed
@@ -1073,7 +1092,7 @@ def generate(
                         history = history[include_mask, ...]
                         history_state = tuple(h[:, include_mask, ...] for h in history_state)
                     # accumulate outputs in memory
-                    buffer.add((out_pt, step_ctx_keys))
+                    buffer.add((out_pt, step_ctx_keys, seed_step))
                     # increment progress by 1 for each step
                     progress.update(advance=1)
                     # conditionally decode on step processing end
@@ -1085,7 +1104,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
-                            n_seeded_steps=n_seeded_steps,
+                            n_seed_steps=n_seed_steps,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1150,7 +1169,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
-                    n_seeded_steps=n_seeded_steps,
+                    n_seed_steps=n_seed_steps,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1166,7 +1185,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
-                n_seeded_steps=n_seeded_steps,
+                n_seed_steps=n_seed_steps,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
