@@ -719,6 +719,12 @@ def generate(
                         del tgt_cardinalities[c]
                         tgt_sub_columns.remove(c)
 
+            if has_slen:
+                # move SLEN to the beginning in tgt_cardinalities
+                slen_items = {k: v for k, v in tgt_cardinalities.items() if SLEN_SUB_COLUMN_PREFIX in k}
+                other_items = {k: v for k, v in tgt_cardinalities.items() if SLEN_SUB_COLUMN_PREFIX not in k}
+                tgt_cardinalities = {**slen_items, **other_items}
+
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
