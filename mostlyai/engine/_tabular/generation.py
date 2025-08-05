@@ -31,8 +31,10 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
+    SDEC_SUB_COLUMN_PREFIX,
     SIDX_RIDX_COLUMN,
     SIDX_SUB_COLUMN_PREFIX,
+    SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -688,6 +690,23 @@ def generate(
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
+
+        # handle different approaches of sequence modeling (backwards compatibility)
+        if is_sequential and model_configs.get("model_units"):
+            for column_prefix, column_alias in [
+                (RIDX_SUB_COLUMN_PREFIX, "RIDX"),
+                (SLEN_SUB_COLUMN_PREFIX, "SLEN"),
+                (SDEC_SUB_COLUMN_PREFIX, "SDEC"),
+            ]:
+                has_col = any(k.startswith(column_prefix) for k in model_configs.get("model_units").keys())
+                if not has_col:
+                    _LOG.warning(
+                        f"{column_alias} not found in model_units, removing {column_alias} columns from tgt_cardinalities"
+                    )
+                    for c in [c_ for c_ in tgt_sub_columns if c_.startswith(column_prefix)]:
+                        del tgt_cardinalities[c]
+                        tgt_sub_columns.remove(c)
+
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 

@@ -52,6 +52,8 @@ SIDX_RIDX_DIGIT_ENCODING_THRESHOLD = 100
 SIDX_RIDX_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
 SIDX_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
 RIDX_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # reverse index
+SLEN_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
+SDEC_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
