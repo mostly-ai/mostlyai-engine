@@ -692,20 +692,26 @@ def generate(
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
 
         # handle different approaches of sequence modeling (backwards compatibility)
-        if is_sequential and model_configs.get("model_units"):
-            for column_prefix, column_alias in [
-                (RIDX_SUB_COLUMN_PREFIX, "RIDX"),
-                (SLEN_SUB_COLUMN_PREFIX, "SLEN"),
-                (SDEC_SUB_COLUMN_PREFIX, "SDEC"),
-            ]:
-                has_col = any(k.startswith(column_prefix) for k in model_configs.get("model_units").keys())
-                if not has_col:
-                    _LOG.warning(
-                        f"{column_alias} not found in model_units, removing {column_alias} columns from tgt_cardinalities"
-                    )
-                    for c in [c_ for c_ in tgt_sub_columns if c_.startswith(column_prefix)]:
-                        del tgt_cardinalities[c]
-                        tgt_sub_columns.remove(c)
+        has_ridx = has_slen = has_sdec = False
+        model_units = model_configs.get("model_units")
+        if is_sequential and model_units:
+            has_ridx = any(k.startswith(RIDX_SUB_COLUMN_PREFIX) for k in model_units.keys())
+            has_slen = any(k.startswith(SLEN_SUB_COLUMN_PREFIX) for k in model_units.keys())
+            has_sdec = any(k.startswith(SDEC_SUB_COLUMN_PREFIX) for k in model_units.keys())
+        elif is_sequential:
+            has_ridx = True
+
+        for prefix, has_col, name in [
+            (RIDX_SUB_COLUMN_PREFIX, has_ridx, "RIDX"),
+            (SLEN_SUB_COLUMN_PREFIX, has_slen, "SLEN"),
+            (SDEC_SUB_COLUMN_PREFIX, has_sdec, "SDEC"),
+        ]:
+            if not has_col:
+                _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
+                to_remove = [c for c in tgt_sub_columns if c.startswith(prefix)]
+                for c in to_remove:
+                    del tgt_cardinalities[c]
+                    tgt_sub_columns.remove(c)
 
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
@@ -1017,11 +1023,13 @@ def generate(
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
+
                     # get seed data for current step
                     seed_step = seed_batch_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
                     seed_step_encoded = (
                         seed_batch_encoded_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
                     )
+
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
                     sidx_df = encode_sidx_ridx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
@@ -1032,19 +1040,48 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
-                    if seq_step > 0 and seq_step > n_seed_steps:
-                        ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
-                        ridx = encode_sidx_ridx(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
-                        ridx_vals = {
-                            col: torch.unsqueeze(
-                                torch.as_tensor(ridx[col], dtype=torch.int64, device=model.device),
-                                dim=-1,
+
+                    ridx_vals, sdec_vals, slen_vals = {}, {}, {}
+
+                    if has_ridx:
+                        # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
+                        if seq_step > 0 and seq_step > n_seed_steps:
+                            ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
+                            ridx = encode_sidx_ridx(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
+                            ridx_vals = {
+                                col: torch.unsqueeze(
+                                    torch.as_tensor(ridx[col], dtype=torch.int64, device=model.device),
+                                    dim=-1,
+                                )
+                                for col in ridx
+                            }
+                        else:
+                            ridx_vals = {}
+
+                    if has_slen:
+                        # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
+                        if seq_step > 0:
+                            slen = out_df[SLEN_SUB_COLUMN_PREFIX]
+                            slen = encode_sidx_ridx(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+                            slen_vals = {
+                                col: torch.unsqueeze(
+                                    torch.as_tensor(slen[col], dtype=torch.int64, device=model.device),
+                                    dim=-1,
+                                )
+                                for col in slen
+                            }
+                            sdec = (
+                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                        else:
+                            slen_vals = {}
+                            sdec = pd.Series([0] * step_size)  # initial sequence index decile
+                        sdec_vals = {
+                            f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
+                                torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
                             )
-                            for col in ridx
                         }
-                    else:
-                        ridx_vals = {}
+
                     # fix seeded columns
                     if len(seed_step_encoded) > 0:
                         seed_vals = {
@@ -1057,7 +1094,8 @@ def generate(
                         }
                     else:
                         seed_vals = {}
-                    fixed_values = sidx_vals | ridx_vals | seed_vals
+
+                    fixed_values = sidx_vals | ridx_vals | slen_vals | sdec_vals | seed_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1070,6 +1108,7 @@ def generate(
                         history_state=history_state,
                         context=context,
                     )
+
                     # transform output dict to tensor for memory efficiency
                     out_pt = torch.stack(list(out_dct.values()), dim=0).transpose(0, 1)
                     # reshape tensor to pandas
@@ -1079,16 +1118,22 @@ def generate(
                         keys=[step_ctx_keys],
                         key_name=tgt_context_key,
                     )
-                    # decode SIDX, RIDX columns
+                    # decode sequence columns
                     out_df[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
                         out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
                     )
-                    out_df[RIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
-                        out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
-                    )
-                    out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
-                        lower=seq_len_min - seq_step, upper=seq_len_max
-                    )
+                    if has_ridx:
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
+                            out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
+                        )
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
+                            lower=seq_len_min - seq_step, upper=seq_len_max
+                        )
+                    if has_slen:
+                        out_df[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
+                            out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
+                        )
+                        # TODO: clip SLEN?
                     # calculate include step mask (True: include current step, False: exclude current step)
                     include_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
                         out_df[SIDX_SUB_COLUMN_PREFIX] < n_seed_steps
