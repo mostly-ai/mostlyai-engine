@@ -121,6 +121,9 @@ class ModelCheckpoint(abc.ABC):
         if val_loss < self.best_val_loss:
             self.best_val_loss = val_loss
             self.save_checkpoint(model, optimizer, lr_scheduler, dp_accountant)
+            # delete old checkpoints, if implemented in subclass
+            if hasattr(self, "_delete_old_checkpoints"):
+                self._delete_old_checkpoints()
             return True
         else:
             return False

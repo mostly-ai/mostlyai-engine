@@ -170,6 +170,18 @@ class LanguageModelCheckpoint(ModelCheckpoint):
         for f in files:
             f.unlink(missing_ok=True)
 
+    def _delete_old_checkpoints(self):
+        # keep only the most recently modified model weight file (safetensors or bin)
+        patterns = ["*.safetensors", "*.bin"]
+        files = [f for p in patterns for f in self.workspace.model_path.glob(p)]
+        if len(files) <= 1:
+            return
+        # sort by modification time, descending (most recent first)
+        files_sorted = sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)
+        # keep the most recent, delete the rest
+        for f in files_sorted[1:]:
+            f.unlink(missing_ok=True)
+
     def model_weights_path_exists(self) -> bool:
         return any(self.workspace.model_path.glob("*.safetensors")) or any(self.workspace.model_path.glob("*.bin"))
 
