@@ -687,9 +687,7 @@ def generate(
         ctx_stats = workspace.ctx_stats.read()
 
         tgt_cardinalities = get_cardinalities(tgt_stats, include_old_positional_columns=True)
-        tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
-        ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
 
         # read model config
         model_units = model_configs.get("model_units") or ModelSize.M
@@ -714,10 +712,8 @@ def generate(
             ]:
                 if not has_col:
                     _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
-                    to_remove = [c for c in tgt_sub_columns if c.startswith(prefix)]
-                    for c in to_remove:
+                    for c in (c for c in tgt_cardinalities if c.startswith(prefix)):
                         del tgt_cardinalities[c]
-                        tgt_sub_columns.remove(c)
 
             if has_slen:
                 # move SLEN to the beginning in tgt_cardinalities
@@ -725,6 +721,8 @@ def generate(
                 other_items = {k: v for k, v in tgt_cardinalities.items() if SLEN_SUB_COLUMN_PREFIX not in k}
                 tgt_cardinalities = {**slen_items, **other_items}
 
+        tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
+        ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
@@ -1068,6 +1066,9 @@ def generate(
                         # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
                         if seq_step > 0:
                             slen = out_df[SLEN_SUB_COLUMN_PREFIX]
+                            sdec = (
+                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
                             slen = encode_sidx_ridx(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
                             slen_vals = {
                                 col: torch.unsqueeze(
@@ -1076,9 +1077,6 @@ def generate(
                                 )
                                 for col in slen
                             }
-                            sdec = (
-                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
                         else:
                             slen_vals = {}
                             sdec = pd.Series([0] * step_size)  # initial sequence index decile
