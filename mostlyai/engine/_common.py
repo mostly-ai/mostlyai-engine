@@ -567,6 +567,7 @@ def get_sidx_ridx_cardinalities(max_seq_len: int, include_old_positional_columns
 
 
 def trim_sequences(syn: pd.DataFrame, tgt_context_key: str):
+    # TODO: backwards compatibility
     if syn.empty:
         return syn
     syn = syn.dropna(subset=[tgt_context_key])
