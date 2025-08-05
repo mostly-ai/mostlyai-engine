@@ -636,7 +636,7 @@ def decode_buffered_samples(
             df_seed.drop(columns=["_SEQ_IDX"], inplace=True)
         else:
             # for flat data, just overwrite all seed columns
-            df_syn[seed_columns] = df_seed[seed_columns].values
+            df_syn[seed_columns] = df_seed[seed_columns].copy()
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
@@ -699,24 +699,25 @@ def generate(
 
         # handle different approaches to sequence modeling (backwards compatibility)
         has_ridx = has_slen = has_sdec = False
-        if is_sequential and isinstance(model_units, dict):
-            has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-            has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-            has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-        elif is_sequential:
-            has_ridx = True
+        if is_sequential:
+            if isinstance(model_units, dict):
+                has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+            else:
+                has_ridx = True
 
-        for prefix, has_col, name in [
-            (RIDX_SUB_COLUMN_PREFIX, has_ridx, "RIDX"),
-            (SLEN_SUB_COLUMN_PREFIX, has_slen, "SLEN"),
-            (SDEC_SUB_COLUMN_PREFIX, has_sdec, "SDEC"),
-        ]:
-            if not has_col:
-                _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
-                to_remove = [c for c in tgt_sub_columns if c.startswith(prefix)]
-                for c in to_remove:
-                    del tgt_cardinalities[c]
-                    tgt_sub_columns.remove(c)
+            for prefix, has_col, name in [
+                (RIDX_SUB_COLUMN_PREFIX, has_ridx, "RIDX"),
+                (SLEN_SUB_COLUMN_PREFIX, has_slen, "SLEN"),
+                (SDEC_SUB_COLUMN_PREFIX, has_sdec, "SDEC"),
+            ]:
+                if not has_col:
+                    _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
+                    to_remove = [c for c in tgt_sub_columns if c.startswith(prefix)]
+                    for c in to_remove:
+                        del tgt_cardinalities[c]
+                        tgt_sub_columns.remove(c)
 
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
