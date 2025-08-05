@@ -686,15 +686,20 @@ def generate(
         _LOG.info(f"{has_context=}")
         ctx_stats = workspace.ctx_stats.read()
 
-        tgt_cardinalities = get_cardinalities(tgt_stats)
+        tgt_cardinalities = get_cardinalities(tgt_stats, include_old_positional_columns=True)
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_cardinalities = get_cardinalities(ctx_stats)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
 
-        # handle different approaches of sequence modeling (backwards compatibility)
+        # read model config
+        model_units = model_configs.get("model_units") or ModelSize.M
+        _LOG.debug(f"{model_units=}")
+        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
+        _LOG.info(f"{enable_flexible_generation=}")
+
+        # handle different approaches to sequence modeling (backwards compatibility)
         has_ridx = has_slen = has_sdec = False
-        model_units = model_configs.get("model_units")
-        if is_sequential and model_units:
+        if is_sequential and isinstance(model_units, dict):
             has_ridx = any(k.startswith(RIDX_SUB_COLUMN_PREFIX) for k in model_units.keys())
             has_slen = any(k.startswith(SLEN_SUB_COLUMN_PREFIX) for k in model_units.keys())
             has_sdec = any(k.startswith(SDEC_SUB_COLUMN_PREFIX) for k in model_units.keys())
@@ -715,12 +720,6 @@ def generate(
 
         _LOG.info(f"{len(tgt_sub_columns)=}")
         _LOG.info(f"{len(ctx_sub_columns)=}")
-
-        # read model config
-        model_units = model_configs.get("model_units") or ModelSize.M
-        _LOG.debug(f"{model_units=}")
-        enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
-        _LOG.info(f"{enable_flexible_generation=}")
 
         # resolve device
         device = (
