@@ -614,26 +614,27 @@ def decode_buffered_samples(
 
     # preserve all seed values
     df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
-    seed_columns = [col for col in df_seed.columns]
-    if is_sequential:
-        # overwrite first steps of each sequence in synthetic data with values from seed data
-        df_syn["_SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
-        df_seed["_SEQ_IDX"] = df_seed.groupby(tgt_context_key).cumcount()
-        # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
-        df_overwrite = pd.merge(
-            df_syn[[tgt_context_key, "_SEQ_IDX"]].copy(),
-            df_seed.assign(_SEED_IDX=df_seed.index),
-            on=[tgt_context_key, "_SEQ_IDX"],
-            how="left",
-        )
-        # project df_overwrite onto df_syn
-        seed_rows = df_overwrite["_SEED_IDX"].notna()
-        df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
-        df_syn.drop(columns=["_SEQ_IDX"], inplace=True)
-        df_seed.drop(columns=["_SEQ_IDX"], inplace=True)
-    else:
-        # for flat data, just overwrite all seed columns
-        df_syn[seed_columns] = df_seed[seed_columns].values
+    if not df_seed.empty:
+        seed_columns = [col for col in df_seed.columns]
+        if is_sequential:
+            # overwrite first steps of each sequence in synthetic data with values from seed data
+            df_syn["_SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
+            df_seed["_SEQ_IDX"] = df_seed.groupby(tgt_context_key).cumcount()
+            # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
+            df_overwrite = pd.merge(
+                df_syn[[tgt_context_key, "_SEQ_IDX"]].copy(),
+                df_seed.assign(_SEED_IDX=df_seed.index),
+                on=[tgt_context_key, "_SEQ_IDX"],
+                how="left",
+            )
+            # project df_overwrite onto df_syn
+            seed_rows = df_overwrite["_SEED_IDX"].notna()
+            df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
+            df_syn.drop(columns=["_SEQ_IDX"], inplace=True)
+            df_seed.drop(columns=["_SEQ_IDX"], inplace=True)
+        else:
+            # for flat data, just overwrite all seed columns
+            df_syn[seed_columns] = df_seed[seed_columns].values
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
