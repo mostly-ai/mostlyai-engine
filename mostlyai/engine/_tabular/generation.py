@@ -615,7 +615,7 @@ def decode_buffered_samples(
     )
 
     # preserve all seed values
-    df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
+    df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True) if seed_data else pd.DataFrame()
     if not df_seed.empty:
         seed_columns = [col for col in df_seed.columns]
         if is_sequential:
