@@ -1124,7 +1124,7 @@ def generate(
                         keys=[step_ctx_keys],
                         key_name=tgt_context_key,
                     )
-                    # decode sequence columns
+                    # decode positional columns
                     out_df[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
                         out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
                     )
@@ -1139,11 +1139,13 @@ def generate(
                         out_df[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
                             out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
                         )
-                        # TODO: clip SLEN?
+                        out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
                     # calculate include step mask (True: include current step, False: exclude current step)
-                    include_mask = (out_df[RIDX_SUB_COLUMN_PREFIX] > 0) | (
-                        out_df[SIDX_SUB_COLUMN_PREFIX] < n_seed_steps
-                    )
+                    if has_ridx:
+                        include_mask = out_df[RIDX_SUB_COLUMN_PREFIX] > 0
+                    else:
+                        include_mask = out_df[SIDX_SUB_COLUMN_PREFIX] < out_df[SLEN_SUB_COLUMN_PREFIX]
+                    include_mask = include_mask | (out_df[SIDX_SUB_COLUMN_PREFIX] < n_seed_steps)
                     next_step_size = include_mask.sum()
                     # filter next iteration inputs only when threshold is passed
                     # or there is no more data to sample on next iteration
