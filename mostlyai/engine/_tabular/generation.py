@@ -700,9 +700,9 @@ def generate(
         # handle different approaches to sequence modeling (backwards compatibility)
         has_ridx = has_slen = has_sdec = False
         if is_sequential and isinstance(model_units, dict):
-            has_ridx = any(k.startswith(RIDX_SUB_COLUMN_PREFIX) for k in model_units.keys())
-            has_slen = any(k.startswith(SLEN_SUB_COLUMN_PREFIX) for k in model_units.keys())
-            has_sdec = any(k.startswith(SDEC_SUB_COLUMN_PREFIX) for k in model_units.keys())
+            has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+            has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+            has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
         elif is_sequential:
             has_ridx = True
 
