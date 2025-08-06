@@ -144,7 +144,7 @@ def _encode_partition(
             df_pads = pd.DataFrame({c: [0] for c in df.columns if c != tgt_context_key})
             df_miss = df_miss.merge(df_pads, how="cross")
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
-        # enrich with sequence lengths and sequence indexes
+        # enrich with positional columns
         df = _enrich_positional_columns(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
