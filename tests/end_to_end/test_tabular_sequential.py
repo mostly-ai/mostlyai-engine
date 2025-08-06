@@ -338,7 +338,7 @@ def test_multiple_batches(tmp_path):
     # this test is to ensure that we can generate quality data in multiple batches
     workspace_dir = tmp_path / "ws"
     key = "id"
-    trn_sample_size = 1_000
+    trn_sample_size = 1_001
     ctx = pd.DataFrame({key: list(range(trn_sample_size))})
     tgt = []
     for k in ctx[key]:

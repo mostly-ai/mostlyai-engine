@@ -49,7 +49,7 @@ def test_flatten_frame():
     assert_frame_equal(flatten_frame(df, "key"), expected_df)
 
 
-def test_enrich_sidx_ridx():
+def test_enrich_positional_columns():
     df = pd.DataFrame(
         {
             "key": [1, 1, 1, 2, 2],
