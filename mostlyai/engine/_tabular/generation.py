@@ -712,7 +712,7 @@ def generate(
             ]:
                 if not has_col:
                     _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
-                    for c in (c for c in tgt_cardinalities if c.startswith(prefix)):
+                    for c in [c for c in tgt_cardinalities if c.startswith(prefix)]:
                         del tgt_cardinalities[c]
 
             if has_slen:
