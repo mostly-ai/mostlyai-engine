@@ -517,10 +517,10 @@ def skip_if_error(func: Callable) -> Callable:
 def encode_positional_column(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
     assert is_integer_dtype(vals)
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
-        # encode sidx, ridx as numeric_discrete
+        # encode positional column as numeric_discrete
         df = pd.DataFrame({f"{prefix}cat": vals})
     else:
-        # encode sidx, ridx as numeric_digit
+        # encode positional column as numeric_digit
         n_digits = len(str(max_seq_len))
         df = pd.DataFrame(vals.astype(str).str.pad(width=n_digits, fillchar="0").apply(list).tolist()).astype(int)
         df.columns = [f"{prefix}E{i}" for i in range(n_digits - 1, -1, -1)]
@@ -529,10 +529,10 @@ def encode_positional_column(vals: pd.Series, max_seq_len: int, prefix: str = ""
 
 def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
-        # decode sidx, ridx as numeric_discrete
+        # decode positional column as numeric_discrete
         vals = df_encoded[f"{prefix}cat"]
     else:
-        # decode sidx, ridx as numeric_digit
+        # decode positional column as numeric_digit
         n_digits = len(str(max_seq_len))
         vals = sum([df_encoded[f"{prefix}E{d}"] * 10 ** int(d) for d in list(range(n_digits))])
     return vals
