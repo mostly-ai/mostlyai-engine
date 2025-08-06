@@ -699,6 +699,8 @@ def generate(
                 has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
                 has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
             else:
+                # model_units not being a dict indicates that training was skipped altogether
+                # generate data using model with SIDX/RIDX positional columns
                 has_ridx = True
 
             for prefix, has_col, name in [
