@@ -211,21 +211,19 @@ def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
 def _regroup_partial_sequences_by_length(
     ctx_data: pd.DataFrame, seed_data: pd.DataFrame, ctx_primary_key: str, tgt_context_key: str
 ) -> tuple[pd.DataFrame, int]:
-    # add temporary __PARTIAL_SEQUENCE_LENGTH column to ctx_data
-    partial_seq_lens = seed_data.groupby(tgt_context_key).size().rename("__PARTIAL_SEQUENCE_LENGTH")
-    ctx_data = ctx_data.assign(
-        __PARTIAL_SEQUENCE_LENGTH=ctx_data[ctx_primary_key].map(partial_seq_lens).fillna(0).astype(int)
-    )
+    # add temporary __PARTIAL_SEQ_LEN column to ctx_data
+    partial_seq_lens = seed_data.groupby(tgt_context_key).size().rename("__PARTIAL_SEQ_LEN")
+    ctx_data = ctx_data.assign(__PARTIAL_SEQ_LEN=ctx_data[ctx_primary_key].map(partial_seq_lens).fillna(0).astype(int))
 
     # regroup batches so that partial sequences of equal length are together
     new_batches = []
     for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
-        for _, new_batch_df in old_batch_df.groupby("__PARTIAL_SEQUENCE_LENGTH", sort=False):
+        for _, new_batch_df in old_batch_df.groupby("__PARTIAL_SEQ_LEN", sort=False):
             new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
             new_batches.append(new_batch_df)
 
-    # rebuild ctx_data; drop temporary __PARTIAL_SEQUENCE_LENGTH column
-    ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__PARTIAL_SEQUENCE_LENGTH"]).reset_index(drop=True)
+    # rebuild ctx_data; drop temporary __PARTIAL_SEQ_LEN column
+    ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__PARTIAL_SEQ_LEN"]).reset_index(drop=True)
 
     return ctx_data, len(new_batches)
 
