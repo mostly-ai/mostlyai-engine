@@ -145,7 +145,7 @@ def _encode_partition(
             df_miss = df_miss.merge(df_pads, how="cross")
             df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
         # enrich with sequence lengths and sequence indexes
-        df = _enrich_sidx_ridx(df, tgt_context_key, max_len)
+        df = _enrich_positional_columns(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
     elif has_context:
@@ -379,7 +379,7 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def _enrich_sidx_ridx(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def _enrich_positional_columns(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     ridx = df.groupby(context_key).cumcount(ascending=False)  # sequence remainder

@@ -23,7 +23,7 @@ from mostlyai.engine._common import RIDX_SUB_COLUMN_PREFIX, SIDX_SUB_COLUMN_PREF
 from mostlyai.engine._language.encoding import format_df
 from mostlyai.engine._tabular.encoding import (
     _encode_col,
-    _enrich_sidx_ridx,
+    _enrich_positional_columns,
     flatten_frame,
     pad_ctx_sequences,
     pad_tgt_sequences,
@@ -57,7 +57,7 @@ def test_enrich_sidx_ridx():
             "is_paid": [0, 1, 0, 1, 0],
         }
     )
-    df = _enrich_sidx_ridx(df, context_key="key", max_seq_len=2)
+    df = _enrich_positional_columns(df, context_key="key", max_seq_len=2)
     expected_df = pd.DataFrame(
         {
             f"{SIDX_SUB_COLUMN_PREFIX}cat": [0, 1, 2, 0, 1],
