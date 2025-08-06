@@ -579,7 +579,6 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
-    n_seed_steps: int | None = None,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -1176,7 +1175,6 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
-                            n_seed_steps=n_seed_steps,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1241,7 +1239,6 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
-                    n_seed_steps=n_seed_steps,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1257,7 +1254,6 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
-                n_seed_steps=n_seed_steps,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
