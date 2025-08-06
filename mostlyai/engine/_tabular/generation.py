@@ -715,9 +715,9 @@ def generate(
 
             if has_slen:
                 # move SLEN to the beginning in tgt_cardinalities
-                slen_items = {k: v for k, v in tgt_cardinalities.items() if SLEN_SUB_COLUMN_PREFIX in k}
-                other_items = {k: v for k, v in tgt_cardinalities.items() if SLEN_SUB_COLUMN_PREFIX not in k}
-                tgt_cardinalities = {**slen_items, **other_items}
+                tgt_cardinalities = dict(
+                    sorted(tgt_cardinalities.items(), key=lambda x: not x[0].startswith(SLEN_SUB_COLUMN_PREFIX))
+                )
 
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
