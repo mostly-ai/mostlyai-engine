@@ -620,7 +620,7 @@ def decode_buffered_samples(
             # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
             df_overwrite = pd.merge(
                 df_syn[[tgt_context_key, "__SEQ_IDX"]].copy(),
-                df_seed.assign(_SEED_IDX=df_seed.index),
+                df_seed,
                 on=[tgt_context_key, "__SEQ_IDX"],
                 how="left",
                 indicator="__INDICATOR",
