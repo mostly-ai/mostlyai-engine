@@ -709,7 +709,8 @@ def generate(
                 (SDEC_SUB_COLUMN_PREFIX, has_sdec, "SDEC"),
             ]:
                 if not has_col:
-                    _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
+                    if name == "RIDX":
+                        _LOG.warning(f"{name} not found in model_units, removing {name} columns from tgt_cardinalities")
                     for c in [c for c in tgt_cardinalities if c.startswith(prefix)]:
                         del tgt_cardinalities[c]
 
@@ -827,17 +828,19 @@ def generate(
         seq_len_max = seq_len_stats["max"]
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
-        # validate seed_data for sequential generation
+        # validate sequential seed_data has tgt_context_key
+        if is_sequential and tgt_context_key not in seed_data.columns:
+            raise ValueError(
+                f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
+            )
+
+        # trim sequences in seed_data to seq_len_max for sequential generation
         if is_sequential:
-            if tgt_context_key not in seed_data.columns:
-                raise ValueError(
-                    f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
-                )
-            if seed_data.groupby(tgt_context_key).size().max() > seq_len_max:
-                # TODO: should we allow sequences longer than seq_len_max and just silently truncate them?
-                raise ValueError(
-                    f"Seed data must contain sequences of length at most `{seq_len_max}` for sequential generation"
-                )
+            seed_data = (
+                seed_data.groupby(tgt_context_key, group_keys=False)
+                .apply(lambda x: x.iloc[:seq_len_max])
+                .reset_index(drop=True)
+            )
 
         # ensure valid columns in seed_data
         tgt_columns = (
