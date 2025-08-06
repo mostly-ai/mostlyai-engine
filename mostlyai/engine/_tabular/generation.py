@@ -39,8 +39,8 @@ from mostlyai.engine._common import (
     ProgressCallback,
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
-    decode_sidx_ridx,
-    encode_sidx_ridx,
+    decode_positional_column,
+    encode_positional_column,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -1036,7 +1036,7 @@ def generate(
 
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
-                    sidx_df = encode_sidx_ridx(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    sidx_df = encode_positional_column(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
                             torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
@@ -1051,7 +1051,9 @@ def generate(
                         # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
                         if seq_step > 0 and seq_step > n_seed_steps:
                             ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
-                            ridx = encode_sidx_ridx(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
+                            ridx = encode_positional_column(
+                                ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
+                            )
                             ridx_vals = {
                                 col: torch.unsqueeze(
                                     torch.as_tensor(ridx[col], dtype=torch.int64, device=model.device),
@@ -1069,7 +1071,9 @@ def generate(
                             sdec = (
                                 (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
                             )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
-                            slen = encode_sidx_ridx(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+                            slen = encode_positional_column(
+                                slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
+                            )
                             slen_vals = {
                                 col: torch.unsqueeze(
                                     torch.as_tensor(slen[col], dtype=torch.int64, device=model.device),
@@ -1123,18 +1127,18 @@ def generate(
                         key_name=tgt_context_key,
                     )
                     # decode positional columns
-                    out_df[SIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
+                    out_df[SIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
                         out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
                     )
                     if has_ridx:
-                        out_df[RIDX_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
                             out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
                         )
                         out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
                             lower=seq_len_min - seq_step, upper=seq_len_max
                         )
                     if has_slen:
-                        out_df[SLEN_SUB_COLUMN_PREFIX] = decode_sidx_ridx(
+                        out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
                             out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
                         )
                         out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)

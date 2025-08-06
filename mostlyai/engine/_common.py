@@ -320,7 +320,7 @@ def get_cardinalities(stats: dict, include_old_positional_columns: bool = False)
 
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_sidx_ridx_cardinalities(max_seq_len, include_old_positional_columns)
+        cardinalities |= get_positional_cardinalities(max_seq_len, include_old_positional_columns)
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -514,7 +514,7 @@ def skip_if_error(func: Callable) -> Callable:
     return skip_if_error_wrapper
 
 
-def encode_sidx_ridx(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
+def encode_positional_column(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.DataFrame:
     assert is_integer_dtype(vals)
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode sidx, ridx as numeric_discrete
@@ -527,7 +527,7 @@ def encode_sidx_ridx(vals: pd.Series, max_seq_len: int, prefix: str = "") -> pd.
     return df
 
 
-def decode_sidx_ridx(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
+def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "") -> pd.Series:
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # decode sidx, ridx as numeric_discrete
         vals = df_encoded[f"{prefix}cat"]
@@ -538,7 +538,7 @@ def decode_sidx_ridx(df_encoded: pd.DataFrame, max_seq_len: int, prefix: str = "
     return vals
 
 
-def get_sidx_ridx_cardinalities(max_seq_len: int, include_old_positional_columns: bool) -> dict[str, int]:
+def get_positional_cardinalities(max_seq_len: int, include_old_positional_columns: bool) -> dict[str, int]:
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode positional columns as numeric_discrete
         sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}

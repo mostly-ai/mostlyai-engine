@@ -29,7 +29,7 @@ from mostlyai.engine._common import (
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
-    encode_sidx_ridx,
+    encode_positional_column,
     get_argn_name,
     get_sequence_length_stats,
     is_a_list,
@@ -383,8 +383,8 @@ def _enrich_sidx_ridx(df: pd.DataFrame, context_key: str, max_seq_len: int) -> p
     df = df.reset_index(drop=True)
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
     ridx = df.groupby(context_key).cumcount(ascending=False)  # sequence remainder
-    sidx = encode_sidx_ridx(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
-    ridx = encode_sidx_ridx(ridx, max_seq_len=max_seq_len, prefix=RIDX_SUB_COLUMN_PREFIX)
+    sidx = encode_positional_column(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
+    ridx = encode_positional_column(ridx, max_seq_len=max_seq_len, prefix=RIDX_SUB_COLUMN_PREFIX)
     df = pd.concat([sidx, ridx, df], axis=1)
     return df
 
