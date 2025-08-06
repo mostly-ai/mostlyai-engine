@@ -566,21 +566,6 @@ def get_sidx_ridx_cardinalities(max_seq_len: int, include_old_positional_columns
     )
 
 
-def trim_sequences(syn: pd.DataFrame, tgt_context_key: str):
-    # TODO: backwards compatibility
-    if syn.empty:
-        return syn
-    syn = syn.dropna(subset=[tgt_context_key])
-    # discard SIDX, RIDX columns
-    syn.drop(
-        [c for c in syn.columns if c.startswith(SIDX_RIDX_COLUMN)],
-        axis=1,
-        inplace=True,
-    )
-    syn.reset_index(drop=True, inplace=True)
-    return syn
-
-
 def persist_data_part(df: pd.DataFrame, output_path: Path, infix: str):
     t0 = time.time()
     part_fn = f"part.{infix}.parquet"
