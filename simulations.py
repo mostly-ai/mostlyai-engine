@@ -96,6 +96,10 @@ match (dataset, seed_data):
         print(f"sequence length of the first item: {(tgt[tgt_context_key] == first_item[tgt_context_key]).sum()}")
         first_item = first_item.drop(tgt_context_key)
         seed_data = tgt.groupby(tgt_context_key, as_index=False).apply(lambda x: first_item)
+    case (dataset, "all_steps"):
+        seed_data = tgt.copy()
+    case (dataset, "all_steps * 2"):
+        seed_data = pd.concat([tgt, tgt], ignore_index=True)
     case _:
         seed_data = None
 
