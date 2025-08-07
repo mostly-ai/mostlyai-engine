@@ -277,7 +277,7 @@ def _calculate_sample_losses(
         # mask for ridx columns: this takes the sequence padding into account to learn the stopping with ridx=0
         ridx_mask = torch.nn.functional.pad(padding_mask, (1, 0), value=1)[:, :-1]
         # mask for sidx columns
-        sidx_mask = torch.zeros_like(padding_mask, dtype=torch.int64)
+        sidx_mask = torch.zeros_like(padding_mask)
 
         # calculate per column losses
         losses_by_column = []
