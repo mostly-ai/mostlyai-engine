@@ -62,7 +62,8 @@ def load_base_model_and_config(
         config = AutoConfig.from_pretrained(model_id_or_path)
     else:
         config = AutoConfig.from_pretrained(model_id_or_path)
-        if config.model_type == LSTMFromScratchConfig.model_id:
+        # Support both canonical and legacy identifiers for our custom LSTM
+        if config.model_type in {LSTMFromScratchConfig.model_type, LSTMFromScratchConfig.model_id}:
             # make sure that we use standard LSTM layers during inference for the model trained with DP
             # (see https://opacus.ai/api/dp_rnn.html#opacus.layers.dp_rnn.DPLSTM for more details)
             if not is_training:

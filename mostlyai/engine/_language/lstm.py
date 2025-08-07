@@ -23,7 +23,10 @@ _LOG = logging.getLogger(__name__)
 
 
 class LSTMFromScratchConfig(PretrainedConfig):
-    model_type = model_id = "MOSTLY_AI/LSTMFromScratch-3m"
+    # Use a simple, slash-free model_type for Transformers registry.
+    # Keep a legacy model_id for backwards compatibility with older saved configs.
+    model_type = "mostlyai_lstm3m"
+    model_id = "MOSTLY_AI/LSTMFromScratch-3m"
 
     def __init__(
         self,
@@ -133,7 +136,18 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
 
 
 def register_mostly_lstm_model():
-    # register the model so that we can load it with `AutoModelForCausalLM.from_pretrained()` later
-    AutoConfig.register(LSTMFromScratchConfig.model_id, LSTMFromScratchConfig)
-    AutoModel.register(LSTMFromScratchConfig, LSTMFromScratchLMHeadModel)
-    AutoModelForCausalLM.register(LSTMFromScratchConfig, LSTMFromScratchLMHeadModel)
+    # Register config under both the canonical model_type and the legacy model_id (for older checkpoints).
+    # Make registration idempotent to avoid errors in environments that import multiple times.
+    for name in {LSTMFromScratchConfig.model_type, LSTMFromScratchConfig.model_id}:
+        try:
+            AutoConfig.register(name, LSTMFromScratchConfig)
+        except ValueError:
+            pass
+    try:
+        AutoModel.register(LSTMFromScratchConfig, LSTMFromScratchLMHeadModel)
+    except Exception:
+        pass
+    try:
+        AutoModelForCausalLM.register(LSTMFromScratchConfig, LSTMFromScratchLMHeadModel)
+    except Exception:
+        pass
