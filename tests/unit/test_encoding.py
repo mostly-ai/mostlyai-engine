@@ -103,7 +103,7 @@ def test_pad_ctx_sequences():
         pd.DataFrame(
             {
                 "key": [1, 2],
-                "product": [[3, 2, 0], [0]],
+                "product": [[3, 2], [0]],
                 "is_paid": [[0], [0]],
             }
         ),

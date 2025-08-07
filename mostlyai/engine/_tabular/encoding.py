@@ -432,5 +432,6 @@ def pad_ctx_sequences(df: pd.DataFrame, padding_value: int = 0) -> pd.DataFrame:
         return df
     list_cols = [c for c in df.columns if is_a_list(df.loc[0, c])]
     for col in list_cols:
-        df[col] = df[col].apply(lambda x: x + [padding_value])
+        # Note: only pad empty sequences to keep the backward compatibility
+        df[col] = df[col].apply(lambda x: x + [padding_value] if len(x) == 0 else x)
     return df
