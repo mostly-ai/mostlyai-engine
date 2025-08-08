@@ -35,9 +35,8 @@ from torch.utils.data import DataLoader
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
-    SDEC_SUB_COLUMN_PREFIX,
+    RIDX_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -189,6 +188,9 @@ class BatchCollator:
 
     @staticmethod
     def _slice_sequences(batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
+        # we pad sequences with one step
+        # thus, to respect the max_sequence_window provided by the user, we need to add 1 to it
+        max_sequence_window += 1
         # determine sequence lengths of current batch
         tgt_columns = [col for col in batch.columns if col.startswith(TGT)]
         seq_lens = batch[tgt_columns[0]].copy().str.len().values
@@ -264,34 +266,30 @@ def _calculate_sample_losses(
     if isinstance(model, SequentialModel) or (
         isinstance(model, GradSampleModule) and isinstance(model._module, SequentialModel)
     ):
-        slen_cols = [k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)]
+        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
+        ridx_cols = [k for k in data if k.startswith(RIDX_SUB_COLUMN_PREFIX)]
 
-        # generate masks for SLEN and time step
-        slen_mask = torch.zeros_like(data[slen_cols[0]], dtype=torch.int64)
-        for slen_col in slen_cols:
-            slen_mask |= data[slen_col] != 0  # mask loss for padded rows, which have SLEN=0
-        slen_mask = slen_mask.squeeze(-1)
-        time_step_mask = torch.zeros_like(slen_mask, dtype=torch.int64)
-        time_step_mask[:, 0] = 10  # mask loss for all time steps except the first one, and emphasize that one by 10x
+        # mask for all the columns other than sidx and ridx
+        padding_mask = torch.zeros_like(data[ridx_cols[0]], dtype=torch.int64)
+        for ridx_col in ridx_cols:
+            padding_mask |= data[ridx_col] != 0  # mask loss for padded rows, which have RIDX=0
+        padding_mask = padding_mask.squeeze(-1)
+        # mask for ridx columns: this takes the sequence padding into account to learn the stopping with ridx=0
+        ridx_mask = torch.nn.functional.pad(padding_mask, (1, 0), value=1)[:, :-1]
+        # mask for sidx columns
+        sidx_mask = torch.zeros_like(padding_mask)
 
         # calculate per column losses
-        sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
-        sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
         losses_by_column = []
         for col in tgt_cols:
-            if col in slen_cols:
-                # mask out SLEN for steps > 1
-                mask = time_step_mask
-            elif col in sidx_cols or col in sdec_cols:
-                # SIDX and SDEC columns need to be present in the computation graph for DP to work
-                # so we're only masking them instead of skipping them completely
-                mask = torch.zeros_like(slen_mask, dtype=torch.int64)
+            if col in sidx_cols:
+                mask = sidx_mask
+            elif col in ridx_cols:
+                mask = ridx_mask
             else:
-                # mask out paddings
-                mask = slen_mask
-
+                mask = padding_mask
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
+            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask), min=1)
             losses_by_column.append(masked_loss)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
