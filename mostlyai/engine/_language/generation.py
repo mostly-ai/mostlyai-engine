@@ -14,7 +14,6 @@
 
 import contextlib
 import importlib
-import json
 import logging
 import os
 import platform
@@ -72,10 +71,10 @@ def decode_buffered_samples(
 
     def parse_json(x, columns: list[str]):
         try:
-            parsed_x = json_repair.loads(x)
+            parsed_x = json_repair.loads(x, stream_stable=True)
             if not isinstance(parsed_x, dict):
                 raise ValueError("parsed_x has to be a dictionary")
-        except (json.decoder.JSONDecodeError, ValueError):
+        except Exception:
             parsed_x = {}
         return [parsed_x.get(c, INVALID_VALUE) for c in columns]
 
