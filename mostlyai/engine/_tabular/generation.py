@@ -47,7 +47,6 @@ from mostlyai.engine._common import (
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
     get_sub_columns_nested_from_cardinalities,
-    is_sequential,
     persist_data_part,
     trim_sequences,
 )
@@ -102,14 +101,14 @@ def _resolve_gen_column_order(
     cardinalities: dict,
     rebalancing: RebalancingConfig | None = None,
     imputation: ImputationConfig | None = None,
-    sample_seed: pd.DataFrame | None = None,
+    seed_data: pd.DataFrame | None = None,
     fairness: FairnessConfig | None = None,
 ):
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
     # 0. SLEN/SIDX column
-    # 1. Sample seed columns
+    # 1. Seed data columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
     # 4. Fairness sensitive columns (which are imputation columns as well)
@@ -170,16 +169,16 @@ def _resolve_gen_column_order(
             )
             column_order = [rebalance_column_argn] + [c for c in column_order if c != rebalance_column_argn]
 
-    if sample_seed is not None:
-        # sample_seed columns should be at the beginning in the generation model
-        # sample_seed has higher priority than rebalancing and imputation
+    if seed_data is not None:
+        # seed_data columns should be at the beginning in the generation model
+        # seed_data has higher priority than rebalancing and imputation
         seed_columns_argn = [
             get_argn_name(
                 argn_processor=column_stats[col][ARGN_PROCESSOR],
                 argn_table=column_stats[col][ARGN_TABLE],
                 argn_column=column_stats[col][ARGN_COLUMN],
             )
-            for col in sample_seed.columns
+            for col in seed_data.columns
             if col in column_stats
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
@@ -206,34 +205,6 @@ def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
     rows_per_batch = len(df) / no_of_batches
     running_total = pd.Series(range(len(df))) / rows_per_batch
     df = df.assign(__BATCH=running_total.astype(int) + 1)
-    return df
-
-
-def _pad_vertically(df: pd.DataFrame, batch_size: int, primary_key: str) -> pd.DataFrame:
-    """
-    Append rows with zeros so that `df` has `batch_size` rows.
-    """
-    # determine number of required padded rows
-    no_of_pad_rows = batch_size - df.shape[0]
-    if no_of_pad_rows <= 0:
-        return df
-
-    # create padded rows with zeros
-    def pad_flat(c):
-        return pd.Series(np.repeat([0], no_of_pad_rows), name=c)
-
-    def pad_seq(c):
-        return pd.Series(np.empty((no_of_pad_rows, 0)).tolist(), name=c)
-
-    pads = pd.concat(
-        [pad_seq(c) if is_sequential(df[c]) else pad_flat(c) for c in df.columns],
-        axis=1,
-    )
-    # flag padded rows by setting its key column to None
-    pads[primary_key] = None
-    # concatenate the padded rows to original data
-    df = pd.concat([df, pads], axis=0)
-    df.reset_index(drop=True, inplace=True)
     return df
 
 
@@ -619,34 +590,29 @@ def decode_buffered_samples(
 
     if is_sequential:
         data, keys = zip(*buffer.buffer) if buffer.buffer else ([], [])
-        syn = _reshape_pt_to_pandas(
+        df_syn = _reshape_pt_to_pandas(
             data=data,
             sub_cols=tgt_sub_columns,
             keys=keys,
             key_name=tgt_context_key,
         )
         # trim sequences to min and max length
-        syn = trim_sequences(
-            syn=syn,
+        df_syn = trim_sequences(
+            syn=df_syn,
             tgt_context_key=tgt_context_key,
             seq_len_min=seq_len_min,
             seq_len_max=seq_len_max,
         )
-    else:
-        (data,) = zip(*buffer.buffer)
-        syn = pd.concat(data, axis=0).reset_index(drop=True)
-
-    # extract pre-defined seed columns, if provided
-    seed_columns = [col for col in syn.columns if col.startswith("__seed:")]
-    if seed_columns:
-        df_seed = syn[seed_columns].rename(columns=lambda col: col.replace("__seed:", "", 1))
-    else:
         df_seed = pd.DataFrame()
+    else:
+        (data, seed_data) = zip(*buffer.buffer)
+        df_syn = pd.concat(data, axis=0).reset_index(drop=True)
+        df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
 
     # decode generated data
-    _LOG.info(f"decode generated data {syn.shape}")
-    syn = _decode_df(
-        df_encoded=syn,
+    _LOG.info(f"decode generated data {df_syn.shape}")
+    df_syn = _decode_df(
+        df_encoded=df_syn,
         stats=tgt_stats,
         context_key=tgt_context_key,
         prev_steps=decode_prev_steps,
@@ -654,15 +620,15 @@ def decode_buffered_samples(
 
     # preserve all seed columns
     for col in df_seed.columns:
-        syn[col] = df_seed[col]
+        df_syn[col] = df_seed[col]
 
     # postprocess generated data
-    _LOG.info(f"post-process generated data {syn.shape}")
-    syn = _post_process_decoding(
-        syn,
+    _LOG.info(f"post-process generated data {df_syn.shape}")
+    df_syn = _post_process_decoding(
+        df_syn,
         tgt_primary_key=tgt_primary_key,
     )
-    return syn
+    return df_syn
 
 
 ##################
@@ -746,13 +712,13 @@ def generate(
         _LOG.info(f"imputation: {imputation}")
         _LOG.info(f"rebalancing: {rebalancing}")
         _LOG.info(f"fairness: {fairness}")
-        _LOG.info(f"sample_seed: {list(seed_data.columns) if isinstance(seed_data, pd.DataFrame) else None}")
+        _LOG.info(f"seed_data: {list(seed_data.columns) if isinstance(seed_data, pd.DataFrame) else None}")
         gen_column_order = _resolve_gen_column_order(
             column_stats=tgt_stats["columns"],
             cardinalities=tgt_cardinalities,
             rebalancing=rebalancing,
             imputation=imputation,
-            sample_seed=seed_data,
+            seed_data=seed_data,
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
@@ -805,7 +771,7 @@ def generate(
             if seed_data is None:
                 trn_sample_size = tgt_stats["no_of_training_records"] + tgt_stats["no_of_validation_records"]
                 sample_size = trn_sample_size if sample_size is None else sample_size
-            else:  # sample_seed is not None
+            else:  # seed_data is not None
                 sample_size = len(seed_data)
             ctx_primary_key = tgt_context_key or DUMMY_CONTEXT_KEY
             tgt_context_key = ctx_primary_key
@@ -814,10 +780,10 @@ def generate(
             ctx_data = ctx_primary_keys.to_frame()
 
         if seed_data is None:
-            # create on-the-fly sample seed
+            # create on-the-fly seed data
             seed_data = pd.DataFrame(index=range(sample_size))
 
-        # ensure valid columns in sample_seed
+        # ensure valid columns in seed_data
         tgt_columns = list(tgt_stats["columns"].keys()) + ([tgt_primary_key] if tgt_primary_key else [])
         seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
 
@@ -914,7 +880,7 @@ def generate(
         # add __BATCH to ctx_data
         ctx_data = _batch_df(ctx_data, no_of_batches)
 
-        # add __BATCH to sample_seed
+        # add __BATCH to seed_data
         seed_data = _batch_df(seed_data, no_of_batches)
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -924,11 +890,11 @@ def generate(
 
         _LOG.info(f"generate {no_of_batches} batches")
         for batch in range(1, no_of_batches + 1):
-            ctx_batch = ctx_data[ctx_data["__BATCH"] == batch]
+            ctx_batch = ctx_data[ctx_data["__BATCH"] == batch].drop(columns="__BATCH")
             ctx_batch = apply_encoding_type_dtypes(ctx_batch, ctx_encoding_types)
             batch_size = len(ctx_batch)
 
-            seed_batch = seed_data[seed_data["__BATCH"] == batch]
+            seed_batch = seed_data[seed_data["__BATCH"] == batch].drop(columns="__BATCH")
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -948,16 +914,16 @@ def generate(
             ctx_keys.rename(tgt_context_key, inplace=True)
 
             # encode seed_batch
-            _LOG.info(f"encode sample seed values {seed_batch.shape}")
+            _LOG.info(f"encode seed data values {seed_batch.shape}")
             seed_batch_encoded, _, _ = encode_df(df=seed_batch, stats=tgt_stats)
 
             # sample data from generative model
             _LOG.info(f"sample data from model with context {ctx_batch.shape}")
             if not tgt_sub_columns:
-                # there are no columns to sample, emit warning and continue to batch decoding
+                # there are no columns to sample, emit warning and continue to batch decoding; this case can only happen for flat tables
                 _LOG.warning("no target columns to sample")
                 syn = ctx_keys.to_frame().reset_index(drop=True)
-                buffer.add((syn,))
+                buffer.add((syn, seed_batch))
             elif isinstance(model, SequentialModel):
                 ctxflt_inputs = {
                     col: torch.unsqueeze(
@@ -1126,13 +1092,8 @@ def generate(
                     ],
                     axis=1,
                 )
-                seed_cols_df = seed_batch.loc[:, seed_batch.columns != "__BATCH"].add_prefix("__seed:")
-                if not seed_cols_df.empty:
-                    # keep original seed values, in order to preserve them
-                    seed_cols_df.reset_index(drop=True, inplace=True)
-                    syn = pd.concat([syn, seed_cols_df], axis=1)
                 syn.reset_index(drop=True, inplace=True)
-                buffer.add((syn,))
+                buffer.add((syn, seed_batch))
 
             # send number of processed batches / steps
             progress.update(completed=batch * (seq_len_max + 1) - 1)

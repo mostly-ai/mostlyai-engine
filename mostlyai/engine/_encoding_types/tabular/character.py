@@ -155,7 +155,7 @@ def decode_character(df_encoded: pd.DataFrame, stats: dict) -> pd.Series:
         values = values.apply(lambda item: item.replace(UNKNOWN_TOKEN, "")).str.rstrip()
     else:
         # handle de-generate case, where no tokens were stored
-        values = pd.Series(pd.NA).repeat(df_encoded.shape[0])
+        values = pd.Series(pd.NA, index=range(df_encoded.shape[0]))
     if stats["has_nan"]:
         values[df_encoded["nan"] == 1] = pd.NA
     return values

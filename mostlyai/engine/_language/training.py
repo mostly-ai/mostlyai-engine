@@ -16,7 +16,6 @@ import gc
 import json
 import logging
 import math
-import os
 import time
 import warnings
 from collections.abc import Callable
@@ -468,10 +467,6 @@ def train(
                 model_config = LSTMFromScratchConfig(vocab_size=len(tokenizer), with_dp=with_dp)
                 model = LSTMFromScratchLMHeadModel(model_config).to(device)
         else:
-            # use MOSTLY_HUGGING_FACE_TOKEN if available
-            if os.getenv("MOSTLY_HUGGING_FACE_TOKEN"):
-                os.environ["HF_TOKEN"] = os.environ["MOSTLY_HUGGING_FACE_TOKEN"]
-
             model, model_config = load_base_model_and_config(
                 model_id_or_path,
                 device=device,
