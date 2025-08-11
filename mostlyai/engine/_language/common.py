@@ -27,6 +27,7 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
 )
+from transformers.quantizers import AutoQuantizationConfig
 
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
 
@@ -84,7 +85,9 @@ def load_base_model_and_config(
     else:
         attn_implementation = None
         torch_dtype = torch.float32
-    if is_gpu_training and is_bitsandbytes_available:
+    if hasattr(config, "quantization_config"):
+        quantization_config = AutoQuantizationConfig.from_dict(config.quantization_config)
+    elif is_gpu_training and is_bitsandbytes_available:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -117,7 +120,7 @@ def load_base_model_and_config(
         quantization_config=quantization_config,
         torch_dtype=torch_dtype,
     )
-    if quantization_config:
+    if isinstance(quantization_config, BitsAndBytesConfig):
         # convert all non-kbit layers to float32
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
     if is_gpu_training and model.supports_gradient_checkpointing:
