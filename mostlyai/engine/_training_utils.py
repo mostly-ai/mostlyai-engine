@@ -14,7 +14,10 @@
 
 import abc
 import logging
+import os
+import shutil
 import time
+from pathlib import Path
 
 import pandas as pd
 import torch
@@ -24,6 +27,67 @@ from pydantic import BaseModel, Field, field_validator
 from mostlyai.engine._workspace import Workspace
 
 _LOG = logging.getLogger(__name__)
+
+
+def _iter_files_recursively(root_path: Path):
+    # walk directory without following symlinks; fast and memory-light
+    stack = [root_path]
+    while stack:
+        path = stack.pop()
+        try:
+            with os.scandir(path) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            yield Path(entry.path)
+                    except FileNotFoundError:
+                        # entry disappeared between scandir and stat; skip
+                        continue
+        except FileNotFoundError:
+            continue
+
+
+def _get_directory_size_bytes(root_path: Path) -> int:
+    total_size = 0
+    for file_path in _iter_files_recursively(root_path):
+        try:
+            total_size += file_path.stat().st_size
+        except FileNotFoundError:
+            # file removed during traversal; ignore
+            pass
+    return total_size
+
+
+def _format_size(num_bytes: int) -> str:
+    # simple human-readable formatter
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024.0 or unit == units[-1]:
+            return f"{size:.1f}{unit}"
+        size /= 1024.0
+
+
+def log_workspace_storage(workspace: Workspace, context: str | None = None) -> None:
+    """
+    log filesystem usage and workspace directory size.
+
+    keeps it minimal and reusable; meant to be called at checkpoints and epoch boundaries.
+    """
+    root = workspace._ws_path  # intentionally use internal path for simplicity
+    try:
+        usage = shutil.disk_usage(root)
+        ws_size = _get_directory_size_bytes(root)
+        used_pct = (usage.used / usage.total * 100.0) if usage.total else 0.0
+        prefix = f"[{context}] " if context else ""
+        _LOG.info(
+            f"{prefix}storage: workspace_size={_format_size(ws_size)}, fs_used={_format_size(usage.used)}/"
+            f"{_format_size(usage.total)} ({used_pct:.1f}%), fs_free={_format_size(usage.free)}"
+        )
+    except Exception as e:
+        _LOG.debug(f"storage logging failed: {e}")
 
 
 class ProgressMessage(BaseModel, extra="allow"):
@@ -140,6 +204,11 @@ class ModelCheckpoint(abc.ABC):
         self._save_model_weights(model)
         self.last_save_time = time.time()
         self.save_count += 1
+        # log storage usage after saving a checkpoint
+        try:
+            log_workspace_storage(self.workspace, context=f"checkpoint #{self.save_count}")
+        except Exception:
+            pass
 
     def has_saved_once(self) -> bool:
         return self.save_count > 0

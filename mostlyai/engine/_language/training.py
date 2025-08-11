@@ -63,6 +63,7 @@ from mostlyai.engine._training_utils import (
     ModelCheckpoint,
     ProgressMessage,
     check_early_training_exit,
+    log_workspace_storage,
 )
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
 from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy
@@ -296,6 +297,11 @@ def train(
     t0_ = time.time()
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
+    # log initial storage state
+    try:
+        log_workspace_storage(workspace, context="start training")
+    except Exception:
+        pass
 
     with ProgressCallbackWrapper(
         update_progress, progress_messages_path=workspace.model_progress_messages_path
@@ -735,6 +741,11 @@ def train(
                 # calculate val loss
                 with forward_ctx_mgr:
                     val_loss = _calculate_val_loss(model=model, val_dataloader=val_dataloader)
+                # log storage at each validation point (end of epoch)
+                try:
+                    log_workspace_storage(workspace, context=f"end epoch {int(epoch)}")
+                except Exception:
+                    pass
                 dp_total_epsilon = (
                     privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
                 )
