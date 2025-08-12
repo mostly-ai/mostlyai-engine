@@ -319,7 +319,10 @@ def train(
             )
         ):
             device = torch.device("cuda:0")
-            _LOG.info("device set to single gpu (cuda:0) because model is too small or differential privacy is enabled")
+            if torch.cuda.device_count() > 1:
+                _LOG.info(
+                    "device set to single gpu (cuda:0) because model is too small or differential privacy is enabled"
+                )
 
         if not with_dp:
             if device.type == "cuda":
