@@ -1384,7 +1384,7 @@ class SequentialModel(nn.Module):
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
                 tgt_embeds_slen_ridx_masked = {
-                    k: torch.zeros_like(v) if k.startswith((RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)) else v
+                    k: torch.zeros_like(v) if k.startswith((SLEN_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX)) else v
                     for k, v in tgt_embeds.items()
                 }
 

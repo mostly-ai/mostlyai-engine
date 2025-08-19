@@ -216,8 +216,6 @@ class BatchCollator:
                 np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
             ]
 
-        sel_idxs = [np.concatenate(([0], el))[:-1] for el in sel_idxs]
-
         # loop over each record within batch and pick values for each tgt column
         tgt_col_idxs = [batch.columns.get_loc(c) for c in tgt_columns]
         rows = []
