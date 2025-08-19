@@ -1135,9 +1135,9 @@ def generate(
                         out_df[RIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
                             out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
                         )
-                        out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
-                            lower=seq_len_min - seq_step, upper=seq_len_max
-                        )
+                        # out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
+                        #     lower=seq_len_min - seq_step, upper=seq_len_max
+                        # )
                     if has_slen:
                         out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
                             out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX

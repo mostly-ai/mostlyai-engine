@@ -215,6 +215,8 @@ class BatchCollator:
                 np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
             ]
 
+        sel_idxs = [np.concatenate(([0], el))[:-1] for el in sel_idxs]
+
         # loop over each record within batch and pick values for each tgt column
         tgt_col_idxs = [batch.columns.get_loc(c) for c in tgt_columns]
         rows = []
@@ -276,6 +278,8 @@ def _calculate_sample_losses(
         padding_mask = padding_mask.squeeze(-1)
         # mask for ridx columns: this takes the sequence padding into account to learn the stopping with ridx=0
         ridx_mask = torch.nn.functional.pad(padding_mask, (1, 0), value=1)[:, :-1]
+        # rectify loss for first step on RIDX
+        ridx_mask[:, 0] = 1000
         # mask for sidx columns
         sidx_mask = torch.zeros_like(padding_mask)
 
