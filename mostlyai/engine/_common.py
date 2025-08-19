@@ -315,12 +315,12 @@ def get_argn_name(
     return "".join(name)
 
 
-def get_cardinalities(stats: dict, include_old_positional_columns: bool = False) -> dict[str, int]:
+def get_cardinalities(stats: dict) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
 
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_positional_cardinalities(max_seq_len, include_old_positional_columns)
+        cardinalities |= get_positional_cardinalities(max_seq_len)
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -538,18 +538,18 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
     return vals
 
 
-def get_positional_cardinalities(max_seq_len: int, include_old_positional_columns: bool) -> dict[str, int]:
+def get_positional_cardinalities(max_seq_len: int) -> dict[str, int]:
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode positional columns as numeric_discrete
         sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
-        ridx_cardinalities = {f"{RIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+        ridx_cardinalities = {f"{RIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
     else:
         # encode positional columns as numeric_digit
         digits = [int(digit) for digit in str(max_seq_len)]
         sidx_cardinalities = {}
-        ridx_cardinalities = {}
         slen_cardinalities = {}
+        ridx_cardinalities = {}
         for idx, digit in enumerate(digits):
             # cap cardinality of the most significant position
             # less significant positions allow any digit
@@ -558,12 +558,7 @@ def get_positional_cardinalities(max_seq_len: int, include_old_positional_column
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             ridx_cardinalities[f"{RIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-    sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
-    return (
-        sidx_cardinalities | ridx_cardinalities | slen_cardinalities | sdec_cardinalities
-        if include_old_positional_columns
-        else sidx_cardinalities | ridx_cardinalities
-    )
+    return sidx_cardinalities | slen_cardinalities | ridx_cardinalities
 
 
 def persist_data_part(df: pd.DataFrame, output_path: Path, infix: str):

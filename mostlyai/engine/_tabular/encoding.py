@@ -26,6 +26,7 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     RIDX_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
+    SLEN_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
@@ -382,10 +383,12 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
 def _enrich_positional_columns(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
+    slen = df.groupby(context_key)[context_key].transform("size") - 1  # sequence length
     ridx = df.groupby(context_key).cumcount(ascending=False)  # sequence remainder
     sidx = encode_positional_column(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
+    slen = encode_positional_column(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
     ridx = encode_positional_column(ridx, max_seq_len=max_seq_len, prefix=RIDX_SUB_COLUMN_PREFIX)
-    df = pd.concat([sidx, ridx, df], axis=1)
+    df = pd.concat([sidx, slen, ridx, df], axis=1)
     return df
 
 

@@ -682,7 +682,7 @@ def generate(
         _LOG.info(f"{has_context=}")
         ctx_stats = workspace.ctx_stats.read()
 
-        tgt_cardinalities = get_cardinalities(tgt_stats, include_old_positional_columns=True)
+        tgt_cardinalities = get_cardinalities(tgt_stats)
         ctx_cardinalities = get_cardinalities(ctx_stats)
 
         # read model config
@@ -714,11 +714,11 @@ def generate(
                     for c in [c for c in tgt_cardinalities if c.startswith(prefix)]:
                         del tgt_cardinalities[c]
 
-            if has_slen:
-                # move SLEN to the beginning in tgt_cardinalities
-                tgt_cardinalities = dict(
-                    sorted(tgt_cardinalities.items(), key=lambda x: not x[0].startswith(SLEN_SUB_COLUMN_PREFIX))
-                )
+            # if has_slen:
+            #     # move SLEN to the beginning in tgt_cardinalities
+            #     tgt_cardinalities = dict(
+            #         sorted(tgt_cardinalities.items(), key=lambda x: not x[0].startswith(SLEN_SUB_COLUMN_PREFIX))
+            #     )
 
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
@@ -1116,6 +1116,7 @@ def generate(
                         history=history,
                         history_state=history_state,
                         context=context,
+                        first_step=seq_step == 0,
                     )
 
                     # transform output dict to tensor for memory efficiency

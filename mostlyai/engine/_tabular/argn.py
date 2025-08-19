@@ -37,6 +37,7 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
+    SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
     get_sub_columns_lookup,
@@ -723,7 +724,7 @@ def _make_permutation_mask(
         # create mask in provided order
         order = torch.tensor([columns.index(c) for c in column_order], dtype=torch.int32)
     elif is_sequential and n_cols >= 1:
-        # create mask in random order, but keep SIDX/RIDX column at first position
+        # create mask in random order, but keep positional columns at first position
         order = torch.randperm(n_cols - 1) + 1
         order = torch.cat((torch.zeros(1, dtype=torch.int32), order), dim=0)
     else:
@@ -1239,6 +1240,7 @@ class SequentialModel(nn.Module):
         history=None,
         history_state=None,
         context=None,
+        first_step=False,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -1249,16 +1251,17 @@ class SequentialModel(nn.Module):
         if mode == "trn":
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
-            tgt_embeds_ridx_masked = {
-                k: torch.zeros_like(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()
+            tgt_embeds_slen_ridx_masked = {
+                k: torch.zeros_like(v) if k.startswith((RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)) else v
+                for k, v in tgt_embeds.items()
             }
 
             # forward pass through column embedders
-            tgt_col_embeds = self.column_embedders(tgt_embeds_ridx_masked)
+            tgt_col_embeds = self.column_embedders(tgt_embeds_slen_ridx_masked)
 
             # history
             # time shift: remove last time step; add zeros for first time step; add randoms for all others
-            embeddings = torch.cat(list(tgt_embeds_ridx_masked.values()), dim=-1)
+            embeddings = torch.cat(list(tgt_embeds_slen_ridx_masked.values()), dim=-1)
             history_in = embeddings[:, :-1, :]
             history_in = nn.ConstantPad2d((0, 0, 1, 0), 0)(history_in)
             history, _ = self.history_compressor(history_in)
@@ -1337,6 +1340,7 @@ class SequentialModel(nn.Module):
             column_order = self.column_order or self.tgt_columns
             sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
 
+            slen_out = []
             for sub_col in sub_column_order:
                 lookup = self.tgt_sub_columns_lookup[sub_col]
 
@@ -1368,24 +1372,31 @@ class SequentialModel(nn.Module):
                         fixed_probs=fixed_probs.get(sub_col),
                     )
 
+                if first_step and sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
+                    slen_out.append(out)
+
+                if first_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                    out = slen_out.pop(0)
+
                 # update timestep output
                 outputs[sub_col] = out
 
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
-                tgt_embeds_ridx_masked = {
-                    k: torch.zeros_like(v) if k.startswith(RIDX_SUB_COLUMN_PREFIX) else v for k, v in tgt_embeds.items()
+                tgt_embeds_slen_ridx_masked = {
+                    k: torch.zeros_like(v) if k.startswith((RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)) else v
+                    for k, v in tgt_embeds.items()
                 }
 
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:
                     col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
-                    col_embed_in = torch.cat([tgt_embeds_ridx_masked[sc] for sc in col_sub_cols], dim=-1)
+                    col_embed_in = torch.cat([tgt_embeds_slen_ridx_masked[sc] for sc in col_sub_cols], dim=-1)
                     tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # update history and hidden state
-            history_in = torch.cat([v for v in tgt_embeds_ridx_masked.values()], dim=-1)
+            history_in = torch.cat([v for v in tgt_embeds_slen_ridx_masked.values()], dim=-1)
             history, history_state = self.history_compressor(history_in, history_state=history_state)
 
             # order outputs according to tgt_sub_columns
