@@ -567,7 +567,19 @@ def get_positional_cardinalities(
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             ridx_cardinalities[f"{RIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-    return sidx_cardinalities | slen_cardinalities | ridx_cardinalities
+    sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
+    match has_slen, has_ridx, has_sdec:
+        case True, True, False:
+            # SIDX/SLEN/RIDX model
+            return sidx_cardinalities | slen_cardinalities | ridx_cardinalities
+        case True, False, True:
+            # SLEN/SIDX/SDEC model
+            return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
+        case True, False, False:
+            # SLEN/SIDX model
+            return slen_cardinalities | sidx_cardinalities
+        case _:
+            raise ValueError(f"Invalid positional encoding: {has_slen=}, {has_ridx=}, {has_sdec=}")
 
 
 def persist_data_part(df: pd.DataFrame, output_path: Path, infix: str):
