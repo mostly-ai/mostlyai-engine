@@ -49,11 +49,11 @@ PREFIX_TABLE = ":"
 PREFIX_COLUMN = "/"
 PREFIX_SUB_COLUMN = "__"
 SIDX_RIDX_DIGIT_ENCODING_THRESHOLD = 100
-SIDX_RIDX_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
-SIDX_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
-RIDX_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # reverse index
-SLEN_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
-SDEC_SUB_COLUMN_PREFIX = f"{SIDX_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
+SIDX_SLEN_RIDX_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
+SIDX_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
+RIDX_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # reverse index
+SLEN_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
+SDEC_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
@@ -315,12 +315,14 @@ def get_argn_name(
     return "".join(name)
 
 
-def get_cardinalities(stats: dict) -> dict[str, int]:
+def get_cardinalities(
+    stats: dict, has_slen: bool | None = None, has_ridx: bool | None = None, has_sdec: bool | None = None
+) -> dict[str, int]:
     cardinalities: dict[str, int] = {}
 
     if stats.get("is_sequential", False):
         max_seq_len = get_sequence_length_stats(stats)["max"]
-        cardinalities |= get_positional_cardinalities(max_seq_len)
+        cardinalities |= get_positional_cardinalities(max_seq_len, has_slen, has_ridx, has_sdec)
 
     for i, column in enumerate(stats.get("columns", [])):
         column_stats = stats["columns"][column]
@@ -538,7 +540,13 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
     return vals
 
 
-def get_positional_cardinalities(max_seq_len: int) -> dict[str, int]:
+def get_positional_cardinalities(
+    max_seq_len: int, has_slen: bool | None, has_ridx: bool | None, has_sdec: bool | None
+) -> dict[str, int]:
+    has_slen = has_slen if has_slen is not None else True
+    has_ridx = has_ridx if has_ridx is not None else True
+    has_sdec = has_sdec if has_sdec is not None else False
+
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode positional columns as numeric_discrete
         sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}

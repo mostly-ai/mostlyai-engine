@@ -32,7 +32,7 @@ from mostlyai.engine._common import (
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
-    SIDX_RIDX_COLUMN,
+    SIDX_SLEN_RIDX_COLUMN,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
@@ -107,7 +107,7 @@ def _resolve_gen_column_order(
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
-    # 0. SIDX/RIDX column
+    # 0. Positional column
     # 1. Seed data columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
@@ -183,9 +183,9 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SIDX_RIDX_COLUMN in column_order:
-        # SIDX/RIDX column needs to be the first one in the generation model
-        column_order = [SIDX_RIDX_COLUMN] + [c for c in column_order if c != SIDX_RIDX_COLUMN]
+    if SIDX_SLEN_RIDX_COLUMN in column_order:
+        # positional column needs to be the first one in the generation model
+        column_order = [SIDX_SLEN_RIDX_COLUMN] + [c for c in column_order if c != SIDX_SLEN_RIDX_COLUMN]
 
     return column_order
 
@@ -593,7 +593,7 @@ def decode_buffered_samples(
             key_name=tgt_context_key,
         )
         df_syn = df_syn.drop(
-            columns=[c for c in df_syn.columns if c.startswith(SIDX_RIDX_COLUMN)],
+            columns=[c for c in df_syn.columns if c.startswith(SIDX_SLEN_RIDX_COLUMN)],
             axis=1,
         ).reset_index(drop=True)
     else:
@@ -715,7 +715,7 @@ def generate(
                         del tgt_cardinalities[c]
 
             if has_slen and not has_ridx:
-                # move SLEN to the beginning in tgt_cardinalities
+                # move SLEN to the beginning in tgt_cardinalities for SLEN/SIDX model
                 tgt_cardinalities = dict(
                     sorted(tgt_cardinalities.items(), key=lambda x: not x[0].startswith(SLEN_SUB_COLUMN_PREFIX))
                 )
