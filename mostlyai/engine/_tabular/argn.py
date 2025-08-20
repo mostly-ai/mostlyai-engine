@@ -216,15 +216,18 @@ class Embedders(nn.Module):
         self.embedders = nn.ModuleDict()
 
         # embedding layers for each sub column defined in cardinalities
+        last_slen_sub_col = next(
+            [sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX)], None
+        )
         last_ridx_sub_col = next(
             (sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX)), None
         )
         for sub_col, dim_input in self.cardinalities.items():
             dim_output = _embedding_heuristic(id=self.id(sub_col), model_size=model_size, dim_input=dim_input)
             embedder = nn.Embedding(num_embeddings=dim_input, embedding_dim=dim_output, device=device)
-            # the embeddings of the last ridx sub column are never used
-            # so we explicitly freeze it to make opacus not complain about "per sample gradient is not initialized"
-            if sub_col == last_ridx_sub_col:
+            # the embeddings of the last slen and ridx sub columns are never used
+            # so we explicitly freeze them to make opacus not complain about "per sample gradient is not initialized"
+            if sub_col in [last_ridx_sub_col, last_slen_sub_col]:
                 embedder.weight.requires_grad = False
             self.add(sub_column=sub_col, embedder=embedder)
             self.dims.append(dim_output)
