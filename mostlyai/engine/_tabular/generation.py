@@ -803,6 +803,7 @@ def generate(
         # sequence lengths
         seq_len_stats = get_sequence_length_stats(tgt_stats)
         seq_len_median = seq_len_stats["median"]
+        seq_len_min = seq_len_stats["min"]
         seq_len_max = seq_len_stats["max"]
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
@@ -1106,8 +1107,7 @@ def generate(
                     out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
                         out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
                     )
-                    # TODO: remove comment after testing
-                    # out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
+                    out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
                     if has_ridx:
                         # set RIDX to SLEN for first step; beyond that decode RIDX
                         out_df[RIDX_SUB_COLUMN_PREFIX] = (
@@ -1115,10 +1115,9 @@ def generate(
                             if seq_step > 0
                             else out_df[SLEN_SUB_COLUMN_PREFIX]
                         )
-                        # TODO: remove comment after testing
-                        # out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
-                        #     lower=seq_len_min - seq_step, upper=seq_len_max
-                        # )
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
+                            lower=seq_len_min - seq_step, upper=seq_len_max
+                        )
                     # calculate include step mask (True: include current step, False: exclude current step)
                     if RIDX_SUB_COLUMN_PREFIX in out_df.columns:
                         include_mask = out_df[RIDX_SUB_COLUMN_PREFIX] > 0
