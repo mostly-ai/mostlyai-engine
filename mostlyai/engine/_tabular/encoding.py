@@ -383,7 +383,7 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
 def _enrich_positional_columns(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
-    slen = df.groupby(context_key)[context_key].transform("size") - 1  # sequence length
+    slen = df.groupby(context_key)[context_key].transform("size") - 1  # sequence length; -1 to account for padding
     ridx = df.groupby(context_key).cumcount(ascending=False)  # sequence remainder
     sidx = encode_positional_column(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     slen = encode_positional_column(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
