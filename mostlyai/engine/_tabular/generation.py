@@ -1022,9 +1022,22 @@ def generate(
                         for c in sidx_df
                     }
 
+                    # fix SLEN by propagating sampled SLEN from first step
+                    slen_vals = {}
+                    if seq_step > 0:
+                        slen = out_df[SLEN_SUB_COLUMN_PREFIX]
+                        slen = encode_positional_column(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+                        slen_vals = {
+                            col: torch.unsqueeze(
+                                torch.as_tensor(slen[col], dtype=torch.int64, device=model.device),
+                                dim=-1,
+                            )
+                            for col in slen
+                        }
+
                     # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
                     ridx_vals = {}
-                    if seq_step > n_seed_steps:
+                    if has_ridx and seq_step > n_seed_steps:
                         ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
                         ridx = encode_positional_column(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
                         ridx_vals = {
@@ -1035,28 +1048,21 @@ def generate(
                             for col in ridx
                         }
 
-                    # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
-                    slen_vals = {}
-                    if seq_step > 0:
-                        slen = out_df[SLEN_SUB_COLUMN_PREFIX]
-                        sdec = (
-                            (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                        )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
-                        slen = encode_positional_column(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-                        slen_vals = {
-                            col: torch.unsqueeze(
-                                torch.as_tensor(slen[col], dtype=torch.int64, device=model.device),
-                                dim=-1,
+                    # fix SDEC according to SIDX and SLEN
+                    sdec_vals = {}
+                    if has_sdec:
+                        if seq_step > 0:
+                            slen = out_df[SLEN_SUB_COLUMN_PREFIX]
+                            sdec = (
+                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                        else:
+                            sdec = pd.Series([0] * step_size)  # initial sequence index decile
+                        sdec_vals = {
+                            f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
+                                torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
                             )
-                            for col in slen
                         }
-                    else:
-                        sdec = pd.Series([0] * step_size)  # initial sequence index decile
-                    sdec_vals = {
-                        f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                            torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
-                        )
-                    }
 
                     # fix seeded columns
                     seed_vals = {}
