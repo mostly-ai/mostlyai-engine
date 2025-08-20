@@ -49,11 +49,11 @@ PREFIX_TABLE = ":"
 PREFIX_COLUMN = "/"
 PREFIX_SUB_COLUMN = "__"
 SIDX_RIDX_DIGIT_ENCODING_THRESHOLD = 100
-SIDX_SLEN_RIDX_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
-SIDX_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
-RIDX_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # reverse index
-SLEN_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
-SDEC_SUB_COLUMN_PREFIX = f"{SIDX_SLEN_RIDX_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
+POSITIONAL_COLUMN = f"{TGT}{PREFIX_TABLE}{PREFIX_COLUMN}"
+SIDX_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}sidx_"  # sequence index
+RIDX_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # reverse index
+SLEN_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
+SDEC_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
@@ -543,6 +543,7 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
 def get_positional_cardinalities(
     max_seq_len: int, has_slen: bool | None, has_ridx: bool | None, has_sdec: bool | None
 ) -> dict[str, int]:
+    # the latest version of the model uses SIDX/SLEN/RIDX positional column
     has_slen = has_slen if has_slen is not None else True
     has_ridx = has_ridx if has_ridx is not None else True
     has_sdec = has_sdec if has_sdec is not None else False
