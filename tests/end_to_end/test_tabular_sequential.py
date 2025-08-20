@@ -665,10 +665,10 @@ def test_seed_generation(tmp_path):
 
 
 def test_long_sequences(tmp_path):
-    # test that long sequence lengths can be learnt with short training (1 epoch)
+    # test that long sequence lengths are learnt after short training (1 epoch)
     workspace_dir = tmp_path / "ws"
     key_col = "id"
-    n_seq_len_500, n_seq_len_0 = 1_000, 100
+    n_seq_len_500, n_seq_len_0 = 900, 100
     ctx = pd.DataFrame({key_col: range(n_seq_len_500 + n_seq_len_0)})
     tgt = pd.DataFrame({key_col: np.repeat(ctx[key_col][:n_seq_len_500], 500)})
     split(
@@ -683,4 +683,7 @@ def test_long_sequences(tmp_path):
     train(workspace_dir=workspace_dir, max_epochs=1)
     generate(workspace_dir=workspace_dir)
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
-    assert syn.groupby(key_col).size().value_counts(normalize=True)[500] > 0.85
+    syn_seq_lengths = syn.groupby(key_col).size().reindex(ctx[key_col], fill_value=0)
+    syn_seq_lengths_dist = syn_seq_lengths.value_counts(normalize=True)
+    assert 0.80 < syn_seq_lengths_dist.get(500, 0) < 0.95
+    assert 0.05 < syn_seq_lengths_dist.get(0, 0) < 0.15
