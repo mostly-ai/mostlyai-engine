@@ -662,3 +662,25 @@ def test_seed_generation(tmp_path):
     # check that the sequence lengths are inversely correlated with the number of MINUS steps
     avg_seq_lens = {name: syn_dict[name].groupby(key_col).size().mean() for name in seed_data_dict.keys()}
     assert avg_seq_lens["minuses"] < avg_seq_lens["balanced"] < avg_seq_lens["pluses"]
+
+
+def test_long_sequences(tmp_path):
+    # test that long sequence lengths can be learnt with short training (1 epoch)
+    workspace_dir = tmp_path / "ws"
+    key_col = "id"
+    n_seq_len_500, n_seq_len_0 = 1_000, 100
+    ctx = pd.DataFrame({key_col: range(n_seq_len_500 + n_seq_len_0)})
+    tgt = pd.DataFrame({key_col: np.repeat(ctx[key_col][:n_seq_len_500], 500)})
+    split(
+        tgt_data=tgt,
+        tgt_context_key=key_col,
+        ctx_data=ctx,
+        ctx_primary_key=key_col,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    train(workspace_dir=workspace_dir, max_epochs=1)
+    generate(workspace_dir=workspace_dir)
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+    assert syn.groupby(key_col).size().value_counts(normalize=True)[500] > 0.85
