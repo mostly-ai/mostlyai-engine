@@ -39,6 +39,7 @@ jobs:
             run: |
               uv sync --frozen --only-group dev
               uv pip install ".[gpu]"
+              uv pip install "triton==3.4.0"  # temporary fix for issues on GitHub runner (T4 GPU); to be removed after upgrading to torch 2.8
 
           - name: Setup | Check for available GPU-s
             run: nvidia-smi
