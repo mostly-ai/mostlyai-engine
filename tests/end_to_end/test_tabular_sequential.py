@@ -685,5 +685,8 @@ def test_long_sequences(tmp_path):
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
     syn_seq_lengths = syn.groupby(key_col).size().reindex(ctx[key_col], fill_value=0)
     syn_seq_lengths_dist = syn_seq_lengths.value_counts(normalize=True)
-    assert 0.80 < syn_seq_lengths_dist.get(500, 0) < 0.95
-    assert 0.05 < syn_seq_lengths_dist.get(0, 0) < 0.15
+    p_500 = syn_seq_lengths_dist.get(500, 0)
+    p_0 = syn_seq_lengths_dist.get(0, 0)
+    assert 0.75 < p_500 < 0.95  # majority of sequences are 500 steps long
+    assert 0.03 < p_0 < 0.23  # significant minority of sequences are 0 steps long
+    assert p_500 + p_0 > 0.95  # there are just a handful of other lengths

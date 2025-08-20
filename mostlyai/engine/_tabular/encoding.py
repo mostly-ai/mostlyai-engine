@@ -140,22 +140,22 @@ def _encode_partition(
         df = pad_tgt_sequences(df, context_key=tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         if has_context:
-            zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
-            df_miss = pd.DataFrame({tgt_context_key: zero_seq_ids})
-            df_pads = pd.DataFrame({c: [0] for c in df.columns if c != tgt_context_key})
-            df_miss = df_miss.merge(df_pads, how="cross")
-            df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
+            zero_seq_ids = set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key])
+            df_miss = pd.DataFrame(
+                [{tgt_context_key: i, **{c: 0 for c in df.columns if c != tgt_context_key}} for i in zero_seq_ids]
+            )
+            df = pd.concat([df, df_miss], ignore_index=True)
         # enrich with positional columns
         df = _enrich_positional_columns(df, tgt_context_key, max_len)
         # flatten to list columns
         df = flatten_frame(df, tgt_context_key)
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
-        zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
-        df_miss = pd.DataFrame({tgt_context_key: zero_seq_ids})
-        df_pads = pd.DataFrame({c: [0] for c in df.columns if c != tgt_context_key})
-        df_miss = df_miss.merge(df_pads, how="cross")
-        df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
+        zero_seq_ids = set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key])
+        df_miss = pd.DataFrame(
+            [{tgt_context_key: i, **{c: 0 for c in df.columns if c != tgt_context_key}} for i in zero_seq_ids]
+        )
+        df = pd.concat([df, df_miss], ignore_index=True)
         # ensure that max 1 item is retained per context_id for flat mode
         df = df[df.groupby(tgt_context_key).cumcount() < 1]
 
