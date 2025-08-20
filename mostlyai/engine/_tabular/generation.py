@@ -714,11 +714,11 @@ def generate(
                     for c in [c for c in tgt_cardinalities if c.startswith(prefix)]:
                         del tgt_cardinalities[c]
 
-            # if has_slen:
-            #     # move SLEN to the beginning in tgt_cardinalities
-            #     tgt_cardinalities = dict(
-            #         sorted(tgt_cardinalities.items(), key=lambda x: not x[0].startswith(SLEN_SUB_COLUMN_PREFIX))
-            #     )
+            if has_slen and not has_ridx:
+                # move SLEN to the beginning in tgt_cardinalities
+                tgt_cardinalities = dict(
+                    sorted(tgt_cardinalities.items(), key=lambda x: not x[0].startswith(SLEN_SUB_COLUMN_PREFIX))
+                )
 
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
@@ -992,8 +992,6 @@ def generate(
                 syn = ctx_keys.to_frame().reset_index(drop=True)
                 buffer.add((syn, seed_batch))
             elif isinstance(model, SequentialModel):
-                seq_stats = get_sequence_length_stats(tgt_stats)
-                seq_len_min = seq_stats["min"]
                 ctxflt_inputs = {
                     col: torch.unsqueeze(
                         torch.as_tensor(ctx_batch_encoded[col].to_numpy(), device=model.device).type(torch.int),
@@ -1116,7 +1114,6 @@ def generate(
                         history=history,
                         history_state=history_state,
                         context=context,
-                        first_step=seq_step == 0,
                     )
 
                     # transform output dict to tensor for memory efficiency
@@ -1143,7 +1140,9 @@ def generate(
                         out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
                             out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
                         )
-                        out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
+                        # out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
+                    if has_ridx and has_slen and seq_step == 0:
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX]
                     # calculate include step mask (True: include current step, False: exclude current step)
                     if has_ridx:
                         include_mask = out_df[RIDX_SUB_COLUMN_PREFIX] > 0

@@ -217,7 +217,7 @@ class Embedders(nn.Module):
 
         # embedding layers for each sub column defined in cardinalities
         last_slen_sub_col = next(
-            [sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX)], None
+            (sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX)), None
         )
         last_ridx_sub_col = next(
             (sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX)), None
@@ -1243,7 +1243,6 @@ class SequentialModel(nn.Module):
         history=None,
         history_state=None,
         context=None,
-        first_step=False,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -1343,7 +1342,6 @@ class SequentialModel(nn.Module):
             column_order = self.column_order or self.tgt_columns
             sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
 
-            slen_out = []
             for sub_col in sub_column_order:
                 lookup = self.tgt_sub_columns_lookup[sub_col]
 
@@ -1374,12 +1372,6 @@ class SequentialModel(nn.Module):
                         top_p=top_p,
                         fixed_probs=fixed_probs.get(sub_col),
                     )
-
-                if first_step and sub_col.startswith(SLEN_SUB_COLUMN_PREFIX):
-                    slen_out.append(out)
-
-                if first_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
-                    out = slen_out.pop(0)
 
                 # update timestep output
                 outputs[sub_col] = out
