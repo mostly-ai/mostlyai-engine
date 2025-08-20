@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from mostlyai.engine._common import RIDX_SUB_COLUMN_PREFIX, SIDX_SUB_COLUMN_PREFIX
+from mostlyai.engine._common import RIDX_SUB_COLUMN_PREFIX, SIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX
 from mostlyai.engine._language.encoding import format_df
 from mostlyai.engine._tabular.encoding import (
     _encode_col,
@@ -61,6 +61,7 @@ def test_enrich_positional_columns():
     expected_df = pd.DataFrame(
         {
             f"{SIDX_SUB_COLUMN_PREFIX}cat": [0, 1, 2, 0, 1],
+            f"{SLEN_SUB_COLUMN_PREFIX}cat": [2, 2, 2, 1, 1],
             f"{RIDX_SUB_COLUMN_PREFIX}cat": [2, 1, 0, 1, 0],
             "key": [1, 1, 1, 2, 2],
             "product": [3, 2, 0, 9, 0],

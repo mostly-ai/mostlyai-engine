@@ -1024,7 +1024,7 @@ def generate(
 
                     # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
                     ridx_vals = {}
-                    if seq_step > 0 and seq_step > n_seed_steps:
+                    if seq_step > n_seed_steps:
                         ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
                         ridx = encode_positional_column(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
                         ridx_vals = {

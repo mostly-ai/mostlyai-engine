@@ -271,12 +271,12 @@ def _calculate_sample_losses(
         slen_cols = {k for k in data if k.startswith(SLEN_SUB_COLUMN_PREFIX)}
         ridx_cols = [k for k in data if k.startswith(RIDX_SUB_COLUMN_PREFIX)]
 
-        # mask for all the columns other than sidx and ridx
+        # mask for all the columns other than positional column
         padding_mask = torch.zeros_like(data[ridx_cols[0]], dtype=torch.int64)
         for ridx_col in ridx_cols:
             padding_mask |= data[ridx_col] != 0  # mask loss for padded rows, which have RIDX=0
         padding_mask = padding_mask.squeeze(-1)
-        # mask for slen columns; mask out all steps beyond first one
+        # mask for slen columns; only first step is unmasked
         slen_mask = torch.zeros_like(padding_mask)
         slen_mask[:, 0] = 1
         # mask for ridx columns: this takes the sequence padding into account to learn the stopping with ridx=0

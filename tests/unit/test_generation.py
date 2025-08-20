@@ -311,6 +311,7 @@ class TestResolveGenColumnOrder:
         }
         seq_cardinalities = flat_cardinalities | {
             "tgt:/__sidx__E0": 8,
+            "tgt:/__slen__E0": 9,
             "tgt:/__ridx__E0": 9,
         }
         return col_stats, flat_cardinalities, seq_cardinalities
@@ -356,7 +357,7 @@ class TestResolveGenColumnOrder:
             cardinalities=cardinalities,
         )
         flat_expected = ["tgt:t0/c0", "tgt:t1/c1", "tgt:t2/c2"]
-        seq_expected = ["tgt:/"] + flat_expected  # SIDX/RIDX column is always first for sequential model
+        seq_expected = ["tgt:/"] + flat_expected  # positional column is always first for sequential model
         assert gen_column_order == {"flat": flat_expected, "sequential": seq_expected}[model_type]
 
     @pytest.mark.parametrize("model_type", ["flat", "sequential"])
