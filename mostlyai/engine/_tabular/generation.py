@@ -1097,27 +1097,27 @@ def generate(
                     out_df[SIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
                         out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
                     )
-                    if has_slen:
-                        out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
-                            out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
-                        )
-                        # TODO: remove comment after testing
-                        # out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
-
+                    out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
+                        out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
+                    )
+                    # TODO: remove comment after testing
+                    # out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
                     if has_ridx:
-                        out_df[RIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
-                            out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
+                        # set RIDX to SLEN for first step; beyond that decode RIDX
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = (
+                            decode_positional_column(out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
+                            if seq_step > 0
+                            else out_df[SLEN_SUB_COLUMN_PREFIX]
                         )
                         # TODO: remove comment after testing
                         # out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
                         #     lower=seq_len_min - seq_step, upper=seq_len_max
                         # )
-                    if has_ridx and has_slen and seq_step == 0:
-                        out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX]
                     # calculate include step mask (True: include current step, False: exclude current step)
-                    if has_ridx:
+                    if RIDX_SUB_COLUMN_PREFIX in out_df.columns:
                         include_mask = out_df[RIDX_SUB_COLUMN_PREFIX] > 0
                     else:
+                        # fall back to calculating the mask based on SLEN column (backwards compatibility)
                         include_mask = out_df[SIDX_SUB_COLUMN_PREFIX] < out_df[SLEN_SUB_COLUMN_PREFIX]
                     include_mask = include_mask | (out_df[SIDX_SUB_COLUMN_PREFIX] < n_seed_steps)
                     next_step_size = include_mask.sum()
