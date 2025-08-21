@@ -37,6 +37,7 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
+    SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
@@ -1290,9 +1291,16 @@ class SequentialModel(nn.Module):
                 masked_col_embeds = [torch.mul(col_mask[lookup.col_idx, :].int(), col_embeddings)]
 
                 # collect previous sub column embeddings for current column
-                prev_sub_col_embeds = [
-                    tgt_embeds[sub_col] for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
-                ]
+                prev_sub_col_embeds = {
+                    sub_col: tgt_embeds[sub_col]
+                    for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                }
+                if sub_col.startswith((SIDX_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX)):
+                    prev_sub_col_embeds = {
+                        k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                        for k, v in prev_sub_col_embeds.items()
+                    }
+                prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                 # regressor
                 regressor_in = context_history + masked_col_embeds + prev_sub_col_embeds
@@ -1351,10 +1359,16 @@ class SequentialModel(nn.Module):
 
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
-                    prev_sub_col_embeds = [
-                        tgt_embeds[sub_col]
+                    prev_sub_col_embeds = {
+                        sub_col: tgt_embeds[sub_col]
                         for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
-                    ]
+                    }
+                    if sub_col.startswith((SIDX_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX)):
+                        prev_sub_col_embeds = {
+                            k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                            for k, v in prev_sub_col_embeds.items()
+                        }
+                    prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                     # regressor
                     regressor_in = context_history + [col_embeddings] + prev_sub_col_embeds

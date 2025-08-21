@@ -550,28 +550,28 @@ def get_positional_cardinalities(
 
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode positional columns as numeric_discrete
-        sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
         slen_cardinalities = {f"{SLEN_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
+        sidx_cardinalities = {f"{SIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
         ridx_cardinalities = {f"{RIDX_SUB_COLUMN_PREFIX}cat": max_seq_len + 1}
     else:
         # encode positional columns as numeric_digit
         digits = [int(digit) for digit in str(max_seq_len)]
-        sidx_cardinalities = {}
         slen_cardinalities = {}
+        sidx_cardinalities = {}
         ridx_cardinalities = {}
         for idx, digit in enumerate(digits):
             # cap cardinality of the most significant position
             # less significant positions allow any digit
             card = digit + 1 if idx == 0 else 10
             e_idx = len(digits) - idx - 1
+            slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             sidx_cardinalities[f"{SIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
             ridx_cardinalities[f"{RIDX_SUB_COLUMN_PREFIX}E{e_idx}"] = card
-            slen_cardinalities[f"{SLEN_SUB_COLUMN_PREFIX}E{e_idx}"] = card
     sdec_cardinalities = {f"{SDEC_SUB_COLUMN_PREFIX}cat": 10}
     match has_slen, has_ridx, has_sdec:
         case True, True, False:
-            # SIDX/SLEN/RIDX model
-            return sidx_cardinalities | slen_cardinalities | ridx_cardinalities
+            # SLEN/SIDX/RIDX model
+            return slen_cardinalities | sidx_cardinalities | ridx_cardinalities
         case True, False, True:
             # SLEN/SIDX/SDEC model
             return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
