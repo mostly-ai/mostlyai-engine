@@ -30,16 +30,17 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
+    POSITIONAL_COLUMN,
+    RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SIDX_SDEC_COLUMN,
     SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
     ProgressCallback,
     ProgressCallbackWrapper,
     apply_encoding_type_dtypes,
-    decode_slen_sidx_sdec,
-    encode_slen_sidx_sdec,
+    decode_positional_column,
+    encode_positional_column,
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
@@ -48,7 +49,6 @@ from mostlyai.engine._common import (
     get_sub_columns_from_cardinalities,
     get_sub_columns_nested_from_cardinalities,
     persist_data_part,
-    trim_sequences,
 )
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
@@ -77,7 +77,7 @@ from mostlyai.engine._tabular.argn import (
     get_no_of_model_parameters,
 )
 from mostlyai.engine._tabular.common import load_model_weights
-from mostlyai.engine._tabular.encoding import encode_df, pad_horizontally
+from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 from mostlyai.engine.domain import (
@@ -107,7 +107,7 @@ def _resolve_gen_column_order(
     column_order = get_columns_from_cardinalities(cardinalities)
 
     # Reorder columns in the following order:
-    # 0. SLEN/SIDX column
+    # 0. Positional column
     # 1. Seed data columns
     # 2. Rebalancing column
     # 3. Fairness sensitive columns (which are not imputation columns)
@@ -183,9 +183,9 @@ def _resolve_gen_column_order(
         ]
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
-    if SLEN_SIDX_SDEC_COLUMN in column_order:
-        # SLEN/SIDX column needs to be the first one in the generation model
-        column_order = [SLEN_SIDX_SDEC_COLUMN] + [c for c in column_order if c != SLEN_SIDX_SDEC_COLUMN]
+    if POSITIONAL_COLUMN in column_order:
+        # positional column needs to be the first one in the generation model
+        column_order = [POSITIONAL_COLUMN] + [c for c in column_order if c != POSITIONAL_COLUMN]
 
     return column_order
 
@@ -206,6 +206,26 @@ def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
     running_total = pd.Series(range(len(df))) / rows_per_batch
     df = df.assign(__BATCH=running_total.astype(int) + 1)
     return df
+
+
+def _regroup_partial_sequences_by_length(
+    ctx_data: pd.DataFrame, seed_data: pd.DataFrame, ctx_primary_key: str, tgt_context_key: str
+) -> tuple[pd.DataFrame, int]:
+    # add temporary __PARTIAL_SEQ_LEN column to ctx_data
+    partial_seq_lens = seed_data.groupby(tgt_context_key).size().rename("__PARTIAL_SEQ_LEN")
+    ctx_data = ctx_data.assign(__PARTIAL_SEQ_LEN=ctx_data[ctx_primary_key].map(partial_seq_lens).fillna(0).astype(int))
+
+    # regroup batches so that partial sequences of equal length are together
+    new_batches = []
+    for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
+        for _, new_batch_df in old_batch_df.groupby("__PARTIAL_SEQ_LEN", sort=False):
+            new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
+            new_batches.append(new_batch_df)
+
+    # rebuild ctx_data; drop temporary __PARTIAL_SEQ_LEN column
+    ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__PARTIAL_SEQ_LEN"]).reset_index(drop=True)
+
+    return ctx_data, len(new_batches)
 
 
 def _reshape_pt_to_pandas(
@@ -237,29 +257,6 @@ def _reshape_pt_to_pandas(
     # keys.shape=(sum(1<=x<=batch_size),)
     keys = pd.concat(keys, axis=0).rename(key_name).reset_index(drop=True)
     return pd.concat([keys, df], axis=1)
-
-
-def _continue_sequence_mask(
-    step_output: torch.Tensor,
-    sub_cols: list[str],
-    step_keys: pd.Series,
-    key_name: str,
-    seq_len_min: int,
-    seq_len_max: int,
-):
-    # reshape tensor to pandas
-    syn = _reshape_pt_to_pandas(
-        data=[step_output],
-        sub_cols=sub_cols,
-        keys=[step_keys],
-        key_name=key_name,
-    )
-    # decode SLEN/SIDX columns
-    syn[SIDX_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = decode_slen_sidx_sdec(syn, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
-    syn[SLEN_SUB_COLUMN_PREFIX] = np.maximum(seq_len_min, syn[SLEN_SUB_COLUMN_PREFIX])
-    # calculate stop sequence mask (True=continue, False=stop)
-    return syn[SIDX_SUB_COLUMN_PREFIX] < syn[SLEN_SUB_COLUMN_PREFIX]
 
 
 def _post_process_decoding(
@@ -583,31 +580,25 @@ def decode_buffered_samples(
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
-    seq_len_min = seq_len_stats["min"]
     seq_len_max = seq_len_stats["max"]
 
     assert not buffer.is_empty() or seq_len_max == 0
 
     if is_sequential:
-        data, keys = zip(*buffer.buffer) if buffer.buffer else ([], [])
+        data, keys, seed_data = zip(*buffer.buffer) if buffer.buffer else ([], [], [])
         df_syn = _reshape_pt_to_pandas(
             data=data,
             sub_cols=tgt_sub_columns,
             keys=keys,
             key_name=tgt_context_key,
         )
-        # trim sequences to min and max length
-        df_syn = trim_sequences(
-            syn=df_syn,
-            tgt_context_key=tgt_context_key,
-            seq_len_min=seq_len_min,
-            seq_len_max=seq_len_max,
-        )
-        df_seed = pd.DataFrame()
+        df_syn = df_syn.drop(
+            columns=[c for c in df_syn.columns if c.startswith(POSITIONAL_COLUMN)],
+            axis=1,
+        ).reset_index(drop=True)
     else:
-        (data, seed_data) = zip(*buffer.buffer)
+        data, seed_data = zip(*buffer.buffer)
         df_syn = pd.concat(data, axis=0).reset_index(drop=True)
-        df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True)
 
     # decode generated data
     _LOG.info(f"decode generated data {df_syn.shape}")
@@ -618,9 +609,30 @@ def decode_buffered_samples(
         prev_steps=decode_prev_steps,
     )
 
-    # preserve all seed columns
-    for col in df_seed.columns:
-        df_syn[col] = df_seed[col]
+    # preserve all seed values
+    df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True) if seed_data else pd.DataFrame()
+    if not df_seed.empty:
+        seed_columns = [col for col in df_seed.columns]
+        if is_sequential:
+            # overwrite first steps of each sequence in synthetic data with values from seed data
+            df_syn["__SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
+            df_seed["__SEQ_IDX"] = df_seed.groupby(tgt_context_key).cumcount()
+            # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
+            df_overwrite = pd.merge(
+                df_syn[[tgt_context_key, "__SEQ_IDX"]].copy(),
+                df_seed,
+                on=[tgt_context_key, "__SEQ_IDX"],
+                how="left",
+                indicator="__INDICATOR",
+            )
+            # project df_overwrite onto df_syn
+            seed_rows = df_overwrite["__INDICATOR"] == "both"
+            df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
+            df_syn.drop(columns=["__SEQ_IDX"], inplace=True)
+            df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
+        else:
+            # for flat data, just overwrite all seed columns
+            df_syn[seed_columns] = df_seed[seed_columns].copy()
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
@@ -670,25 +682,26 @@ def generate(
         _LOG.info(f"{has_context=}")
         ctx_stats = workspace.ctx_stats.read()
 
-        tgt_cardinalities = get_cardinalities(tgt_stats)
-        tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
-        ctx_cardinalities = get_cardinalities(ctx_stats)
-        ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
-        if is_sequential and model_configs.get("model_units"):
-            # remain backwards compatible to models trained without SDEC
-            has_sdec = any([f"{SDEC_SUB_COLUMN_PREFIX}cat" in k for k in model_configs.get("model_units").keys()])
-            if not has_sdec:
-                _LOG.warning("SDEC not found in model_units, removing SDEC columns from tgt_cardinalities")
-                del tgt_cardinalities[f"{SDEC_SUB_COLUMN_PREFIX}cat"]
-                tgt_sub_columns.remove(f"{SDEC_SUB_COLUMN_PREFIX}cat")
-        _LOG.info(f"{len(tgt_sub_columns)=}")
-        _LOG.info(f"{len(ctx_sub_columns)=}")
-
         # read model config
         model_units = model_configs.get("model_units") or ModelSize.M
         _LOG.debug(f"{model_units=}")
         enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
         _LOG.info(f"{enable_flexible_generation=}")
+
+        # handle different approaches to sequence modeling (backwards compatibility)
+        has_slen = has_ridx = has_sdec = None
+        if is_sequential:
+            if isinstance(model_units, dict):
+                has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+
+        tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
+        ctx_cardinalities = get_cardinalities(ctx_stats)
+        tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
+        ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
+        _LOG.info(f"{len(tgt_sub_columns)=}")
+        _LOG.info(f"{len(ctx_sub_columns)=}")
 
         # resolve device
         device = (
@@ -781,11 +794,11 @@ def generate(
 
         if seed_data is None:
             # create on-the-fly seed data
-            seed_data = pd.DataFrame(index=range(sample_size))
+            seed_data = pd.DataFrame(columns=[tgt_context_key])
 
-        # ensure valid columns in seed_data
-        tgt_columns = list(tgt_stats["columns"].keys()) + ([tgt_primary_key] if tgt_primary_key else [])
-        seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
+        if not is_sequential:
+            # link seed data to dummy context for flat data generation
+            seed_data = seed_data.assign(**{tgt_context_key: ctx_data[ctx_primary_key].values})
 
         # sequence lengths
         seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -793,6 +806,27 @@ def generate(
         seq_len_min = seq_len_stats["min"]
         seq_len_max = seq_len_stats["max"]
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
+
+        # validate sequential seed_data has tgt_context_key
+        if is_sequential and tgt_context_key not in seed_data.columns:
+            raise ValueError(
+                f"Seed data must contain tgt_context_key column `{tgt_context_key}` for sequential generation"
+            )
+
+        # trim sequences in seed_data to seq_len_max for sequential generation
+        if is_sequential:
+            _LOG.warning(f"limiting user-provided seed sequences to a maximum length of `{seq_len_max}`")
+            seed_data = (
+                seed_data.groupby(tgt_context_key, group_keys=False)
+                .apply(lambda x: x.iloc[:seq_len_max])
+                .reset_index(drop=True)
+            )
+
+        # ensure valid columns in seed_data
+        tgt_columns = (
+            list(tgt_stats["columns"].keys()) + [tgt_context_key] + ([tgt_primary_key] if tgt_primary_key else [])
+        )
+        seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
 
         # determine batch_size for generation
         if batch_size is None:
@@ -880,8 +914,11 @@ def generate(
         # add __BATCH to ctx_data
         ctx_data = _batch_df(ctx_data, no_of_batches)
 
-        # add __BATCH to seed_data
-        seed_data = _batch_df(seed_data, no_of_batches)
+        # update __BATCH to ensure that, partial sequences of the same length are grouped within the same batch
+        if is_sequential:
+            ctx_data, no_of_batches = _regroup_partial_sequences_by_length(
+                ctx_data, seed_data, ctx_primary_key, tgt_context_key
+            )
 
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)
@@ -894,7 +931,7 @@ def generate(
             ctx_batch = apply_encoding_type_dtypes(ctx_batch, ctx_encoding_types)
             batch_size = len(ctx_batch)
 
-            seed_batch = seed_data[seed_data["__BATCH"] == batch].drop(columns="__BATCH")
+            seed_batch = seed_data[seed_data[tgt_context_key].isin(ctx_batch[ctx_primary_key])]
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -903,19 +940,29 @@ def generate(
                     index=ctx_batch.index,
                 )
 
+            # align ctx_batch and seed_batch by their respective keys
+            ctx_batch = ctx_batch.sort_values(ctx_primary_key).reset_index(drop=True)
+            seed_batch = seed_batch.sort_values(tgt_context_key).reset_index(drop=True)
+
             # encode ctx_batch
             _LOG.info(f"encode context {ctx_batch.shape}")
             ctx_batch_encoded, ctx_primary_key_encoded, _ = encode_df(
                 df=ctx_batch, stats=ctx_stats, ctx_primary_key=ctx_primary_key
             )
             # pad left context sequences to ensure non-empty sequences
-            ctx_batch_encoded = pad_horizontally(ctx_batch_encoded, padding_value=0, right=False)
+            ctx_batch_encoded = pad_ctx_sequences(ctx_batch_encoded)
             ctx_keys = ctx_batch_encoded[ctx_primary_key_encoded]
             ctx_keys.rename(tgt_context_key, inplace=True)
 
             # encode seed_batch
             _LOG.info(f"encode seed data values {seed_batch.shape}")
-            seed_batch_encoded, _, _ = encode_df(df=seed_batch, stats=tgt_stats)
+            seed_batch_encoded, _, seed_context_key_encoded = encode_df(
+                df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
+            )
+            seed_batch_grouped = seed_batch.groupby(tgt_context_key, sort=False)
+            seed_batch_encoded_grouped = seed_batch_encoded.groupby(seed_context_key_encoded, sort=False)
+            # it is assumed that all seeded sequences have the same length
+            n_seed_steps = max(list(seed_batch_encoded_grouped.size()), default=0)
 
             # sample data from generative model
             _LOG.info(f"sample data from model with context {ctx_batch.shape}")
@@ -950,19 +997,25 @@ def generate(
                 # process context just once for all sequence steps
                 context = model.context_compressor(ctxflt_inputs | ctxseq_inputs)
                 # loop over sequence steps, and pass forward history to keep model state-less
-                out_dct: dict[str, torch.Tensor] = {}
+                out_df: pd.DataFrame | None = None
                 decode_prev_steps = {}
                 # continue sequences until they reach their predicted length
                 step_ctx_keys = ctx_keys
                 step_size = batch_size
-                step_size_drop_threshold = max(50, batch_size // 100)
                 for seq_step in range(seq_steps):
                     # exit early if nothing more to sample
                     if step_size == 0:
                         break
+
+                    # get seed data for current step
+                    seed_step = seed_batch_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
+                    seed_step_encoded = (
+                        seed_batch_encoded_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
+                    )
+
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
-                    sidx_df = encode_slen_sidx_sdec(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
+                    sidx_df = encode_positional_column(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
                             torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
@@ -970,26 +1023,62 @@ def generate(
                         )
                         for c in sidx_df
                     }
-                    # fix SLEN by propagating sampled SLEN from first step; and update SDEC accordingly
+
+                    # fix SLEN by propagating sampled SLEN from first step
+                    slen_vals = {}
                     if seq_step > 0:
-                        slen_vals = {c: v for c, v in out_dct.items() if c.startswith(SLEN_SUB_COLUMN_PREFIX)}
-                        slen = decode_slen_sidx_sdec(
-                            pd.DataFrame({c: [x[0].detach().cpu().numpy() for x in v] for c, v in slen_vals.items()}),
-                            max_seq_len=seq_steps,
-                            prefix=SLEN_SUB_COLUMN_PREFIX,
-                        )
-                        sdec = (
-                            (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
-                        )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
-                    else:
-                        slen_vals = {}
-                        sdec = pd.Series([0] * step_size)  # initial sequence index decile
-                    sdec_vals = {
-                        f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                            torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
-                        )
-                    }
-                    fixed_values = sidx_vals | slen_vals | sdec_vals
+                        slen = out_df[SLEN_SUB_COLUMN_PREFIX]
+                        slen = encode_positional_column(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
+                        slen_vals = {
+                            col: torch.unsqueeze(
+                                torch.as_tensor(slen[col], dtype=torch.int64, device=model.device),
+                                dim=-1,
+                            )
+                            for col in slen
+                        }
+
+                    # fix RIDX by propagating sampled RIDX from first step after seeded part of sequence
+                    ridx_vals = {}
+                    if has_ridx and seq_step > n_seed_steps:
+                        ridx = (out_df[RIDX_SUB_COLUMN_PREFIX] - 1).clip(lower=0)
+                        ridx = encode_positional_column(ridx, max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
+                        ridx_vals = {
+                            col: torch.unsqueeze(
+                                torch.as_tensor(ridx[col], dtype=torch.int64, device=model.device),
+                                dim=-1,
+                            )
+                            for col in ridx
+                        }
+
+                    # fix SDEC according to SIDX and SLEN
+                    sdec_vals = {}
+                    if has_sdec:
+                        if seq_step > 0:
+                            slen = out_df[SLEN_SUB_COLUMN_PREFIX]
+                            sdec = (
+                                (10 * sidx / slen.clip(lower=1)).clip(upper=9).astype(int)
+                            )  # sequence index decile; clip as during GENERATE SIDX can become larger than SLEN
+                        else:
+                            sdec = pd.Series([0] * step_size)  # initial sequence index decile
+                        sdec_vals = {
+                            f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
+                                torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
+                            )
+                        }
+
+                    # fix seeded columns
+                    seed_vals = {}
+                    if len(seed_step_encoded) > 0:
+                        seed_vals = {
+                            col: torch.unsqueeze(
+                                torch.as_tensor(seed_step_encoded[col].to_numpy(), device=model.device).type(torch.int),
+                                dim=-1,
+                            )
+                            for col in seed_batch_encoded.columns
+                            if col in tgt_sub_columns
+                        }
+
+                    fixed_values = sidx_vals | slen_vals | ridx_vals | sdec_vals | seed_vals
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1002,37 +1091,61 @@ def generate(
                         history_state=history_state,
                         context=context,
                     )
+
                     # transform output dict to tensor for memory efficiency
                     out_pt = torch.stack(list(out_dct.values()), dim=0).transpose(0, 1)
-                    # calculate continue sequence mask
-                    continue_mask = _continue_sequence_mask(
-                        step_output=out_pt,
+                    # reshape tensor to pandas
+                    out_df = _reshape_pt_to_pandas(
+                        data=[out_pt],
                         sub_cols=tgt_sub_columns,
-                        step_keys=step_ctx_keys,
+                        keys=[step_ctx_keys],
                         key_name=tgt_context_key,
-                        seq_len_min=seq_len_min,
-                        seq_len_max=seq_len_max,
                     )
-                    next_step_size = continue_mask.sum()
+                    # decode positional columns
+                    out_df[SIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
+                        out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
+                    )
+                    out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
+                        out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
+                    )
+                    out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
+                    if has_ridx:
+                        # set RIDX to SLEN for first step; beyond that decode RIDX
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = (
+                            decode_positional_column(out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
+                            if seq_step > 0
+                            else out_df[SLEN_SUB_COLUMN_PREFIX]
+                        )
+                        out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
+                            lower=seq_len_min - seq_step, upper=seq_len_max
+                        )
+                    # calculate include step mask (True: include current step, False: exclude current step)
+                    if RIDX_SUB_COLUMN_PREFIX in out_df.columns:
+                        include_mask = out_df[RIDX_SUB_COLUMN_PREFIX] > 0
+                    else:
+                        # fall back to calculating the mask based on SLEN column (backwards compatibility)
+                        include_mask = out_df[SIDX_SUB_COLUMN_PREFIX] < out_df[SLEN_SUB_COLUMN_PREFIX]
+                    include_mask = include_mask | (out_df[SIDX_SUB_COLUMN_PREFIX] < n_seed_steps)
+                    next_step_size = include_mask.sum()
                     # filter next iteration inputs only when threshold is passed
                     # or there is no more data to sample on next iteration
-                    if step_size - next_step_size > step_size_drop_threshold or next_step_size == 0:
+                    if step_size > next_step_size or next_step_size == 0:
                         _LOG.info(f"step_size: {step_size} -> {next_step_size}")
                         step_size = next_step_size
-                        step_ctx_keys = step_ctx_keys[continue_mask].reset_index(drop=True)
-                        out_dct = {k: v[continue_mask, ...] for k, v in out_dct.items()}
-                        out_pt = out_pt[continue_mask, ...]
+                        step_ctx_keys = step_ctx_keys[include_mask].reset_index(drop=True)
+                        out_df = out_df[include_mask].reset_index(drop=True)
+                        out_pt = out_pt[include_mask, ...]
                         # filter context, if it is a sequential context then filter the list of contexts
                         context = [
-                            c[continue_mask, ...]
+                            c[include_mask, ...]
                             if isinstance(c, torch.Tensor)
-                            else [sub_c[continue_mask, ...] for sub_c in c]
+                            else [sub_c[include_mask, ...] for sub_c in c]
                             for c in context
                         ]
-                        history = history[continue_mask, ...]
-                        history_state = tuple(h[:, continue_mask, ...] for h in history_state)
+                        history = history[include_mask, ...]
+                        history_state = tuple(h[:, include_mask, ...] for h in history_state)
                     # accumulate outputs in memory
-                    buffer.add((out_pt, step_ctx_keys))
+                    buffer.add((out_pt, step_ctx_keys, seed_step))
                     # increment progress by 1 for each step
                     progress.update(advance=1)
                     # conditionally decode on step processing end
@@ -1071,6 +1184,7 @@ def generate(
                 fixed_values = {
                     col: torch.as_tensor(seed_batch_encoded[col].to_numpy(), device=model.device).type(torch.int)
                     for col in seed_batch_encoded.columns
+                    if col in tgt_sub_columns
                 }
 
                 out_dct, _ = model(

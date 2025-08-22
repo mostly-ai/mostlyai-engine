@@ -24,13 +24,13 @@ from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
-    SDEC_SUB_COLUMN_PREFIX,
+    RIDX_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
-    encode_slen_sidx_sdec,
+    encode_positional_column,
     get_argn_name,
     get_sequence_length_stats,
     is_a_list,
@@ -129,33 +129,33 @@ def _encode_partition(
             n_jobs=n_jobs,
         )
         # pad each list with one extra item
-        df_ctx = pad_horizontally(df_ctx, padding_value=0, right=False)
+        df_ctx = pad_ctx_sequences(df_ctx)
 
     if is_sequential:
         assert isinstance(tgt_context_key, str)
         # trim sequences to (privacy-protected) max_len
         max_len = seq_len_stats["max"]
         df = df[df.groupby(tgt_context_key).cumcount() < max_len].reset_index(drop=True)
-        # enrich with sequence lengths and sequence indexes
-        df = _enrich_slen_sidx_sdec(df, tgt_context_key, max_len)
-        # flatten to list columns
-        df = flatten_frame(df, tgt_context_key)
+        # pad each list with one extra item
+        df = pad_tgt_sequences(df, context_key=tgt_context_key)
         # add empty records for IDs, that are present in context, but not in target; i.e., for zero-sequence records
         if has_context:
-            zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
-            df_miss = pd.DataFrame({tgt_context_key: zero_seq_ids})
-            df_pads = pd.DataFrame({c: [[]] for c in df.columns if c != tgt_context_key})
-            df_miss = df_miss.merge(df_pads, how="cross")
-            df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
-        # pad each list with one extra item
-        df = pad_horizontally(df, padding_value=0, right=True)
+            zero_seq_ids = set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key])
+            df_miss = pd.DataFrame(
+                [{tgt_context_key: i, **{c: 0 for c in df.columns if c != tgt_context_key}} for i in zero_seq_ids]
+            )
+            df = pd.concat([df, df_miss], ignore_index=True)
+        # enrich with positional columns
+        df = _enrich_positional_columns(df, tgt_context_key, max_len)
+        # flatten to list columns
+        df = flatten_frame(df, tgt_context_key)
     elif has_context:
         # add 0-rows for IDs, that are present in context, but not in target; i.e., for zero-sequence records
-        zero_seq_ids = list(set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key]))
-        df_miss = pd.DataFrame({tgt_context_key: zero_seq_ids})
-        df_pads = pd.DataFrame({c: [0] for c in df.columns if c != tgt_context_key})
-        df_miss = df_miss.merge(df_pads, how="cross")
-        df = pd.concat([df, df_miss], axis=0).reset_index(drop=True)
+        zero_seq_ids = set(df_ctx[ctx_primary_key]) - set(df[tgt_context_key])
+        df_miss = pd.DataFrame(
+            [{tgt_context_key: i, **{c: 0 for c in df.columns if c != tgt_context_key}} for i in zero_seq_ids]
+        )
+        df = pd.concat([df, df_miss], ignore_index=True)
         # ensure that max 1 item is retained per context_id for flat mode
         df = df[df.groupby(tgt_context_key).cumcount() < 1]
 
@@ -380,29 +380,61 @@ def flatten_frame(df: pd.DataFrame, group_key: str) -> pd.DataFrame:
     return flattened_data
 
 
-def _enrich_slen_sidx_sdec(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
+def _enrich_positional_columns(df: pd.DataFrame, context_key: str, max_seq_len: int) -> pd.DataFrame:
     df = df.reset_index(drop=True)
-    slen = df.groupby(context_key)[context_key].transform("size")  # sequence length
     sidx = df.groupby(context_key).cumcount(ascending=True)  # sequence index
-    sdec = (10 * sidx / slen.clip(lower=1)).astype(int)  # sequence index decile
-    slen = encode_slen_sidx_sdec(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
-    sidx = encode_slen_sidx_sdec(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
-    sdec = encode_slen_sidx_sdec(sdec, max_seq_len=max_seq_len, prefix=SDEC_SUB_COLUMN_PREFIX)
-    df = pd.concat([slen, sidx, sdec, df], axis=1)
+    slen = df.groupby(context_key)[context_key].transform("size") - 1  # sequence length; -1 to account for padding
+    ridx = df.groupby(context_key).cumcount(ascending=False)  # sequence remainder
+    sidx = encode_positional_column(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
+    slen = encode_positional_column(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
+    ridx = encode_positional_column(ridx, max_seq_len=max_seq_len, prefix=RIDX_SUB_COLUMN_PREFIX)
+    df = pd.concat([sidx, slen, ridx, df], axis=1)
     return df
 
 
-def pad_horizontally(df: pd.DataFrame, padding_value: int, right=True) -> pd.DataFrame:
+def pad_tgt_sequences(df: pd.DataFrame, context_key: str, padding_value: int = 0) -> pd.DataFrame:
+    """
+    Pad one extra row to for each subject in the target data frame.
+
+    Args:
+        df: Exploded (unflattened) target data frame. Each event is a row.
+        context_key: Context key.
+        padding_value: Value to pad with for columns other than context_key.
+
+    Returns:
+        Padded target data frame.
+    """
+
+    def pad_row(x):
+        return pd.concat(
+            [
+                x,
+                pd.DataFrame(
+                    {col: [padding_value] for col in x.columns if col not in [context_key]}
+                    | {context_key: [x.iloc[0][context_key]]}
+                ),
+            ],
+            axis=0,
+        )
+
+    return df.groupby(context_key)[df.columns].apply(pad_row).reset_index(drop=True)
+
+
+def pad_ctx_sequences(df: pd.DataFrame, padding_value: int = 0) -> pd.DataFrame:
+    """
+    Pad one extra item to the context sequences with a given padding value.
+
+    Args:
+        df: Flattened context data frame.
+        padding_value: Value to pad with.
+
+    Returns:
+        Padded context data frame.
+    """
     if df.shape[0] == 0:
         return df
     list_cols = [c for c in df.columns if is_a_list(df.loc[0, c])]
-
-    def pad_right(x):
-        return x + [padding_value] if len(x) == 0 else x
-
-    def pad_left(x):
-        return [padding_value] + x if len(x) == 0 else x
-
     for col in list_cols:
-        df[col] = df[col].apply(pad_right if right else pad_left)
+        # Note: only pad empty sequences to keep the backward compatibility
+        df[col] = df[col].apply(lambda x: x + [padding_value] if len(x) == 0 else x)
     return df

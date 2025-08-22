@@ -252,8 +252,8 @@ class TestMakePermutationMask:
         columns = [f"tgt:t0/c{idx}" for idx in range(len(col_embedding_dims))]
 
         # append tgt:/ column
-        slen_sidx_col_dim = 2
-        col_embedding_dims += [slen_sidx_col_dim]
+        positional_col_dim = 2
+        col_embedding_dims += [positional_col_dim]
         columns += ["tgt:/"]
 
         mask = _make_permutation_mask(
@@ -264,10 +264,10 @@ class TestMakePermutationMask:
             device=torch.device("cpu"),
         )
         # tgt:/ column is shifted to the beginning; all other columns see it
-        assert mask[0, :slen_sidx_col_dim].equal(torch.Tensor([False, False]))
-        assert mask[1, :slen_sidx_col_dim].equal(torch.Tensor([True, True]))
-        assert mask[2, :slen_sidx_col_dim].equal(torch.Tensor([True, True]))
-        assert mask[3, :slen_sidx_col_dim].equal(torch.Tensor([True, True]))
+        assert mask[0, :positional_col_dim].equal(torch.Tensor([False, False]))
+        assert mask[1, :positional_col_dim].equal(torch.Tensor([True, True]))
+        assert mask[2, :positional_col_dim].equal(torch.Tensor([True, True]))
+        assert mask[3, :positional_col_dim].equal(torch.Tensor([True, True]))
 
 
 class TestSample:
