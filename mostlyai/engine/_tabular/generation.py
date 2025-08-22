@@ -815,6 +815,7 @@ def generate(
 
         # trim sequences in seed_data to seq_len_max for sequential generation
         if is_sequential:
+            _LOG.warning(f"limiting user-provided seed sequences to a maximum length of `{seq_len_max}`")
             seed_data = (
                 seed_data.groupby(tgt_context_key, group_keys=False)
                 .apply(lambda x: x.iloc[:seq_len_max])
