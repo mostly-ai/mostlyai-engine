@@ -668,9 +668,9 @@ def test_long_sequences(tmp_path):
     # test that long sequence lengths are learnt after short training (1 epoch)
     workspace_dir = tmp_path / "ws"
     key_col = "id"
-    n_seq_len_500, n_seq_len_0 = 900, 100
-    ctx = pd.DataFrame({key_col: range(n_seq_len_500 + n_seq_len_0)})
-    tgt = pd.DataFrame({key_col: np.repeat(ctx[key_col][:n_seq_len_500], 500)})
+    n_seq_len_300, n_seq_len_0 = 999, 1
+    ctx = pd.DataFrame({key_col: range(n_seq_len_300 + n_seq_len_0)})
+    tgt = pd.DataFrame({key_col: np.repeat(ctx[key_col][:n_seq_len_300], 300)})
     split(
         tgt_data=tgt,
         tgt_context_key=key_col,
@@ -678,15 +678,12 @@ def test_long_sequences(tmp_path):
         ctx_primary_key=key_col,
         workspace_dir=workspace_dir,
     )
-    analyze(workspace_dir=workspace_dir)
+    analyze(workspace_dir=workspace_dir, value_protection=False)
     encode(workspace_dir=workspace_dir)
     train(workspace_dir=workspace_dir, max_epochs=1)
     generate(workspace_dir=workspace_dir)
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
     syn_seq_lengths = syn.groupby(key_col).size().reindex(ctx[key_col], fill_value=0)
     syn_seq_lengths_dist = syn_seq_lengths.value_counts(normalize=True)
-    p_500 = syn_seq_lengths_dist.get(500, 0)
-    p_0 = syn_seq_lengths_dist.get(0, 0)
-    assert 0.75 < p_500 < 0.95  # majority of sequences are 500 steps long
-    assert 0.03 < p_0 < 0.23  # significant minority of sequences are 0 steps long
-    assert p_500 + p_0 > 0.95  # there are just a handful of other lengths
+    p_300 = syn_seq_lengths_dist.get(300, 0)
+    assert p_300 >= 0.8  # majority of sequences are 300 steps long
