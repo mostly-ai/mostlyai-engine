@@ -814,13 +814,10 @@ def generate(
             )
 
         # trim sequences in seed_data to seq_len_max for sequential generation
-        if is_sequential:
-            _LOG.warning(f"limiting user-provided seed sequences to a maximum length of `{seq_len_max}`")
-            seed_data = (
-                seed_data.groupby(tgt_context_key, group_keys=False)
-                .apply(lambda x: x.iloc[:seq_len_max])
-                .reset_index(drop=True)
-            )
+        seed_data_grouped = seed_data.groupby(tgt_context_key, group_keys=False)
+        if is_sequential and (seed_seq_len_max := seed_data_grouped.size().max()) > seq_len_max:
+            _LOG.warning(f"truncating seed sequences: max allowed = `{seq_len_max}`, found = `{seed_seq_len_max}`")
+            seed_data = seed_data_grouped.apply(lambda x: x.iloc[:seq_len_max]).reset_index(drop=True)
 
         # ensure valid columns in seed_data
         tgt_columns = (
