@@ -687,3 +687,38 @@ def test_long_sequences(tmp_path):
     syn_seq_lengths_dist = syn_seq_lengths.value_counts(normalize=True)
     p_300 = syn_seq_lengths_dist.get(300, 0)
     assert p_300 >= 0.8  # majority of sequences are 300 steps long
+
+
+def test_deterministic_lengths(tmp_path):
+    # test that correlation between sequence lengths and explicit countdown is kept
+    workspace_dir = tmp_path / "ws"
+    key = "key"
+    n_sequences = 5_000
+    keys = np.arange(n_sequences)
+    seq_lens = np.random.randint(3, 7, size=n_sequences)
+    countdown = np.concatenate([np.arange(ln - 1, -1, -1) for ln in seq_lens])
+    tgt = pd.DataFrame(
+        {
+            key: np.repeat(keys, seq_lens),
+            "countdown": countdown,
+        }
+    )
+    ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
+
+    split(
+        tgt_data=tgt,
+        tgt_context_key=key,
+        ctx_data=ctx,
+        ctx_primary_key=key,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir, value_protection=False)
+    encode(workspace_dir=workspace_dir)
+    train(workspace_dir=workspace_dir)
+    generate(workspace_dir=workspace_dir)
+
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+    syn["slen"] = syn.groupby(key).transform("size")
+    syn_first = syn.groupby(key).first()
+    match_rate = (syn_first["slen"] == syn_first["countdown"] + 1).value_counts(normalize=True)[True]
+    assert match_rate > 0.95
