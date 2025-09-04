@@ -216,8 +216,15 @@ class Embedders(nn.Module):
         self.embedders = nn.ModuleDict()
 
         # embedding layers for each sub column defined in cardinalities
+        has_ridx = any(sub_col.startswith(RIDX_SUB_COLUMN_PREFIX) for sub_col in self.cardinalities)
         last_slen_sub_col = next(
-            (sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX)), None
+            (
+                sub_col
+                for sub_col in reversed(self.cardinalities)
+                if sub_col.startswith(SLEN_SUB_COLUMN_PREFIX)
+                if has_ridx  # last SLEN sub column is dangling for model with RIDX only
+            ),
+            None,
         )
         last_ridx_sub_col = next(
             (sub_col for sub_col in reversed(self.cardinalities) if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX)), None
@@ -1249,21 +1256,26 @@ class SequentialModel(nn.Module):
         if context is None:
             context = self.context_compressor(x)
 
+        # SLEN is only masked for models with RIDX
+        has_ridx = any(sub_col.startswith(RIDX_SUB_COLUMN_PREFIX) for sub_col in self.tgt_cardinalities)
+        masked_positional_columns = (
+            (SLEN_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX) if has_ridx else (RIDX_SUB_COLUMN_PREFIX,)
+        )
+
         outputs = {}
         if mode == "trn":
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
-            tgt_embeds_slen_ridx_masked = {
-                k: torch.zeros_like(v) if k.startswith((RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)) else v
-                for k, v in tgt_embeds.items()
+            tgt_embeds_positional_masked = {
+                k: torch.zeros_like(v) if k.startswith(masked_positional_columns) else v for k, v in tgt_embeds.items()
             }
 
             # forward pass through column embedders
-            tgt_col_embeds = self.column_embedders(tgt_embeds_slen_ridx_masked)
+            tgt_col_embeds = self.column_embedders(tgt_embeds_positional_masked)
 
             # history
             # time shift: remove last time step; add zeros for first time step; add randoms for all others
-            embeddings = torch.cat(list(tgt_embeds_slen_ridx_masked.values()), dim=-1)
+            embeddings = torch.cat(list(tgt_embeds_positional_masked.values()), dim=-1)
             history_in = embeddings[:, :-1, :]
             history_in = nn.ConstantPad2d((0, 0, 1, 0), 0)(history_in)
             history, _ = self.history_compressor(history_in)
@@ -1393,20 +1405,20 @@ class SequentialModel(nn.Module):
 
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
-                tgt_embeds_slen_ridx_masked = {
-                    k: torch.zeros_like(v) if k.startswith((SLEN_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX)) else v
+                tgt_embeds_positional_masked = {
+                    k: torch.zeros_like(v) if k.startswith(masked_positional_columns) else v
                     for k, v in tgt_embeds.items()
                 }
 
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:
                     col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
-                    col_embed_in = torch.cat([tgt_embeds_slen_ridx_masked[sc] for sc in col_sub_cols], dim=-1)
+                    col_embed_in = torch.cat([tgt_embeds_positional_masked[sc] for sc in col_sub_cols], dim=-1)
                     tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # update history and hidden state
-            history_in = torch.cat([v for v in tgt_embeds_slen_ridx_masked.values()], dim=-1)
+            history_in = torch.cat([v for v in tgt_embeds_positional_masked.values()], dim=-1)
             history, history_state = self.history_compressor(history_in, history_state=history_state)
 
             # order outputs according to tgt_sub_columns
