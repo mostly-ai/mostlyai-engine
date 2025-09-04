@@ -1259,7 +1259,7 @@ class SequentialModel(nn.Module):
         # SLEN is only masked for models with RIDX
         has_ridx = any(sub_col.startswith(RIDX_SUB_COLUMN_PREFIX) for sub_col in self.tgt_cardinalities)
         masked_positional_columns = (
-            [SLEN_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX] if has_ridx else [RIDX_SUB_COLUMN_PREFIX]
+            (SLEN_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX) if has_ridx else (RIDX_SUB_COLUMN_PREFIX,)
         )
 
         outputs = {}
