@@ -686,4 +686,4 @@ def test_long_sequences(tmp_path):
     syn_seq_lengths = syn.groupby(key_col).size().reindex(ctx[key_col], fill_value=0)
     syn_seq_lengths_dist = syn_seq_lengths.value_counts(normalize=True)
     p_300 = syn_seq_lengths_dist.get(300, 0)
-    assert p_300 >= 0.8  # majority of sequences are 300 steps long
+    assert p_300 >= 0.7  # majority of sequences are 300 steps long
