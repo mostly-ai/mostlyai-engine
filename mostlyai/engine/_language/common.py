@@ -97,10 +97,10 @@ def load_base_model_and_config(
     else:
         quantization_config = None
 
-    if device.type == "cuda" and device.index is not None:
-        device_map = str(device)
-    else:
+    if device.type == "cuda" and device.index is None:
         device_map = "auto"
+    else:  # device is `cpu` or `cuda:0` (when using single GPU on a multi-GPU instance)
+        device_map = str(device)
 
     if hasattr(config, "text_config") and hasattr(config, "vision_config"):
         config.text_config.use_cache = use_cache
