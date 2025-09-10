@@ -178,7 +178,7 @@ class VLLMEngine(LanguageEngine):
             is_peft_adapter=True,
         )
         self._logits_processors = [XGrammarLogitsProcessor(compiled_grammar) for compiled_grammar in compiled_grammars]
-        
+
         model_executor = self.llm.llm_engine.model_executor
         model_executor.logits_processors = self._logits_processors
 
