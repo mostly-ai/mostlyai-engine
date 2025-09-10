@@ -197,24 +197,25 @@ class BatchCollator:
         seq_lens = batch[tgt_columns[0]].copy().str.len().values
 
         # determine sampling logic for current batch
-        flip = np.random.random()
-        if flip < 0.3:  # 30%
-            # pick start of the sequence to focus on the beginning
-            sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
-        elif 0.3 <= flip < 0.4:  # 10%
-            # pick end of the sequence to focus on the end
-            sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
-        else:  # 60%
-            # random continuous window to focus on any part
-            start_idxs = np.random.randint(low=1 - max_sequence_window, high=seq_lens, size=len(seq_lens))
-            # ensure that sequences that fit into max_sequence_length are completely covered
-            start_idxs[seq_lens <= max_sequence_window] = 0
-            # calculate final start and end indexes
-            end_idxs = start_idxs + max_sequence_window
-            start_idxs = np.maximum(0, start_idxs)
-            sel_idxs = [
-                np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
-            ]
+        sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
+        # flip = np.random.random()
+        # if flip < 0.3:  # 30%
+        #     # pick start of the sequence to focus on the beginning
+        #     sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
+        # elif 0.3 <= flip < 0.4:  # 10%
+        #     # pick end of the sequence to focus on the end
+        #     sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
+        # else:  # 60%
+        #     # random continuous window to focus on any part
+        #     start_idxs = np.random.randint(low=1 - max_sequence_window, high=seq_lens, size=len(seq_lens))
+        #     # ensure that sequences that fit into max_sequence_length are completely covered
+        #     start_idxs[seq_lens <= max_sequence_window] = 0
+        #     # calculate final start and end indexes
+        #     end_idxs = start_idxs + max_sequence_window
+        #     start_idxs = np.maximum(0, start_idxs)
+        #     sel_idxs = [
+        #         np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
+        #     ]
 
         # loop over each record within batch and pick values for each tgt column
         tgt_col_idxs = [batch.columns.get_loc(c) for c in tgt_columns]
