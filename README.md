@@ -153,3 +153,4 @@ engine.generate(                      # use model to generate synthetic samples 
 )
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```
+
