@@ -388,7 +388,8 @@ def _enrich_positional_columns(df: pd.DataFrame, context_key: str, max_seq_len: 
     sidx = encode_positional_column(sidx, max_seq_len=max_seq_len, prefix=SIDX_SUB_COLUMN_PREFIX)
     slen = encode_positional_column(slen, max_seq_len=max_seq_len, prefix=SLEN_SUB_COLUMN_PREFIX)
     ridx = encode_positional_column(ridx, max_seq_len=max_seq_len, prefix=RIDX_SUB_COLUMN_PREFIX)
-    df = pd.concat([sidx, slen, ridx, df], axis=1)
+    # df = pd.concat([sidx, slen, ridx, df], axis=1)
+    df = pd.concat([sidx, ridx, df], axis=1)
     return df
 
 
