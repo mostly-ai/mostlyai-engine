@@ -137,10 +137,12 @@ class BatchCollator:
     For sequence data, it will sample subsequences with lengths up to max_sequence_window.
     """
 
-    def __init__(self, is_sequential: bool, max_sequence_window: int | None, device: torch.device):
+    def __init__(self, is_sequential: bool, max_sequence_window: int | None, trn_cnt: int | None, device: torch.device):
         self.is_sequential = is_sequential
         self.max_sequence_window = max_sequence_window
+        self.trn_cnt = trn_cnt if max_sequence_window else None
         self.device = device
+        self.count = 0
 
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
         batch = pd.DataFrame(batch)
@@ -187,8 +189,7 @@ class BatchCollator:
                 )
         return tensors
 
-    @staticmethod
-    def _slice_sequences(batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
+    def _slice_sequences(self, batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
         # we pad sequences with one step
         # thus, to respect the max_sequence_window provided by the user, we need to add 1 to it
         max_sequence_window += 1
@@ -197,25 +198,37 @@ class BatchCollator:
         seq_lens = batch[tgt_columns[0]].copy().str.len().values
 
         # determine sampling logic for current batch
-        sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
-        # flip = np.random.random()
-        # if flip < 0.3:  # 30%
-        #     # pick start of the sequence to focus on the beginning
-        #     sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
-        # elif 0.3 <= flip < 0.4:  # 10%
-        #     # pick end of the sequence to focus on the end
-        #     sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
-        # else:  # 60%
-        #     # random continuous window to focus on any part
-        #     start_idxs = np.random.randint(low=1 - max_sequence_window, high=seq_lens, size=len(seq_lens))
-        #     # ensure that sequences that fit into max_sequence_length are completely covered
-        #     start_idxs[seq_lens <= max_sequence_window] = 0
-        #     # calculate final start and end indexes
-        #     end_idxs = start_idxs + max_sequence_window
-        #     start_idxs = np.maximum(0, start_idxs)
-        #     sel_idxs = [
-        #         np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
-        #     ]
+        # epoch 0-1: focus on the beginning of the sequences
+        epoch = self.count / self.trn_cnt if self.trn_cnt is not None else None
+        if epoch is not None and epoch < 2:
+            sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
+        # epoch 2-N: gradually shift focus to learn the rest of the sequences
+        else:
+            flip = np.random.random()
+            if epoch is not None:
+                prob_beginning = 0.9 - 0.2 * min(
+                    int(epoch) - 2, 4
+                )  # prob_beginning will go down from 90% to 30% until epoch 6 and stay at 30%
+            else:
+                prob_beginning = 0.3
+            prob_end = 0.1
+            if flip < prob_beginning:
+                # pick start of the sequence to focus on the beginning
+                sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
+            elif prob_beginning <= flip < prob_beginning + prob_end:
+                # pick end of the sequence to focus on the end
+                sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
+            else:  # 60%
+                # random continuous window to focus on any part
+                start_idxs = np.random.randint(low=1 - max_sequence_window, high=seq_lens, size=len(seq_lens))
+                # ensure that sequences that fit into max_sequence_length are completely covered
+                start_idxs[seq_lens <= max_sequence_window] = 0
+                # calculate final start and end indexes
+                end_idxs = start_idxs + max_sequence_window
+                start_idxs = np.maximum(0, start_idxs)
+                sel_idxs = [
+                    np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
+                ]
 
         # loop over each record within batch and pick values for each tgt column
         tgt_col_idxs = [batch.columns.get_loc(c) for c in tgt_columns]
@@ -228,6 +241,7 @@ class BatchCollator:
                 else:
                     cells.append(batch_cell)
             rows.append(cells)
+        self.count += len(batch)
 
         return pd.DataFrame(rows, columns=batch.columns, index=batch.index)
 
@@ -542,8 +556,11 @@ def train(
             val_batch_size = val_batch_size // 2
 
         # and see if it's possible to make it compatible with DP
-        batch_collator = BatchCollator(
-            is_sequential=is_sequential, max_sequence_window=max_sequence_window, device=device
+        trn_batch_collator = BatchCollator(
+            is_sequential=is_sequential, max_sequence_window=max_sequence_window, trn_cnt=trn_cnt, device=device
+        )
+        val_batch_collator = BatchCollator(
+            is_sequential=is_sequential, max_sequence_window=None, trn_cnt=None, device=device
         )
         disable_progress_bar()
         trn_dataset = load_dataset("parquet", data_files=[str(p) for p in workspace.encoded_data_trn.fetch_all()])[
@@ -554,7 +571,7 @@ def train(
             shuffle=True,
             # either DP logical batch size or grad accumulation physical batch size
             batch_size=trn_batch_size if with_dp else batch_size,
-            collate_fn=batch_collator,
+            collate_fn=trn_batch_collator,
         )
         val_dataset = load_dataset("parquet", data_files=[str(p) for p in workspace.encoded_data_val.fetch_all()])[
             "train"
@@ -563,7 +580,7 @@ def train(
             dataset=val_dataset,
             shuffle=False,
             batch_size=val_batch_size,
-            collate_fn=batch_collator,
+            collate_fn=val_batch_collator,
         )
 
         _LOG.info(f"{trn_cnt=}, {val_cnt=}")
