@@ -140,12 +140,11 @@ class VLLMEngine(LanguageEngine):
         model_path = str(model_path)
         self._lora_request = LoRARequest("adapter", 1, model_path)
         config_max_model_len = _get_and_verify_max_len(
-            base_config, max_model_len=None, disable_sliding_window=None, sliding_window_len=None
+            base_config, tokenizer_config=None, max_model_len=None, disable_sliding_window=False, sliding_window=None
         )
         self.llm = LLM(
             model=peft_config.base_model_name_or_path,
             tokenizer=model_path,
-            device=device.type,
             max_model_len=min(config_max_model_len, self.tokenizer_max_length + max_new_tokens),
             enable_lora=True,
             dtype=torch.bfloat16 if is_bf16_supported(device) else torch.float16,
@@ -179,6 +178,9 @@ class VLLMEngine(LanguageEngine):
             is_peft_adapter=True,
         )
         self._logits_processors = [XGrammarLogitsProcessor(compiled_grammar) for compiled_grammar in compiled_grammars]
+        
+        model_executor = self.llm.llm_engine.model_executor
+        model_executor.logits_processors = self._logits_processors
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
@@ -202,9 +204,8 @@ class VLLMEngine(LanguageEngine):
                 max_tokens=self.max_new_tokens,
                 temperature=sampling_temperature,
                 top_p=sampling_top_p,
-                logits_processors=[lp],
             )
-            for lp in self._logits_processors[:actual_batch_size]
+            for _ in range(actual_batch_size)
         ]
         t_generate = time.time()
         outputs = self.llm.generate(
