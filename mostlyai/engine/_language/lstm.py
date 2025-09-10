@@ -25,6 +25,11 @@ _LOG = logging.getLogger(__name__)
 class LSTMFromScratchConfig(PretrainedConfig):
     model_type = model_id = "MOSTLY_AI/LSTMFromScratch-3m"
 
+    # Map standard transformer attributes to our custom LSTM attributes
+    attribute_map = {
+        "num_hidden_layers": "num_layers",
+    }
+
     def __init__(
         self,
         vocab_size: int | None = None,
