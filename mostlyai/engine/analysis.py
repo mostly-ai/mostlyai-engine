@@ -339,13 +339,25 @@ def _analyze_reduce(
     stats_list = [read_json(file) for file in stats_files]
     stats: dict[str, Any] = {"columns": {}}
 
+    # check how many context tables have sequential context
+    if mode == "ctx":
+        ctxseq_stats = {}
+        ctxseq_tables = []
+        for column, column_stats in stats_list[0]["columns"].items():
+            if "seq_len" in column_stats:
+                table_name = column.split(TABLE_COLUMN_INFIX)[0]
+                if table_name not in ctxseq_tables:
+                    ctxseq_tables.append(table_name)
+        n_ctxseq_tables = len(ctxseq_tables)
+        _LOG.info(f"{n_ctxseq_tables = }")
+
     encoding_types = {
         column: column_stats.get("encoding_type") for column, column_stats in stats_list[0]["columns"].items()
     }
 
-    # ctx: distribute the privacy budget across all columns
+    # ctx: distribute the privacy budget across all columns + sequence lengths of n_ctxseq_tables
     # tgt: distribute the privacy budget across all columns + sequence length
-    n_dp_splits = len(encoding_types) if mode == "ctx" else len(encoding_types) + 1
+    n_dp_splits = len(encoding_types) + n_ctxseq_tables if mode == "ctx" else len(encoding_types) + 1
     _LOG.info(f"{value_protection = }")
     if value_protection_epsilon is not None and n_dp_splits > 0:
         _LOG.info(f"epsilon for analyzing each column and sequence length: {value_protection_epsilon / n_dp_splits}")
@@ -364,13 +376,13 @@ def _analyze_reduce(
             stats["columns"][column] = {"encoding_type": encoding_type}
             continue
 
-        analyze_reduce_column_args = {
-            "stats_list": column_stats_list,
+        value_protection_args = {
             "value_protection": value_protection,
             "value_protection_epsilon": value_protection_epsilon / n_dp_splits
             if value_protection_epsilon is not None
             else None,
         }
+        analyze_reduce_column_args = {"stats_list": column_stats_list} | value_protection_args
 
         match encoding_type:
             case ModelEncodingType.tabular_categorical:
@@ -413,9 +425,16 @@ def _analyze_reduce(
         if encoding_type in _VALUE_PROTECTION_ENCODING_TYPES:
             stats_col = {"value_protection": value_protection} | stats_col
 
-        is_flat_column = "seq_len" not in column_stats_list[0]
-        if not is_flat_column:
-            stats_col["seq_len"] = _analyze_reduce_seq_len([column_stats_list[0]["seq_len"]])
+        is_ctxseq_column = "seq_len" in column_stats_list[0]
+        if is_ctxseq_column:
+            table_name = column.split(TABLE_COLUMN_INFIX)[0]
+            # only get the lengths from the first column of a ctxseq table and reuse the stats later
+            if table_name not in ctxseq_stats:
+                ctxseq_stats[table_name] = _analyze_reduce_seq_len(
+                    stats_list=[column_stats_list[0]["seq_len"]], **value_protection_args
+                )
+                _LOG.info(f"analyzed sequence length for context table `{table_name}`")
+            stats_col["seq_len"] = ctxseq_stats[table_name]
 
         is_language_column = encoding_type in (
             ModelEncodingType.language_text,

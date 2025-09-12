@@ -401,12 +401,11 @@ def get_sub_columns_lookup(
     return sub_cols_lookup
 
 
-class CtxSequenceLengthError(Exception):
-    """Error raised when the cols of the same table do not have the same stats value"""
-
-
 def get_ctx_sequence_length(ctx_stats: dict, key: str) -> dict[str, int]:
-    seq_stats: dict[str, int] = {}
+    """
+    Get the stats of sequence lengths from the first column_stats of each context table
+    """
+    ctxseq_stats: dict[str, int] = {}
 
     for column_stats in ctx_stats.get("columns", {}).values():
         if "seq_len" in column_stats:
@@ -414,12 +413,10 @@ def get_ctx_sequence_length(ctx_stats: dict, key: str) -> dict[str, int]:
                 argn_processor=column_stats[ARGN_PROCESSOR],
                 argn_table=column_stats[ARGN_TABLE],
             )
-            cur_value = seq_stats.get(table)
-            if cur_value and cur_value != column_stats["seq_len"][key]:
-                raise CtxSequenceLengthError()
-            seq_stats[table] = column_stats["seq_len"][key]
+            if table not in ctxseq_stats:
+                ctxseq_stats[table] = column_stats["seq_len"][key]
 
-    return seq_stats
+    return ctxseq_stats
 
 
 def get_max_data_points_per_sample(stats: dict) -> int:

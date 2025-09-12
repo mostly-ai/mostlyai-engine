@@ -24,7 +24,6 @@ from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
-    CtxSequenceLengthError,
     apply_encoding_type_dtypes,
     dp_non_rare,
     dp_quantiles,
@@ -505,36 +504,6 @@ class TestGetCtxSequenceLength:
         assert get_ctx_sequence_length(stats, key="min") == {"ctxseq:t1": 1}
         assert get_ctx_sequence_length(stats, key="max") == {"ctxseq:t1": 3}
         assert get_ctx_sequence_length(stats, key="median") == {"ctxseq:t1": 2}
-
-    def test_raise_exception_when_cols_not_converge(self):
-        stats = {
-            "columns": {
-                "table0.col0": {
-                    ARGN_PROCESSOR: "ctxflt",
-                    ARGN_TABLE: "t0",
-                    ARGN_COLUMN: "c0",
-                },
-                "table1.col0": {
-                    ARGN_PROCESSOR: "ctxseq",
-                    "seq_len": {
-                        "any-key": 2,
-                    },
-                    ARGN_TABLE: "t1",
-                    ARGN_COLUMN: "c1",
-                },
-                "table1.col1": {
-                    ARGN_PROCESSOR: "ctxseq",
-                    "seq_len": {
-                        "any-key": 9,
-                    },
-                    ARGN_TABLE: "t1",
-                    ARGN_COLUMN: "c2",
-                },
-            }
-        }
-
-        with pytest.raises(CtxSequenceLengthError):
-            assert get_ctx_sequence_length(stats, key="any-key")
 
 
 @pytest.mark.parametrize(
