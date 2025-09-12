@@ -35,6 +35,7 @@ from transformers import AutoConfig, AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.config import _get_and_verify_max_len
 from vllm.distributed import destroy_distributed_environment, destroy_model_parallel
+from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.platforms import current_platform
 
@@ -209,8 +210,7 @@ class VLLMEngine(LanguageEngine):
         ]
         t_generate = time.time()
         outputs = self.llm.generate(
-            prompts=None,
-            prompt_token_ids=inputs["input_ids"],
+            prompts=[TokensPrompt(prompt_token_ids=token_ids) for token_ids in inputs["input_ids"]],
             sampling_params=sampling_params,
             use_tqdm=False,
             lora_request=self._lora_request,
