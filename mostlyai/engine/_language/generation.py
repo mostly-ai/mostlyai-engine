@@ -287,7 +287,8 @@ def generate(
         enforce_json_output = engine.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
 
-        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine"
+        # VLLMEngine uses V1 guided decoding, others use logits processors
+        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ != "VLLMEngine"
         if enforce_json_output and initialize_logits_processors_once:
             t0 = time.time()
             schemas = create_schemas(
@@ -295,7 +296,19 @@ def generate(
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.initialize_logits_processors(schemas=schemas)
+            # Initialize logits processors once for HuggingFaceEngine
+            if engine.__class__.__name__ == "HuggingFaceEngine":
+                from xgrammar.contrib.hf import LogitsProcessor
+
+                from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
+
+                compiled_grammars = create_compiled_grammars(
+                    schemas=schemas,
+                    tokenizer=engine.tokenizer,
+                    vocab_size=engine._model_config.vocab_size,
+                    is_peft_adapter=engine.is_peft_adapter,
+                )
+                engine._logits_processors = [LogitsProcessor(list(compiled_grammars))]
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -309,6 +322,7 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
+            # Handle JSON constraints per-batch for engines that need it
             if enforce_json_output and not initialize_logits_processors_once:
                 t0 = time.time()
                 schemas = create_schemas(
@@ -316,14 +330,42 @@ def generate(
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(schemas=schemas)
                 total_logits_processor_build_time += time.time() - t0
 
-            outputs, metrics = engine.generate(
-                encoded_ctx_batch["ctx"].tolist(),
-                sampling_temperature=sampling_temperature,
-                sampling_top_p=sampling_top_p,
-            )
+                if engine.__class__.__name__ == "VLLMEngine":
+                    # VLLMEngine uses V1 guided decoding
+                    schemas_list = list(schemas)
+                    outputs, metrics = engine.generate(
+                        encoded_ctx_batch["ctx"].tolist(),
+                        sampling_temperature=sampling_temperature,
+                        sampling_top_p=sampling_top_p,
+                        schemas=schemas_list,
+                    )
+                else:
+                    # HuggingFaceEngine uses per-batch logits processors
+                    from xgrammar.contrib.hf import LogitsProcessor
+
+                    from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
+
+                    compiled_grammars = create_compiled_grammars(
+                        schemas=schemas,
+                        tokenizer=engine.tokenizer,
+                        vocab_size=engine._model_config.vocab_size,
+                        is_peft_adapter=engine.is_peft_adapter,
+                    )
+                    engine._logits_processors = [LogitsProcessor(list(compiled_grammars))]
+                    outputs, metrics = engine.generate(
+                        encoded_ctx_batch["ctx"].tolist(),
+                        sampling_temperature=sampling_temperature,
+                        sampling_top_p=sampling_top_p,
+                    )
+            else:
+                # No JSON constraints needed (or using pre-initialized logits processors)
+                outputs, metrics = engine.generate(
+                    encoded_ctx_batch["ctx"].tolist(),
+                    sampling_temperature=sampling_temperature,
+                    sampling_top_p=sampling_top_p,
+                )
             total_tokenize_fn_time += metrics.tokenize_time
             total_generate_fn_time += metrics.generate_time
 

@@ -15,20 +15,16 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Generator
 from os import PathLike
 from pathlib import Path
 
 import torch
 from peft import PeftModel
-from pydantic import BaseModel
 from transformers import AutoTokenizer
-from xgrammar.contrib.hf import LogitsProcessor
 
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
 
 
 class HuggingFaceEngine(LanguageEngine):
@@ -74,15 +70,6 @@ class HuggingFaceEngine(LanguageEngine):
 
     def supports_json_enforcing(self) -> bool:
         return self._json_enforcing_possible
-
-    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        compiled_grammars = create_compiled_grammars(
-            schemas=schemas,
-            tokenizer=self.tokenizer,
-            vocab_size=self._model_config.vocab_size,
-            is_peft_adapter=self.is_peft_adapter,
-        )
-        self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
 
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
