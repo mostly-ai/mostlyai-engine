@@ -16,19 +16,14 @@ from __future__ import annotations
 
 import os
 
-# Per-Request Logits Processors are not supported in V1 (https://docs.vllm.ai/en/latest/getting_started/v1_user_guide.html#feature-model)
-# Global Logits Processors will be new mechanism to use, but it is not yet released
-# Here is PR for it: https://github.com/vllm-project/vllm/pull/13360
-os.environ["VLLM_USE_V1"] = "0"
+os.environ["VLLM_USE_V1"] = "1"
 
 import contextlib
 import gc
 import time
-from collections.abc import Generator
 from os import PathLike
 
 import torch
-import xgrammar as xgr
 from peft import PeftConfig
 from pydantic import BaseModel
 from transformers import AutoConfig, AutoTokenizer
@@ -38,11 +33,11 @@ from vllm.distributed import destroy_distributed_environment, destroy_model_para
 from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.platforms import current_platform
+from vllm.sampling_params import GuidedDecodingParams
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
 
 
 def cleanup_dist_env_and_memory():
@@ -54,77 +49,6 @@ def cleanup_dist_env_and_memory():
     gc.collect()
     if not current_platform.is_cpu():
         torch.cuda.empty_cache()
-
-
-class XGrammarLogitsProcessor:
-    """
-    Inspired by [XGrammarLogitsProcessor](https://github.com/vllm-project/vllm/blob/a43aa183dc0cb2639044c15d272e0ce1941392b0/vllm/model_executor/guided_decoding/xgrammar_decoding.py#L280).
-    VLLM's XGrammarLogitsProcessor can be reused.
-    """
-
-    def __init__(self, compiled_grammar: xgr.CompiledGrammar):
-        self.compiled_grammar = compiled_grammar
-        self.tokenizer_info = compiled_grammar.tokenizer_info
-        self.batch_size = 1
-
-        self.matchers: list[xgr.GrammarMatcher] | None = None
-        self.token_bitmask: torch.Tensor | None = None
-        self.prefilled = False
-
-    def __call__(self, input_ids: tuple[int], scores: torch.Tensor) -> torch.Tensor:
-        # lazily initialize GrammarMatchers and bitmask
-        if self.matchers is None:
-            self.matchers = [xgr.GrammarMatcher(self.compiled_grammar) for _ in range(self.batch_size)]
-            self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.tokenizer_info.vocab_size)
-
-        if not self.prefilled:
-            # have not sampled a token yet
-            self.prefilled = True
-        else:
-            for i, matcher in enumerate(self.matchers):
-                if not matcher.is_terminated():
-                    sampled_token = input_ids[-1]
-                    assert self.matchers[i].accept_token(sampled_token)
-
-        for i, matcher in enumerate(self.matchers):
-            if not matcher.is_terminated():
-                matcher.fill_next_token_bitmask(self.token_bitmask, i)
-
-        # token_bitmask is a CPU tensor for use with accept_token and
-        # fill_next_token_bitmask so we move it to the device of scores
-        device_type = scores.device.type
-        dtype = scores.dtype
-        if device_type != "cuda":
-            # xgrammar on cpu only supports float32 scores
-            # see: https://github.com/mlc-ai/xgrammar/blob/c1b64920cad24f44f235778c1c00bb52d57da01a/python/xgrammar/kernels/apply_token_bitmask_inplace_cpu.py#L22
-            scores = scores.to("cpu").float().unsqueeze(0)
-
-        # Note: In this method, if the tensors have different dimensions
-        # on CPU device fails, but on GPU it runs without error. Hence the
-        # unsqueeze above for scores, to match the token bitmask shape
-        xgr.apply_token_bitmask_inplace(scores, self.token_bitmask.to(scores.device, non_blocking=True))
-        if device_type != "cuda":
-            scores = scores.to(dtype).to(device_type).squeeze()
-        return scores
-
-    def clone(self) -> XGrammarLogitsProcessor:
-        """Create a new instance with shared compiled grammar but separate state"""
-        new_processor = XGrammarLogitsProcessor(self.compiled_grammar)
-
-        # create fresh matchers for the new sequence
-        if self.matchers is not None:
-            new_processor.matchers = [xgr.GrammarMatcher(self.compiled_grammar) for _ in range(self.batch_size)]
-
-        # create a new token bitmask with the same size
-        if self.token_bitmask is not None:
-            new_processor.token_bitmask = self.token_bitmask
-
-        new_processor.batch_size = self.batch_size
-
-        # reset prefilled state for new sequence
-        new_processor.prefilled = False
-
-        return new_processor
 
 
 class VLLMEngine(LanguageEngine):
@@ -153,6 +77,7 @@ class VLLMEngine(LanguageEngine):
             swap_space=0,
             disable_log_stats=True,
             tensor_parallel_size=torch.cuda.device_count(),
+            gpu_memory_utilization=0.8,  # Reduced from default 0.9 for v1 engine compatibility
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
@@ -163,28 +88,14 @@ class VLLMEngine(LanguageEngine):
             add_bos_token=False,
             add_eos_token=False,
         )
-        self._logits_processors = None
 
     def get_default_batch_size(self) -> int:
         return 192
 
     def supports_json_enforcing(self) -> bool:
         return True
-
-    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        compiled_grammars = create_compiled_grammars(
-            schemas=schemas,
-            tokenizer=self.llm.get_tokenizer(),
-            vocab_size=self.llm.llm_engine.get_model_config().get_vocab_size(),
-            is_peft_adapter=True,
-        )
-        self._logits_processors = [XGrammarLogitsProcessor(compiled_grammar) for compiled_grammar in compiled_grammars]
-
-        model_executor = self.llm.llm_engine.model_executor
-        model_executor.logits_processors = self._logits_processors
-
     def generate(
-        self, text: list[str], sampling_temperature: float, sampling_top_p: float
+        self, text: list[str], sampling_temperature: float, sampling_top_p: float, schemas: list[BaseModel] = None
     ) -> tuple[list[int], EngineMetrics]:
         tokenize_kwargs = dict(
             tokenizer=self.tokenizer,
@@ -200,14 +111,24 @@ class VLLMEngine(LanguageEngine):
         tokenize_time = time.time() - t_tokenize
 
         actual_batch_size = len(inputs["input_ids"])
-        sampling_params = [
-            SamplingParams(
-                max_tokens=self.max_new_tokens,
-                temperature=sampling_temperature,
-                top_p=sampling_top_p,
+
+        # Create sampling params with guided decoding if schemas are provided
+        sampling_params = []
+        for i in range(actual_batch_size):
+            guided_decoding = None
+            if schemas and i < len(schemas):
+                # Convert Pydantic model to JSON schema for guided decoding
+                schema_dict = schemas[i].model_json_schema()
+                guided_decoding = GuidedDecodingParams(json=schema_dict)
+
+            sampling_params.append(
+                SamplingParams(
+                    max_tokens=self.max_new_tokens,
+                    temperature=sampling_temperature,
+                    top_p=sampling_top_p,
+                    guided_decoding=guided_decoding,
+                )
             )
-            for _ in range(actual_batch_size)
-        ]
         t_generate = time.time()
         outputs = self.llm.generate(
             prompts=[TokensPrompt(prompt_token_ids=token_ids) for token_ids in inputs["input_ids"]],

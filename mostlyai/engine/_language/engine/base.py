@@ -13,10 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator
 from dataclasses import dataclass
-
-from pydantic import BaseModel
 
 
 @dataclass
@@ -26,10 +23,6 @@ class EngineMetrics:
 
 
 class LanguageEngine(ABC):
-    @abstractmethod
-    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        pass
-
     @abstractmethod
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
