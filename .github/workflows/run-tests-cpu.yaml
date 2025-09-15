@@ -31,7 +31,7 @@ jobs:
           - name: Setup | Dependencies
             run: |
               uv sync --frozen --only-group dev --only-group docs
-              uv pip install --index-strategy unsafe-first-match torch==2.7.1+cpu torchvision==0.22.1+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
+              uv pip install --index-strategy unsafe-first-match torch==2.8.0+cpu torchvision==0.23.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
 
           - name: Run | Tests -> unit
             run: uv run --no-sync pytest tests/unit
@@ -67,7 +67,7 @@ jobs:
           - name: Setup | Dependencies
             run: |
               uv sync --frozen --only-group dev
-              uv pip install --index-strategy unsafe-first-match torch==2.7.1+cpu torchvision==0.22.1+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
+              uv pip install --index-strategy unsafe-first-match torch==2.8.0+cpu torchvision==0.23.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
 
           - name: Run tests -> end_to_end all except sequential
             run: uv run --no-sync pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/

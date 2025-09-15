@@ -94,6 +94,7 @@ class VLLMEngine(LanguageEngine):
 
     def supports_json_enforcing(self) -> bool:
         return True
+
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float, schemas: list[BaseModel] = None
     ) -> tuple[list[int], EngineMetrics]:
