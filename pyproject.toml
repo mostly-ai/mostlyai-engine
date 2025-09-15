@@ -40,16 +40,16 @@ dependencies = [
     "opacus>=1.5.4",
     "xgrammar>=0.1.21",  # for vllm 0.10.1.1 compatibility (=0.1.21)
     "json-repair>=0.47.0",
-    "torch>=2.7.1,<2.7.2",  # for vllm 0.10.1.1 compatibility
-    "torchaudio>=2.7.1,<2.7.2",  # for vllm 0.10.1.1 compatibility
-    "torchvision>=0.22.1,<0.22.2"  # for vllm 0.10.1.1 compatibility
+    "torch>=2.8.0,<2.9.0",  # for vllm 0.10.2 compatibility
+    "torchaudio>=2.8.0,<2.9.0",  # for vllm 0.10.2 compatibility
+    "torchvision>=0.23.0,<0.24.0"  # for vllm 0.10.2 compatibility
 ]
 
 [project.optional-dependencies]
 gpu = [
     "bitsandbytes==0.42.0; sys_platform == 'darwin'",
     "bitsandbytes>=0.45.5; sys_platform == 'linux'",
-    "vllm==0.10.1.1; sys_platform == 'linux' or sys_platform == 'darwin'",
+    "vllm==0.10.2; sys_platform == 'linux' or sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
