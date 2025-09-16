@@ -1271,7 +1271,7 @@ class SequentialModel(nn.Module):
             }
 
             # forward pass through column embedders
-            tgt_col_embeds = self.column_embedders(tgt_embeds_positional_masked)
+            tgt_col_embeds = self.column_embedders(tgt_embeds)
 
             # history
             # time shift: remove last time step; add zeros for first time step; add randoms for all others
@@ -1413,7 +1413,7 @@ class SequentialModel(nn.Module):
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:
                     col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
-                    col_embed_in = torch.cat([tgt_embeds_positional_masked[sc] for sc in col_sub_cols], dim=-1)
+                    col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
                     tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
