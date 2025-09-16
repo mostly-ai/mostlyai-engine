@@ -540,8 +540,8 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
 def get_positional_cardinalities(
     max_seq_len: int, has_slen: bool | None, has_ridx: bool | None, has_sdec: bool | None
 ) -> dict[str, int]:
-    # the latest version of the model uses SIDX/SLEN/RIDX positional column
-    has_slen = has_slen if has_slen is not None else True
+    # the latest version of the model uses SIDX/RIDX positional column
+    has_slen = has_slen if has_slen is not None else False
     has_ridx = has_ridx if has_ridx is not None else True
     has_sdec = has_sdec if has_sdec is not None else False
 
@@ -569,6 +569,9 @@ def get_positional_cardinalities(
         case True, True, False:
             # SIDX/SLEN/RIDX model
             return sidx_cardinalities | slen_cardinalities | ridx_cardinalities
+        case False, True, False:
+            # SIDX/RIDX model
+            return sidx_cardinalities | ridx_cardinalities
         case True, False, True:
             # SLEN/SIDX/SDEC model
             return slen_cardinalities | sidx_cardinalities | sdec_cardinalities

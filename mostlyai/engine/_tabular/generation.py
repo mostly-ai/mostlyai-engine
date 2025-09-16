@@ -1023,7 +1023,7 @@ def generate(
 
                     # fix SLEN by propagating sampled SLEN from first step
                     slen_vals = {}
-                    if seq_step > 0:
+                    if has_slen and seq_step > 0:
                         slen = out_df[SLEN_SUB_COLUMN_PREFIX]
                         slen = encode_positional_column(slen, max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX)
                         slen_vals = {
@@ -1102,15 +1102,16 @@ def generate(
                     out_df[SIDX_SUB_COLUMN_PREFIX] = decode_positional_column(
                         out_df, seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
                     )
-                    out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
-                        out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
-                    )
-                    out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
+                    if has_slen:
+                        out_df[SLEN_SUB_COLUMN_PREFIX] = decode_positional_column(
+                            out_df, seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
+                        )
+                        out_df[SLEN_SUB_COLUMN_PREFIX] = out_df[SLEN_SUB_COLUMN_PREFIX].clip(lower=seq_len_min)
                     if has_ridx:
                         # set RIDX to SLEN for first step; beyond that decode RIDX
                         out_df[RIDX_SUB_COLUMN_PREFIX] = (
                             decode_positional_column(out_df, seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX)
-                            if seq_step > 0
+                            if seq_step > 0 or not has_slen
                             else out_df[SLEN_SUB_COLUMN_PREFIX]
                         )
                         out_df[RIDX_SUB_COLUMN_PREFIX] = out_df[RIDX_SUB_COLUMN_PREFIX].clip(
