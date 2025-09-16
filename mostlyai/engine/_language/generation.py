@@ -287,28 +287,19 @@ def generate(
         enforce_json_output = engine.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
 
-        # VLLMEngine uses V1 guided decoding, others use logits processors
-        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ != "VLLMEngine"
-        if enforce_json_output and initialize_logits_processors_once:
+        # Check if we can optimize by reusing schemas/constraints across batches
+        can_optimize_batches = len(seeded_tgt_columns) == 0 and engine.supports_batch_size_optimization()
+
+        # Prepare schemas once if optimization is possible
+        schemas_for_optimization = None
+        if enforce_json_output and can_optimize_batches:
             t0 = time.time()
-            schemas = create_schemas(
+            schemas_for_optimization = create_schemas(
                 size=batch_size,
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            # Initialize logits processors once for HuggingFaceEngine
-            if engine.__class__.__name__ == "HuggingFaceEngine":
-                from xgrammar.contrib.hf import LogitsProcessor
-
-                from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
-
-                compiled_grammars = create_compiled_grammars(
-                    schemas=schemas,
-                    tokenizer=engine.tokenizer,
-                    vocab_size=engine._model_config.vocab_size,
-                    is_peft_adapter=engine.is_peft_adapter,
-                )
-                engine._logits_processors = [LogitsProcessor(list(compiled_grammars))]
+            engine.prepare_for_generation(schemas_for_optimization)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -322,8 +313,8 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            # Handle JSON constraints per-batch for engines that need it
-            if enforce_json_output and not initialize_logits_processors_once:
+            # Generate outputs with appropriate method based on JSON constraints
+            if enforce_json_output and not can_optimize_batches:
                 t0 = time.time()
                 schemas = create_schemas(
                     seed_df=seed_data_batch,
@@ -332,35 +323,22 @@ def generate(
                 )
                 total_logits_processor_build_time += time.time() - t0
 
-                if engine.__class__.__name__ == "VLLMEngine":
-                    # VLLMEngine uses V1 guided decoding
-                    schemas_list = list(schemas)
-                    outputs, metrics = engine.generate(
-                        encoded_ctx_batch["ctx"].tolist(),
-                        sampling_temperature=sampling_temperature,
-                        sampling_top_p=sampling_top_p,
-                        schemas=schemas_list,
-                    )
-                else:
-                    # HuggingFaceEngine uses per-batch logits processors
-                    from xgrammar.contrib.hf import LogitsProcessor
-
-                    from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
-
-                    compiled_grammars = create_compiled_grammars(
-                        schemas=schemas,
-                        tokenizer=engine.tokenizer,
-                        vocab_size=engine._model_config.vocab_size,
-                        is_peft_adapter=engine.is_peft_adapter,
-                    )
-                    engine._logits_processors = [LogitsProcessor(list(compiled_grammars))]
-                    outputs, metrics = engine.generate(
-                        encoded_ctx_batch["ctx"].tolist(),
-                        sampling_temperature=sampling_temperature,
-                        sampling_top_p=sampling_top_p,
-                    )
+                # Create schemas per-batch and use engine's JSON constraint method
+                outputs, metrics = engine.generate_with_json_constraints(
+                    encoded_ctx_batch["ctx"].tolist(),
+                    schemas=schemas,
+                    sampling_temperature=sampling_temperature,
+                    sampling_top_p=sampling_top_p,
+                )
+            elif enforce_json_output and can_optimize_batches:
+                # Use pre-prepared schemas for optimized engines
+                outputs, metrics = engine.generate(
+                    encoded_ctx_batch["ctx"].tolist(),
+                    sampling_temperature=sampling_temperature,
+                    sampling_top_p=sampling_top_p,
+                )
             else:
-                # No JSON constraints needed (or using pre-initialized logits processors)
+                # No JSON constraints needed
                 outputs, metrics = engine.generate(
                     encoded_ctx_batch["ctx"].tolist(),
                     sampling_temperature=sampling_temperature,

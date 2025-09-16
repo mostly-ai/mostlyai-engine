@@ -14,6 +14,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -39,4 +40,31 @@ class LanguageEngine(ABC):
 
     @abstractmethod
     def cleanup(self):
+        pass
+
+    def generate_with_json_constraints(
+        self, text: list[str], schemas: Any, sampling_temperature: float, sampling_top_p: float
+    ) -> tuple[list[int], EngineMetrics]:
+        """Generate text with JSON schema constraints.
+
+        Default implementation falls back to regular generation.
+        Engines that support JSON constraints should override this method.
+        """
+        return self.generate(text, sampling_temperature, sampling_top_p)
+
+    def supports_batch_size_optimization(self) -> bool:
+        """Whether the engine can reuse processors/constraints across batches with different sizes.
+
+        Returns:
+            True if the engine can handle variable batch sizes with reused constraints,
+            False if constraints need to be recreated for each batch.
+        """
+        return True
+
+    def prepare_for_generation(self, schemas: Any = None) -> None:
+        """One-time setup before batch processing begins.
+
+        Args:
+            schemas: Optional schemas for engines that support batch size optimization.
+        """
         pass

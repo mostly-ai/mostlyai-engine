@@ -17,14 +17,17 @@ from __future__ import annotations
 import time
 from os import PathLike
 from pathlib import Path
+from typing import Any
 
 import torch
 from peft import PeftModel
 from transformers import AutoTokenizer
+from xgrammar.contrib.hf import LogitsProcessor
 
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
+from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
 
 
 class HuggingFaceEngine(LanguageEngine):
@@ -110,4 +113,26 @@ class HuggingFaceEngine(LanguageEngine):
         return outputs.detach().cpu().tolist(), metrics
 
     def cleanup(self):
+        pass
+
+    def generate_with_json_constraints(
+        self, text: list[str], schemas: Any, sampling_temperature: float, sampling_top_p: float
+    ) -> tuple[list[int], EngineMetrics]:
+        """Generate text with JSON schema constraints using LogitsProcessor."""
+
+        compiled_grammars = create_compiled_grammars(
+            schemas=schemas,
+            tokenizer=self.tokenizer,
+            vocab_size=self._model_config.vocab_size,
+            is_peft_adapter=self.is_peft_adapter,
+        )
+        self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
+        return self.generate(text, sampling_temperature, sampling_top_p)
+
+    def supports_batch_size_optimization(self) -> bool:
+        """HuggingFaceEngine cannot reuse LogitsProcessor across different batch sizes."""
+        return False
+
+    def prepare_for_generation(self, schemas: Any = None) -> None:
+        """HuggingFaceEngine doesn't support batch optimization, so no preparation needed."""
         pass

@@ -22,6 +22,7 @@ import contextlib
 import gc
 import time
 from os import PathLike
+from typing import Any
 
 import torch
 from peft import PeftConfig
@@ -88,6 +89,7 @@ class VLLMEngine(LanguageEngine):
             add_bos_token=False,
             add_eos_token=False,
         )
+        self._prepared_schemas = None
 
     def get_default_batch_size(self) -> int:
         return 192
@@ -114,12 +116,15 @@ class VLLMEngine(LanguageEngine):
         actual_batch_size = len(inputs["input_ids"])
 
         # Create sampling params with guided decoding if schemas are provided
+        # Use prepared schemas if available, otherwise use provided schemas
+        effective_schemas = schemas or self._prepared_schemas
+
         sampling_params = []
         for i in range(actual_batch_size):
             guided_decoding = None
-            if schemas and i < len(schemas):
+            if effective_schemas and i < len(effective_schemas):
                 # Convert Pydantic model to JSON schema for guided decoding
-                schema_dict = schemas[i].model_json_schema()
+                schema_dict = effective_schemas[i].model_json_schema()
                 guided_decoding = GuidedDecodingParams(json=schema_dict)
 
             sampling_params.append(
@@ -144,3 +149,19 @@ class VLLMEngine(LanguageEngine):
     def cleanup(self):
         del self.llm
         cleanup_dist_env_and_memory()
+
+    def generate_with_json_constraints(
+        self, text: list[str], schemas: Any, sampling_temperature: float, sampling_top_p: float
+    ) -> tuple[list[int], EngineMetrics]:
+        """Generate text with JSON schema constraints using V1 guided decoding."""
+        # VLLMEngine's generate method already supports schemas directly
+        schemas_list = list(schemas) if schemas else None
+        return self.generate(text, sampling_temperature, sampling_top_p, schemas=schemas_list)
+
+    def supports_batch_size_optimization(self) -> bool:
+        """VLLMEngine can handle variable batch sizes since it creates sampling params per sample."""
+        return True
+
+    def prepare_for_generation(self, schemas: Any = None) -> None:
+        """Store schemas for reuse across batches when optimization is possible."""
+        self._prepared_schemas = list(schemas) if schemas else None
