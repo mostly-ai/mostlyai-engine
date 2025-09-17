@@ -289,21 +289,6 @@ def _calculate_sample_losses(
         # calculate per column losses
         losses_by_column = []
 
-        # TODO: remove me later
-        # col_data = 'tgt:t0/c0__cat'
-        # col_slen = 'tgt:/__slen_cat'
-        # col_ridx = 'tgt:/__ridx_cat'
-        # col_data_true = data[col_data].squeeze(2)[:,0]
-        # col_slen_true = data[col_slen].squeeze(2)[:,0]
-        # col_ridx_true = data[col_ridx].squeeze(2)[:,0]
-        # col_data_argmax = output[col_data].argmax(axis=2)[:,0]
-        # col_slen_argmax = output[col_slen].argmax(axis=2)[:,0]
-        # col_ridx_argmax = output[col_ridx].argmax(axis=2)[:,0]
-        # if val:
-        #     print(f"col_data_true == col_data_argmax: {sum(col_data_true == col_data_argmax) / len(col_data_true)}")
-        #     print(f"col_slen_true == col_slen_argmax: {sum(col_slen_true == col_slen_argmax) / len(col_slen_true)}")
-        #     print(f"col_ridx_true == col_ridx_argmax: {sum(col_ridx_true == col_ridx_argmax) / len(col_ridx_true)}")
-
         for col in tgt_cols:
             if col in sidx_cols:
                 mask = sidx_mask

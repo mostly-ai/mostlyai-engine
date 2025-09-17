@@ -1315,13 +1315,12 @@ class SequentialModel(nn.Module):
                     sub_col: tgt_embeds[sub_col]
                     for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                 }
-                # TODO: commenting this out makes the tests pass, but it's not clear why
-                # if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
-                #     # RIDX sub-columns should not see SLEN sub-columns
-                #     prev_sub_col_embeds = {
-                #         k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
-                #         for k, v in prev_sub_col_embeds.items()
-                #     }
+                if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                    # RIDX sub-columns should not see SLEN sub-columns
+                    prev_sub_col_embeds = {
+                        k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                        for k, v in prev_sub_col_embeds.items()
+                    }
                 prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                 # regressor
@@ -1387,13 +1386,12 @@ class SequentialModel(nn.Module):
                         sub_col: tgt_embeds[sub_col]
                         for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     }
-                    # TODO: commenting this out makes the tests pass, but it's not clear why
-                    # if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
-                    #     # RIDX sub-columns should not see SLEN sub-columns
-                    #     prev_sub_col_embeds = {
-                    #         k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
-                    #         for k, v in prev_sub_col_embeds.items()
-                    #     }
+                    if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                        # RIDX sub-columns should not see SLEN sub-columns
+                        prev_sub_col_embeds = {
+                            k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                            for k, v in prev_sub_col_embeds.items()
+                        }
                     prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                     # regressor
@@ -1414,11 +1412,11 @@ class SequentialModel(nn.Module):
                     )
 
                 # update timestep output
-                outputs[sub_col] = out
                 if is_0th_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                     # overwrite output for RIDX sub-columns on 0th step with SLEN sub-columns
                     slen_sub_col = sub_col.replace(RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)
-                    outputs[sub_col] = outputs[slen_sub_col]
+                    out = outputs[slen_sub_col]
+                outputs[sub_col] = out
 
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
