@@ -864,6 +864,7 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
     noisy_counts = np.clip(np.array(list(value_counts.values())) + noise, 0, None).astype(int)
     for i, cat in enumerate(value_counts):
         value_counts[cat] = noisy_counts[i]
+    # NOTE: total_counts can be 0 in the edge case when the column only has null values
     total_counts = sum(value_counts.values())
 
     # 2. Collect all categories whose noisy count >= threshold
@@ -871,7 +872,7 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
     # 3. Compute the non-rare ratio
     noisy_total_counts = sum(selected.values())
-    non_rare_ratio = noisy_total_counts / total_counts
+    non_rare_ratio = noisy_total_counts / total_counts if total_counts > 0 else 0
 
     return list(selected.keys()), non_rare_ratio
 
