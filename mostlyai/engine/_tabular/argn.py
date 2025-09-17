@@ -231,7 +231,7 @@ class Embedders(nn.Module):
             embedder = nn.Embedding(num_embeddings=dim_input, embedding_dim=dim_output, device=device)
             # the embeddings of the last slen and ridx sub columns are never used
             # so we explicitly freeze them to make opacus not complain about "per sample gradient is not initialized"
-            if sub_col in [last_slen_sub_col]:
+            if sub_col == last_slen_sub_col:
                 embedder.weight.requires_grad = False
             self.add(sub_column=sub_col, embedder=embedder)
             self.dims.append(dim_output)

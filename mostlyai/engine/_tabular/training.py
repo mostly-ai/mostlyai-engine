@@ -252,9 +252,7 @@ class TabularModelCheckpoint(ModelCheckpoint):
 
 
 def _calculate_sample_losses(
-    model: FlatModel | SequentialModel | GradSampleModule,
-    data: dict[str, torch.Tensor],
-    val=False,
+    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
@@ -288,7 +286,6 @@ def _calculate_sample_losses(
 
         # calculate per column losses
         losses_by_column = []
-
         for col in tgt_cols:
             if col in sidx_cols:
                 mask = sidx_mask
@@ -317,7 +314,7 @@ def _calculate_val_loss(
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
     for step_data in val_dataloader:
-        step_losses = _calculate_sample_losses(model, step_data, val=True)
+        step_losses = _calculate_sample_losses(model, step_data)
         val_sample_losses.extend(step_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
