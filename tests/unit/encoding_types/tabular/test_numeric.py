@@ -327,6 +327,13 @@ class TestDigitAnalyzeReduce:
         assert result["min"] == 0.0
         assert result["max"] == 30.0
 
+    def test_all_nulls(self):
+        stats = self.stats_template(has_nan=True, cnt_values={})
+        result = analyze_reduce_numeric([stats], encoding_type=ModelEncodingType.tabular_numeric_auto)
+        assert result["encoding_type"] == ModelEncodingType.tabular_numeric_discrete
+        assert result["cardinalities"] == {"cat": 2}  # only rare and null
+        assert result["min_decimal"] == 0
+
 
 class TestDigitEncode:
     @pytest.fixture

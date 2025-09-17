@@ -872,7 +872,7 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
     # 3. Compute the non-rare ratio
     noisy_total_counts = sum(selected.values())
-    non_rare_ratio = noisy_total_counts / total_counts if total_counts > 0 else 0
+    non_rare_ratio = noisy_total_counts / total_counts if total_counts > 0 else 1.0
 
     return list(selected.keys()), non_rare_ratio
 

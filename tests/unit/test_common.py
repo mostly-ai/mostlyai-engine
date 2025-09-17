@@ -632,7 +632,7 @@ def test_dp_quantiles():
         # so in the worst case, we will have at least 4 and at most at most 14 rare categories
         ({i: i for i in range(1, 101)}, [86, 96], [0.98, 1.0]),
         # all the values of the column are null, hence empty value_counts
-        ({}, [0, 0], [0, 0]),
+        ({}, [0, 0], [1.0, 1.0]),
     ],
 )
 def test_dp_non_rare(value_counts, expected_selected_range, expected_non_rare_ratio_range):

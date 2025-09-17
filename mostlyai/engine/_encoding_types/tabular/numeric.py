@@ -282,7 +282,7 @@ def analyze_reduce_numeric(
             non_rare_ratio = 1.0
     else:
         categories = []
-        non_rare_ratio = 0.0
+        non_rare_ratio = 1.0
 
     # auto heuristic
     if encoding_type == ModelEncodingType.tabular_numeric_auto:
