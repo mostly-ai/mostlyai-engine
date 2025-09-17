@@ -1314,6 +1314,12 @@ class SequentialModel(nn.Module):
                     sub_col: tgt_embeds[sub_col]
                     for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                 }
+                if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                    # RIDX sub-columns should not see SLEN sub-columns
+                    prev_sub_col_embeds = {
+                        k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                        for k, v in prev_sub_col_embeds.items()
+                    }
                 prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                 # regressor
@@ -1377,6 +1383,12 @@ class SequentialModel(nn.Module):
                         sub_col: tgt_embeds[sub_col]
                         for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     }
+                    if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                        # RIDX sub-columns should not see SLEN sub-columns
+                        prev_sub_col_embeds = {
+                            k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                            for k, v in prev_sub_col_embeds.items()
+                        }
                     prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                     # regressor
