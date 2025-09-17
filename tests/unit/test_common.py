@@ -631,7 +631,7 @@ def test_dp_quantiles():
         # given epsilon=1.0, the noise added to the count should be within the range [-5, 5]
         # so in the worst case, we will have at least 4 and at most at most 14 rare categories
         ({i: i for i in range(1, 101)}, [86, 96], [0.98, 1.0]),
-        # all the categories are rare
+        # all the values of the column are null, hence empty value_counts
         ({}, [0, 0], [0, 0]),
     ],
 )
