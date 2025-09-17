@@ -695,6 +695,8 @@ def generate(
                 has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
                 has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
                 has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+            else:
+                has_slen, has_ridx, has_sdec = True, True, False
 
         tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
         ctx_cardinalities = get_cardinalities(ctx_stats)
