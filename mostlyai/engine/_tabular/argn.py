@@ -1335,7 +1335,9 @@ class SequentialModel(nn.Module):
             return outputs, {}
 
         else:  # mode == "gen"
+            is_0th_step = False
             if history is None or history_state is None:
+                is_0th_step = True
                 # initialize history
                 history_in = torch.cat(
                     [
@@ -1410,6 +1412,10 @@ class SequentialModel(nn.Module):
 
                 # update timestep output
                 outputs[sub_col] = out
+                if is_0th_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                    # overwrite output for RIDX sub-columns on 0th step with SLEN sub-columns
+                    slen_sub_col = sub_col.replace(RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)
+                    outputs[sub_col] = outputs[slen_sub_col]
 
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
