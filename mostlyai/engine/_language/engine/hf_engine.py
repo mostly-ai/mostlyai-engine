@@ -17,10 +17,10 @@ from __future__ import annotations
 import time
 from os import PathLike
 from pathlib import Path
-from typing import Any
 
 import torch
 from peft import PeftModel
+from pydantic import BaseModel
 from transformers import AutoTokenizer
 from xgrammar.contrib.hf import LogitsProcessor
 
@@ -115,24 +115,19 @@ class HuggingFaceEngine(LanguageEngine):
     def cleanup(self):
         pass
 
-    def generate_with_json_constraints(
-        self, text: list[str], schemas: Any, sampling_temperature: float, sampling_top_p: float
-    ) -> tuple[list[int], EngineMetrics]:
-        """Generate text with JSON schema constraints using LogitsProcessor."""
-
-        compiled_grammars = create_compiled_grammars(
-            schemas=schemas,
-            tokenizer=self.tokenizer,
-            vocab_size=self._model_config.vocab_size,
-            is_peft_adapter=self.is_peft_adapter,
-        )
-        self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
-        return self.generate(text, sampling_temperature, sampling_top_p)
+    def update_json_constraints(self, schemas: list[BaseModel] | None) -> None:
+        """Update JSON schema constraints for the next generation call."""
+        if schemas:
+            compiled_grammars = create_compiled_grammars(
+                schemas=schemas,
+                tokenizer=self.tokenizer,
+                vocab_size=self._model_config.vocab_size,
+                is_peft_adapter=self.is_peft_adapter,
+            )
+            self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
+        else:
+            self._logits_processors = None
 
     def can_reuse_schemas(self) -> bool:
         """HuggingFaceEngine cannot reuse LogitsProcessor across different batch sizes."""
         return False
-
-    def prepare_for_generation(self, schemas: Any = None) -> None:
-        """HuggingFaceEngine doesn't support batch optimization, so no preparation needed."""
-        pass

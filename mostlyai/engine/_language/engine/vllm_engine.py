@@ -22,7 +22,6 @@ import contextlib
 import gc
 import time
 from os import PathLike
-from typing import Any
 
 import torch
 from peft import PeftConfig
@@ -78,7 +77,7 @@ class VLLMEngine(LanguageEngine):
             swap_space=0,
             disable_log_stats=True,
             tensor_parallel_size=torch.cuda.device_count(),
-            gpu_memory_utilization=0.8,  # Reduced from default 0.9 for v1 engine compatibility
+            # gpu_memory_utilization=0.8,  # Reduced from default 0.9 for v1 engine compatibility
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
@@ -98,7 +97,7 @@ class VLLMEngine(LanguageEngine):
         return True
 
     def generate(
-        self, text: list[str], sampling_temperature: float, sampling_top_p: float, schemas: list[BaseModel] | None = None
+        self, text: list[str], sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
         tokenize_kwargs = dict(
             tokenizer=self.tokenizer,
@@ -115,9 +114,8 @@ class VLLMEngine(LanguageEngine):
 
         actual_batch_size = len(inputs["input_ids"])
 
-        # Create sampling params with guided decoding if schemas are provided
-        # Use prepared schemas if available, otherwise use provided schemas
-        effective_schemas = schemas or self._prepared_schemas
+        # Create sampling params with guided decoding if schemas are prepared
+        effective_schemas = self._prepared_schemas
 
         sampling_params = []
         for i in range(actual_batch_size):
@@ -150,17 +148,10 @@ class VLLMEngine(LanguageEngine):
         del self.llm
         cleanup_dist_env_and_memory()
 
-    def generate_with_json_constraints(
-        self, text: list[str], schemas: Any, sampling_temperature: float, sampling_top_p: float
-    ) -> tuple[list[int], EngineMetrics]:
-        """Generate text with JSON schema constraints using V1 guided decoding."""
-        schemas_list = list(schemas) if schemas else None
-        return self.generate(text, sampling_temperature, sampling_top_p, schemas=schemas_list)
+    def update_json_constraints(self, schemas: list[BaseModel] | None) -> None:
+        """Update JSON schema constraints for the next generation call."""
+        self._prepared_schemas = list(schemas) if schemas else None
 
     def can_reuse_schemas(self) -> bool:
         """VLLMEngine can handle variable batch sizes since it creates sampling params per sample."""
         return True
-
-    def prepare_for_generation(self, schemas: list[BaseModel] | None = None) -> None:
-        """Store schemas for reuse across batches when schema reuse is possible."""
-        self._prepared_schemas = list(schemas) if schemas else None

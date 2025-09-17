@@ -291,7 +291,6 @@ def generate(
         can_reuse_schemas = len(seeded_tgt_columns) == 0 and engine.can_reuse_schemas()
 
         # Prepare schemas once if optimization is possible
-        schemas_for_optimization = None
         if enforce_json_output and can_reuse_schemas:
             t0 = time.time()
             schemas_for_optimization = create_schemas(
@@ -299,7 +298,7 @@ def generate(
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.prepare_for_generation(schemas_for_optimization)
+            engine.update_json_constraints(schemas_for_optimization)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -313,7 +312,7 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            # Generate outputs with appropriate method based on JSON constraints
+            # Update JSON constraints if needed per-batch (when schema reuse is not possible)
             if enforce_json_output and not can_reuse_schemas:
                 t0 = time.time()
                 schemas = create_schemas(
@@ -321,29 +320,18 @@ def generate(
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
+                engine.update_json_constraints(schemas)
                 total_logits_processor_build_time += time.time() - t0
+            elif not enforce_json_output:
+                # Clear any existing constraints if JSON enforcement is disabled
+                engine.update_json_constraints(None)
 
-                # Create schemas per-batch and use engine's JSON constraint method
-                outputs, metrics = engine.generate_with_json_constraints(
-                    encoded_ctx_batch["ctx"].tolist(),
-                    schemas=schemas,
-                    sampling_temperature=sampling_temperature,
-                    sampling_top_p=sampling_top_p,
-                )
-            elif enforce_json_output and can_reuse_schemas:
-                # Use pre-prepared schemas for optimized engines
-                outputs, metrics = engine.generate(
-                    encoded_ctx_batch["ctx"].tolist(),
-                    sampling_temperature=sampling_temperature,
-                    sampling_top_p=sampling_top_p,
-                )
-            else:
-                # No JSON constraints needed
-                outputs, metrics = engine.generate(
-                    encoded_ctx_batch["ctx"].tolist(),
-                    sampling_temperature=sampling_temperature,
-                    sampling_top_p=sampling_top_p,
-                )
+            # Generate outputs using single generate method
+            outputs, metrics = engine.generate(
+                encoded_ctx_batch["ctx"].tolist(),
+                sampling_temperature=sampling_temperature,
+                sampling_top_p=sampling_top_p,
+            )
             total_tokenize_fn_time += metrics.tokenize_time
             total_generate_fn_time += metrics.generate_time
 
