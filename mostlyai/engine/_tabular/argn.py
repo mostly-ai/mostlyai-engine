@@ -229,7 +229,7 @@ class Embedders(nn.Module):
         for sub_col, dim_input in self.cardinalities.items():
             dim_output = _embedding_heuristic(id=self.id(sub_col), model_size=model_size, dim_input=dim_input)
             embedder = nn.Embedding(num_embeddings=dim_input, embedding_dim=dim_output, device=device)
-            # the embeddings of the last slen and ridx sub columns are never used
+            # the embeddings of the last SLEN sub column are never used
             # so we explicitly freeze them to make opacus not complain about "per sample gradient is not initialized"
             if sub_col == last_slen_sub_col:
                 embedder.weight.requires_grad = False
@@ -1412,7 +1412,7 @@ class SequentialModel(nn.Module):
                 if is_0th_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                     # overwrite output for RIDX sub-columns on 0th step with SLEN sub-columns
                     slen_sub_col = sub_col.replace(RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)
-                    out = outputs[slen_sub_col]
+                    out = outputs[slen_sub_col] if slen_sub_col in outputs else out
                 outputs[sub_col] = out
 
                 # update current sub column embedding

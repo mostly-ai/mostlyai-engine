@@ -30,6 +30,9 @@ from mostlyai.engine._common import (
     ARGN_TABLE,
     CTXFLT,
     CTXSEQ,
+    DEFAULT_HAS_RIDX,
+    DEFAULT_HAS_SDEC,
+    DEFAULT_HAS_SLEN,
     POSITIONAL_COLUMN,
     RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
@@ -696,7 +699,7 @@ def generate(
                 has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
                 has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
             else:
-                has_slen, has_ridx, has_sdec = True, True, False
+                has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
 
         tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
         ctx_cardinalities = get_cardinalities(ctx_stats)

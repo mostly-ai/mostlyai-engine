@@ -56,6 +56,11 @@ SLEN_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # seque
 SDEC_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
+# the latest version of the model uses SIDX/SLEN/RIDX positional column
+DEFAULT_HAS_SLEN = True
+DEFAULT_HAS_RIDX = True
+DEFAULT_HAS_SDEC = False
+
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
 
 # the minimal number of min/max values to trigger the reduction; if less, the min/max will be reduced to None
@@ -318,6 +323,7 @@ def get_argn_name(
 def get_cardinalities(
     stats: dict, has_slen: bool | None = None, has_ridx: bool | None = None, has_sdec: bool | None = None
 ) -> dict[str, int]:
+    # the latest version of the model uses SIDX/SLEN/RIDX positional column (applies to sequential model only)
     cardinalities: dict[str, int] = {}
 
     if stats.get("is_sequential", False):
@@ -538,12 +544,11 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
 
 
 def get_positional_cardinalities(
-    max_seq_len: int, has_slen: bool | None, has_ridx: bool | None, has_sdec: bool | None
+    max_seq_len: int, has_slen: bool | None = None, has_ridx: bool | None = None, has_sdec: bool | None = None
 ) -> dict[str, int]:
-    # the latest version of the model uses SIDX/SLEN/RIDX positional column
-    has_slen = has_slen if has_slen is not None else True
-    has_ridx = has_ridx if has_ridx is not None else True
-    has_sdec = has_sdec if has_sdec is not None else False
+    has_slen = has_slen if has_slen is not None else DEFAULT_HAS_SLEN
+    has_ridx = has_ridx if has_ridx is not None else DEFAULT_HAS_RIDX
+    has_sdec = has_sdec if has_sdec is not None else DEFAULT_HAS_SDEC
 
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode positional columns as numeric_discrete
@@ -569,9 +574,6 @@ def get_positional_cardinalities(
         case True, True, False:
             # SIDX/SLEN/RIDX model
             return sidx_cardinalities | slen_cardinalities | ridx_cardinalities
-        case False, True, False:
-            # SIDX/RIDX model
-            return sidx_cardinalities | ridx_cardinalities
         case True, False, True:
             # SLEN/SIDX/SDEC model
             return slen_cardinalities | sidx_cardinalities | sdec_cardinalities
