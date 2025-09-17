@@ -697,12 +697,7 @@ def test_deterministic_lengths(tmp_path):
     keys = np.arange(n_sequences)
     seq_lens = np.random.randint(3, 7, size=n_sequences)
     countdown = np.concatenate([np.arange(ln - 1, -1, -1) for ln in seq_lens])
-    tgt = pd.DataFrame(
-        {
-            key: np.repeat(keys, seq_lens),
-            "countdown": countdown,
-        }
-    )
+    tgt = pd.DataFrame({key: np.repeat(keys, seq_lens), "countdown": countdown})
     ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
 
     split(

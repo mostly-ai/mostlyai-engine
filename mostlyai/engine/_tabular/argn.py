@@ -1256,26 +1256,28 @@ class SequentialModel(nn.Module):
         if context is None:
             context = self.context_compressor(x)
 
-        # SLEN is only masked for models with RIDX
         has_ridx = any(sub_col.startswith(RIDX_SUB_COLUMN_PREFIX) for sub_col in self.tgt_cardinalities)
-        masked_positional_columns = (
+
+        # SLEN and RIDX are masked for history
+        # NOTE: SLEN is not masked for models without RIDX (backwards compatibility)
+        history_masked_columns = (
             (SLEN_SUB_COLUMN_PREFIX, RIDX_SUB_COLUMN_PREFIX) if has_ridx else (RIDX_SUB_COLUMN_PREFIX,)
         )
+        # SLEN is masked for current row
+        # NOTE: SLEN is not masked for models without RIDX (backwards compatibility)
+        row_masked_columns = (SLEN_SUB_COLUMN_PREFIX,) if has_ridx else ()
 
         outputs = {}
         if mode == "trn":
             # forward pass through sub column embedders
             tgt_embeds = self.embedders(x)
-            tgt_embeds_positional_masked = {
-                k: torch.zeros_like(v) if k.startswith(masked_positional_columns) else v for k, v in tgt_embeds.items()
-            }
-
-            # forward pass through column embedders
-            tgt_col_embeds = self.column_embedders(tgt_embeds)
 
             # history
             # time shift: remove last time step; add zeros for first time step; add randoms for all others
-            embeddings = torch.cat(list(tgt_embeds_positional_masked.values()), dim=-1)
+            tgt_embeds_for_history = {
+                k: torch.zeros_like(v) if k.startswith(history_masked_columns) else v for k, v in tgt_embeds.items()
+            }
+            embeddings = torch.cat(list(tgt_embeds_for_history.values()), dim=-1)
             history_in = embeddings[:, :-1, :]
             history_in = nn.ConstantPad2d((0, 0, 1, 0), 0)(history_in)
             history, _ = self.history_compressor(history_in)
@@ -1286,6 +1288,12 @@ class SequentialModel(nn.Module):
             # repeat flat context to match the length of history
             flat_ctx = self._repeat_flat_context(flat_ctx, history.size(1))
             context_history = [torch.cat(flat_ctx + seq_ctx + [history], -1)]
+
+            # forward pass through column embedders
+            tgt_embeds_for_row = {
+                k: torch.zeros_like(v) if k.startswith(row_masked_columns) else v for k, v in tgt_embeds.items()
+            }
+            tgt_col_embeds = self.column_embedders(tgt_embeds_for_row)
 
             # create batch-wise permutation mask
             col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
@@ -1306,12 +1314,6 @@ class SequentialModel(nn.Module):
                     sub_col: tgt_embeds[sub_col]
                     for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                 }
-                if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
-                    # RIDX sub-columns should not see SLEN sub-columns
-                    prev_sub_col_embeds = {
-                        k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
-                        for k, v in prev_sub_col_embeds.items()
-                    }
                 prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                 # regressor
@@ -1375,12 +1377,6 @@ class SequentialModel(nn.Module):
                         sub_col: tgt_embeds[sub_col]
                         for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     }
-                    if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
-                        # RIDX sub-columns should not see SLEN sub-columns
-                        prev_sub_col_embeds = {
-                            k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
-                            for k, v in prev_sub_col_embeds.items()
-                        }
                     prev_sub_col_embeds = list(prev_sub_col_embeds.values())
 
                     # regressor
@@ -1405,20 +1401,22 @@ class SequentialModel(nn.Module):
 
                 # update current sub column embedding
                 tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
-                tgt_embeds_positional_masked = {
-                    k: torch.zeros_like(v) if k.startswith(masked_positional_columns) else v
-                    for k, v in tgt_embeds.items()
+                tgt_embeds_for_history = {
+                    k: torch.zeros_like(v) if k.startswith(history_masked_columns) else v for k, v in tgt_embeds.items()
+                }
+                tgt_embeds_for_row = {
+                    k: torch.zeros_like(v) if k.startswith(row_masked_columns) else v for k, v in tgt_embeds.items()
                 }
 
                 # update current column embedding
                 if sub_col in self.tgt_last_sub_cols:
                     col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
-                    col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
+                    col_embed_in = torch.cat([tgt_embeds_for_row[sc] for sc in col_sub_cols], dim=-1)
                     tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # update history and hidden state
-            history_in = torch.cat([v for v in tgt_embeds_positional_masked.values()], dim=-1)
+            history_in = torch.cat(list(tgt_embeds_for_history.values()), dim=-1)
             history, history_state = self.history_compressor(history_in, history_state=history_state)
 
             # order outputs according to tgt_sub_columns
