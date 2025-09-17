@@ -625,11 +625,18 @@ def test_dp_quantiles():
     assert q5_dp is None and q95_dp is None
 
 
-def test_dp_non_rare():
-    value_counts = {i: i for i in range(1, 101)}
+@pytest.mark.parametrize(
+    "value_counts, expected_selected_range, expected_non_rare_ratio_range",
+    [
+        # given epsilon=1.0, the noise added to the count should be within the range [-5, 5]
+        # so in the worst case, we will have at least 4 and at most at most 14 rare categories
+        ({i: i for i in range(1, 101)}, [86, 96], [0.98, 1.0]),
+        # all the categories are rare
+        ({}, [0, 0], [0, 0]),
+    ],
+)
+def test_dp_non_rare(value_counts, expected_selected_range, expected_non_rare_ratio_range):
     epsilon = 1.0
     selected, non_rare_ratio = dp_non_rare(value_counts, epsilon, threshold=10)
-    # given epsilon=1.0, the noise added to the count should be within the range [-5, 5]
-    # so in the worst case, we will have at least 4 and at most at most 14 rare categories
-    assert len(selected) >= 86 and len(selected) <= 96
-    assert non_rare_ratio >= 0.98 and non_rare_ratio <= 1.0
+    assert len(selected) >= expected_selected_range[0] and len(selected) <= expected_selected_range[1]
+    assert non_rare_ratio >= expected_non_rare_ratio_range[0] and non_rare_ratio <= expected_non_rare_ratio_range[1]
