@@ -638,5 +638,5 @@ def test_dp_quantiles():
 def test_dp_non_rare(value_counts, expected_selected_range, expected_non_rare_ratio_range):
     epsilon = 1.0
     selected, non_rare_ratio = dp_non_rare(value_counts, epsilon, threshold=10)
-    assert len(selected) >= expected_selected_range[0] and len(selected) <= expected_selected_range[1]
-    assert non_rare_ratio >= expected_non_rare_ratio_range[0] and non_rare_ratio <= expected_non_rare_ratio_range[1]
+    assert expected_selected_range[0] <= len(selected) <= expected_selected_range[1]
+    assert expected_non_rare_ratio_range[0] <= non_rare_ratio <= expected_non_rare_ratio_range[1]
