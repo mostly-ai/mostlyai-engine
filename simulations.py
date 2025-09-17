@@ -138,7 +138,7 @@ engine.encode(workspace_dir=workspace_dir)
 engine.train(
     workspace_dir=workspace_dir,
     max_epochs=max_epochs,
-    max_sequence_window=10000,
+    max_sequence_window=10,
     update_progress=update_progress,
 )
 engine.generate(workspace_dir=workspace_dir, seed_data=seed_data)
