@@ -129,7 +129,7 @@ class HuggingFaceEngine(LanguageEngine):
         self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
         return self.generate(text, sampling_temperature, sampling_top_p)
 
-    def supports_batch_size_optimization(self) -> bool:
+    def can_reuse_schemas(self) -> bool:
         """HuggingFaceEngine cannot reuse LogitsProcessor across different batch sizes."""
         return False
 

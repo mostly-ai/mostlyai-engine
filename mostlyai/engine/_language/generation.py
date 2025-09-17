@@ -288,11 +288,11 @@ def generate(
         _LOG.info(f"{enforce_json_output=}")
 
         # Check if we can optimize by reusing schemas/constraints across batches
-        can_optimize_batches = len(seeded_tgt_columns) == 0 and engine.supports_batch_size_optimization()
+        can_reuse_schemas = len(seeded_tgt_columns) == 0 and engine.can_reuse_schemas()
 
         # Prepare schemas once if optimization is possible
         schemas_for_optimization = None
-        if enforce_json_output and can_optimize_batches:
+        if enforce_json_output and can_reuse_schemas:
             t0 = time.time()
             schemas_for_optimization = create_schemas(
                 size=batch_size,
@@ -314,7 +314,7 @@ def generate(
             ctx_keys = ctx_batch[ctx_primary_key]
 
             # Generate outputs with appropriate method based on JSON constraints
-            if enforce_json_output and not can_optimize_batches:
+            if enforce_json_output and not can_reuse_schemas:
                 t0 = time.time()
                 schemas = create_schemas(
                     seed_df=seed_data_batch,
@@ -330,7 +330,7 @@ def generate(
                     sampling_temperature=sampling_temperature,
                     sampling_top_p=sampling_top_p,
                 )
-            elif enforce_json_output and can_optimize_batches:
+            elif enforce_json_output and can_reuse_schemas:
                 # Use pre-prepared schemas for optimized engines
                 outputs, metrics = engine.generate(
                     encoded_ctx_batch["ctx"].tolist(),

@@ -98,7 +98,7 @@ class VLLMEngine(LanguageEngine):
         return True
 
     def generate(
-        self, text: list[str], sampling_temperature: float, sampling_top_p: float, schemas: list[BaseModel] = None
+        self, text: list[str], sampling_temperature: float, sampling_top_p: float, schemas: list[BaseModel] | None = None
     ) -> tuple[list[int], EngineMetrics]:
         tokenize_kwargs = dict(
             tokenizer=self.tokenizer,
@@ -154,14 +154,13 @@ class VLLMEngine(LanguageEngine):
         self, text: list[str], schemas: Any, sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
         """Generate text with JSON schema constraints using V1 guided decoding."""
-        # VLLMEngine's generate method already supports schemas directly
         schemas_list = list(schemas) if schemas else None
         return self.generate(text, sampling_temperature, sampling_top_p, schemas=schemas_list)
 
-    def supports_batch_size_optimization(self) -> bool:
+    def can_reuse_schemas(self) -> bool:
         """VLLMEngine can handle variable batch sizes since it creates sampling params per sample."""
         return True
 
-    def prepare_for_generation(self, schemas: Any = None) -> None:
-        """Store schemas for reuse across batches when optimization is possible."""
+    def prepare_for_generation(self, schemas: list[BaseModel] | None = None) -> None:
+        """Store schemas for reuse across batches when schema reuse is possible."""
         self._prepared_schemas = list(schemas) if schemas else None

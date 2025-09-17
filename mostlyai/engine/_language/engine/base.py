@@ -52,12 +52,12 @@ class LanguageEngine(ABC):
         """
         return self.generate(text, sampling_temperature, sampling_top_p)
 
-    def supports_batch_size_optimization(self) -> bool:
-        """Whether the engine can reuse processors/constraints across batches with different sizes.
+    def can_reuse_schemas(self) -> bool:
+        """Whether the engine can reuse JSON schema constraints across batches with different sizes.
 
         Returns:
-            True if the engine can handle variable batch sizes with reused constraints,
-            False if constraints need to be recreated for each batch.
+            True if the engine can handle variable batch sizes with reused schema constraints,
+            False if schema constraints need to be recreated for each batch.
         """
         return True
 
