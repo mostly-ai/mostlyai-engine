@@ -77,7 +77,6 @@ class VLLMEngine(LanguageEngine):
             swap_space=0,
             disable_log_stats=True,
             tensor_parallel_size=torch.cuda.device_count(),
-            # gpu_memory_utilization=0.8,  # Reduced from default 0.9 for v1 engine compatibility
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
