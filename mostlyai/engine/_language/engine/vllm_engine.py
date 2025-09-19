@@ -18,8 +18,6 @@ import os
 
 os.environ["VLLM_USE_V1"] = "1"
 
-import contextlib
-import gc
 import time
 from os import PathLike
 
@@ -29,26 +27,14 @@ from pydantic import BaseModel
 from transformers import AutoConfig, AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.config import _get_and_verify_max_len
-from vllm.distributed import destroy_distributed_environment, destroy_model_parallel
+from vllm.distributed import cleanup_dist_env_and_memory
 from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
-from vllm.platforms import current_platform
 from vllm.sampling_params import GuidedDecodingParams
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-
-
-def cleanup_dist_env_and_memory():
-    """Copy from current main of vllm replace by import when possible"""
-    destroy_model_parallel()
-    destroy_distributed_environment()
-    with contextlib.suppress(AssertionError):
-        torch.distributed.destroy_process_group()
-    gc.collect()
-    if not current_platform.is_cpu():
-        torch.cuda.empty_cache()
 
 
 class VLLMEngine(LanguageEngine):
