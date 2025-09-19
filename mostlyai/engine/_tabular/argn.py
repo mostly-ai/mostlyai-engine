@@ -871,6 +871,7 @@ class FlatModel(nn.Module):
         model_size: ModelSizeOrUnits,
         column_order: list[str] | None,
         device: torch.device,
+        with_dp: bool = False,
     ):
         super().__init__()
 
@@ -892,6 +893,7 @@ class FlatModel(nn.Module):
             ctx_cardinalities=self.ctx_cardinalities,
             ctxseq_len_median=self.ctxseq_len_median,
             device=device,
+            with_dp=with_dp,
         )
 
         # sub column embeddings
