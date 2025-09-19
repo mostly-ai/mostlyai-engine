@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -26,10 +25,6 @@ class EngineMetrics:
 
 
 class LanguageEngine(ABC):
-    @abstractmethod
-    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        pass
-
     @abstractmethod
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
@@ -47,3 +42,24 @@ class LanguageEngine(ABC):
     @abstractmethod
     def cleanup(self):
         pass
+
+    def update_json_constraints(self, schemas: list[BaseModel] | None) -> None:
+        """Update JSON schema constraints for the next generation call.
+
+        Args:
+            schemas: Schema constraints to apply to the next generate() call.
+                    None to clear any existing constraints.
+
+        Default implementation does nothing.
+        Engines that support JSON constraints should override this method.
+        """
+        pass
+
+    def can_reuse_schemas(self) -> bool:
+        """Whether the engine can reuse JSON schema constraints across batches with different sizes.
+
+        Returns:
+            True if the engine can handle variable batch sizes with reused schema constraints,
+            False if schema constraints need to be recreated for each batch.
+        """
+        return True

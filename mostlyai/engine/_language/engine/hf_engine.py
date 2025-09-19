@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Generator
 from os import PathLike
 from pathlib import Path
 
@@ -75,15 +74,6 @@ class HuggingFaceEngine(LanguageEngine):
     def supports_json_enforcing(self) -> bool:
         return self._json_enforcing_possible
 
-    def initialize_logits_processors(self, schemas: Generator[BaseModel]):
-        compiled_grammars = create_compiled_grammars(
-            schemas=schemas,
-            tokenizer=self.tokenizer,
-            vocab_size=self._model_config.vocab_size,
-            is_peft_adapter=self.is_peft_adapter,
-        )
-        self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
-
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
@@ -124,3 +114,20 @@ class HuggingFaceEngine(LanguageEngine):
 
     def cleanup(self):
         pass
+
+    def update_json_constraints(self, schemas: list[BaseModel] | None) -> None:
+        """Update JSON schema constraints for the next generation call."""
+        if schemas:
+            compiled_grammars = create_compiled_grammars(
+                schemas=schemas,
+                tokenizer=self.tokenizer,
+                vocab_size=self._model_config.vocab_size,
+                is_peft_adapter=self.is_peft_adapter,
+            )
+            self._logits_processors = [LogitsProcessor(list(compiled_grammars))]
+        else:
+            self._logits_processors = None
+
+    def can_reuse_schemas(self) -> bool:
+        """HuggingFaceEngine cannot reuse LogitsProcessor across different batch sizes."""
+        return False
