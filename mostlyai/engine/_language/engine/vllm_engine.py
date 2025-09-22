@@ -37,6 +37,35 @@ from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
 
 
+def get_dynamic_gpu_memory_utilization(utilization_ratio: float = 0.9) -> float:
+    """
+    Calculate dynamic GPU memory utilization based on available memory.
+
+    Args:
+        utilization_ratio: Fraction of available GPU memory to use (default: 0.9)
+
+    Returns:
+        GPU memory utilization as a fraction.
+    """
+    if not torch.cuda.is_available():
+        return utilization_ratio  # fallback for non-GPU environments
+
+    try:
+        # Get free and total memory from CUDA
+        free_memory, total_memory = torch.cuda.mem_get_info()
+
+        # Use specified ratio of free memory
+        target_memory = free_memory * utilization_ratio
+        utilization = target_memory / total_memory
+
+        # Ensure utilization is within reasonable bounds (0.1 to 0.95)
+        return max(0.1, min(0.95, utilization))
+
+    except Exception:
+        # Fallback to provided ratio if anything goes wrong
+        return utilization_ratio
+
+
 class VLLMEngine(LanguageEngine):
     def __init__(
         self, model_path: PathLike | str, device: torch.device, max_new_tokens: int, tokenizer_max_length: int
@@ -63,7 +92,7 @@ class VLLMEngine(LanguageEngine):
             swap_space=0,
             disable_log_stats=True,
             tensor_parallel_size=torch.cuda.device_count(),
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=get_dynamic_gpu_memory_utilization(),
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,

@@ -169,8 +169,7 @@ def gpu_memory_cleanup(func):
         try:
             result = func(*args, **kwargs)
         finally:
-            # Force GPU memory cleanup with 3 rounds of gc.collect()
-            for _ in range(3):
+            for _ in range(5):
                 gc.collect()
             torch.cuda.empty_cache()
         return result
