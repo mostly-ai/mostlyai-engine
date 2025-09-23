@@ -879,11 +879,14 @@ def generate(
         no_of_model_params = get_no_of_model_parameters(model)
         _LOG.info(f"{no_of_model_params=}")
 
-        load_model_weights(
-            model=model,
-            path=workspace.model_tabular_weights_path,
-            device=device,
-        )
+        if workspace.model_tabular_weights_path.exists():
+            load_model_weights(
+                model=model,
+                path=workspace.model_tabular_weights_path,
+                device=device,
+            )
+        else:
+            _LOG.warning("model weights not found; generating data with an untrained model")
 
         model.to(device)
         model.eval()

@@ -462,6 +462,7 @@ def train(
                 model_size=model_size,
                 column_order=trn_column_order,
                 device=device,
+                with_dp=with_dp,
             )
         _LOG.info(f"model class: {argn.__class__.__name__}")
 
