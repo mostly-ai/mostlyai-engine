@@ -85,6 +85,7 @@ class VLLMEngine(LanguageEngine):
         self.llm = LLM(
             model=peft_config.base_model_name_or_path,
             tokenizer=model_path,
+            download_dir=os.environ.get("HF_HOME"),
             max_model_len=min(config_max_model_len, self.tokenizer_max_length + max_new_tokens),
             enable_lora=True,
             dtype=torch.bfloat16 if is_bf16_supported(device) else torch.float16,
