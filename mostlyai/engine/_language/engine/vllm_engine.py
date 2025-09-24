@@ -17,8 +17,6 @@ from __future__ import annotations
 import os
 
 os.environ["VLLM_USE_V1"] = "1"
-os.environ["HF_HUB_DISABLE_XET"] = "1"
-os.environ["HF_XET_CHUNK_CACHE_SIZE_BYTES"] = "0"
 
 
 import time
