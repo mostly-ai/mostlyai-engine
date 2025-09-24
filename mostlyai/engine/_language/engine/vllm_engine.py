@@ -83,12 +83,9 @@ class VLLMEngine(LanguageEngine):
             base_config, tokenizer_config=None, max_model_len=None, disable_sliding_window=False, sliding_window=None
         )
 
-        hf_home = os.environ.get("HF_HOME")
-
         self.llm = LLM(
             model=peft_config.base_model_name_or_path,
             tokenizer=model_path,
-            download_dir=os.path.join(hf_home, "hub") if hf_home else None,
             max_model_len=min(config_max_model_len, self.tokenizer_max_length + max_new_tokens),
             enable_lora=True,
             dtype=torch.bfloat16 if is_bf16_supported(device) else torch.float16,
