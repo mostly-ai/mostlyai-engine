@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import abc
+import functools
+import gc
 import logging
 import time
 
@@ -157,3 +159,18 @@ def check_early_training_exit(workspace: Workspace, trn_cnt: int, val_cnt: int) 
     trn_files = workspace.encoded_data_trn.fetch_all()
     val_files = workspace.encoded_data_val.fetch_all()
     return any((len(trn_files) == 0, len(val_files) == 0, trn_cnt == 0, val_cnt == 0))
+
+
+def gpu_memory_cleanup(func):
+    """Decorator to clean up GPU memory after function execution."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        finally:
+            for _ in range(5):
+                gc.collect()
+            torch.cuda.empty_cache()
+
+    return wrapper

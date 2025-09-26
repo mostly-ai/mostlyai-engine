@@ -287,15 +287,18 @@ def generate(
         enforce_json_output = engine.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
 
-        initialize_logits_processors_once = len(seeded_tgt_columns) == 0 and engine.__class__.__name__ == "VLLMEngine"
-        if enforce_json_output and initialize_logits_processors_once:
+        # Check if we can optimize by reusing schemas/constraints across batches
+        can_reuse_schemas = len(seeded_tgt_columns) == 0 and engine.can_reuse_schemas()
+
+        # Prepare schemas once if optimization is possible
+        if enforce_json_output and can_reuse_schemas:
             t0 = time.time()
-            schemas = create_schemas(
+            schemas_for_optimization = create_schemas(
                 size=batch_size,
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.initialize_logits_processors(schemas=schemas)
+            engine.update_json_constraints(schemas_for_optimization)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -309,16 +312,21 @@ def generate(
             ctx_batch = ctx_data.iloc[samples_processed : samples_processed + batch_size]
             ctx_keys = ctx_batch[ctx_primary_key]
 
-            if enforce_json_output and not initialize_logits_processors_once:
+            # Update JSON constraints if needed per-batch (when schema reuse is not possible)
+            if enforce_json_output and not can_reuse_schemas:
                 t0 = time.time()
                 schemas = create_schemas(
                     seed_df=seed_data_batch,
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.initialize_logits_processors(schemas=schemas)
+                engine.update_json_constraints(schemas)
                 total_logits_processor_build_time += time.time() - t0
+            elif not enforce_json_output:
+                # Clear any existing constraints if JSON enforcement is disabled
+                engine.update_json_constraints(None)
 
+            # Generate outputs using single generate method
             outputs, metrics = engine.generate(
                 encoded_ctx_batch["ctx"].tolist(),
                 sampling_temperature=sampling_temperature,
