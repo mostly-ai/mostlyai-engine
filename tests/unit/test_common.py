@@ -24,7 +24,6 @@ from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
-    CtxSequenceLengthError,
     apply_encoding_type_dtypes,
     dp_non_rare,
     dp_quantiles,
@@ -506,36 +505,6 @@ class TestGetCtxSequenceLength:
         assert get_ctx_sequence_length(stats, key="max") == {"ctxseq:t1": 3}
         assert get_ctx_sequence_length(stats, key="median") == {"ctxseq:t1": 2}
 
-    def test_raise_exception_when_cols_not_converge(self):
-        stats = {
-            "columns": {
-                "table0.col0": {
-                    ARGN_PROCESSOR: "ctxflt",
-                    ARGN_TABLE: "t0",
-                    ARGN_COLUMN: "c0",
-                },
-                "table1.col0": {
-                    ARGN_PROCESSOR: "ctxseq",
-                    "seq_len": {
-                        "any-key": 2,
-                    },
-                    ARGN_TABLE: "t1",
-                    ARGN_COLUMN: "c1",
-                },
-                "table1.col1": {
-                    ARGN_PROCESSOR: "ctxseq",
-                    "seq_len": {
-                        "any-key": 9,
-                    },
-                    ARGN_TABLE: "t1",
-                    ARGN_COLUMN: "c2",
-                },
-            }
-        }
-
-        with pytest.raises(CtxSequenceLengthError):
-            assert get_ctx_sequence_length(stats, key="any-key")
-
 
 @pytest.mark.parametrize(
     "columns",
@@ -656,11 +625,18 @@ def test_dp_quantiles():
     assert q5_dp is None and q95_dp is None
 
 
-def test_dp_non_rare():
-    value_counts = {i: i for i in range(1, 101)}
+@pytest.mark.parametrize(
+    "value_counts, expected_selected_range, expected_non_rare_ratio_range",
+    [
+        # given epsilon=1.0, the noise added to the count should be within the range [-5, 5]
+        # so in the worst case, we will have at least 4 and at most at most 14 rare categories
+        ({i: i for i in range(1, 101)}, [86, 96], [0.98, 1.0]),
+        # all the values of the column are null, hence empty value_counts
+        ({}, [0, 0], [0, 0]),
+    ],
+)
+def test_dp_non_rare(value_counts, expected_selected_range, expected_non_rare_ratio_range):
     epsilon = 1.0
     selected, non_rare_ratio = dp_non_rare(value_counts, epsilon, threshold=10)
-    # given epsilon=1.0, the noise added to the count should be within the range [-5, 5]
-    # so in the worst case, we will have at least 4 and at most at most 14 rare categories
-    assert len(selected) >= 86 and len(selected) <= 96
-    assert non_rare_ratio >= 0.98 and non_rare_ratio <= 1.0
+    assert expected_selected_range[0] <= len(selected) <= expected_selected_range[1]
+    assert expected_non_rare_ratio_range[0] <= non_rare_ratio <= expected_non_rare_ratio_range[1]

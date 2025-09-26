@@ -56,6 +56,11 @@ SLEN_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # seque
 SDEC_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
 
+# the latest version of the model uses SIDX/SLEN/RIDX positional column
+DEFAULT_HAS_SLEN = True
+DEFAULT_HAS_RIDX = True
+DEFAULT_HAS_SDEC = False
+
 ANALYZE_MIN_MAX_TOP_N = 1000  # the number of min/max values to be kept from each partition
 
 # the minimal number of min/max values to trigger the reduction; if less, the min/max will be reduced to None
@@ -318,6 +323,7 @@ def get_argn_name(
 def get_cardinalities(
     stats: dict, has_slen: bool | None = None, has_ridx: bool | None = None, has_sdec: bool | None = None
 ) -> dict[str, int]:
+    # the latest version of the model uses SIDX/SLEN/RIDX positional column (applies to sequential model only)
     cardinalities: dict[str, int] = {}
 
     if stats.get("is_sequential", False):
@@ -401,12 +407,11 @@ def get_sub_columns_lookup(
     return sub_cols_lookup
 
 
-class CtxSequenceLengthError(Exception):
-    """Error raised when the cols of the same table do not have the same stats value"""
-
-
 def get_ctx_sequence_length(ctx_stats: dict, key: str) -> dict[str, int]:
-    seq_stats: dict[str, int] = {}
+    """
+    Get the stats of sequence lengths from the first column_stats of each context table
+    """
+    ctxseq_stats: dict[str, int] = {}
 
     for column_stats in ctx_stats.get("columns", {}).values():
         if "seq_len" in column_stats:
@@ -414,12 +419,10 @@ def get_ctx_sequence_length(ctx_stats: dict, key: str) -> dict[str, int]:
                 argn_processor=column_stats[ARGN_PROCESSOR],
                 argn_table=column_stats[ARGN_TABLE],
             )
-            cur_value = seq_stats.get(table)
-            if cur_value and cur_value != column_stats["seq_len"][key]:
-                raise CtxSequenceLengthError()
-            seq_stats[table] = column_stats["seq_len"][key]
+            if table not in ctxseq_stats:
+                ctxseq_stats[table] = column_stats["seq_len"][key]
 
-    return seq_stats
+    return ctxseq_stats
 
 
 def get_max_data_points_per_sample(stats: dict) -> int:
@@ -541,12 +544,11 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
 
 
 def get_positional_cardinalities(
-    max_seq_len: int, has_slen: bool | None, has_ridx: bool | None, has_sdec: bool | None
+    max_seq_len: int, has_slen: bool | None = None, has_ridx: bool | None = None, has_sdec: bool | None = None
 ) -> dict[str, int]:
-    # the latest version of the model uses SIDX/SLEN/RIDX positional column
-    has_slen = has_slen if has_slen is not None else True
-    has_ridx = has_ridx if has_ridx is not None else True
-    has_sdec = has_sdec if has_sdec is not None else False
+    has_slen = has_slen if has_slen is not None else DEFAULT_HAS_SLEN
+    has_ridx = has_ridx if has_ridx is not None else DEFAULT_HAS_RIDX
+    has_sdec = has_sdec if has_sdec is not None else DEFAULT_HAS_SDEC
 
     if max_seq_len < SIDX_RIDX_DIGIT_ENCODING_THRESHOLD:
         # encode positional columns as numeric_discrete
@@ -867,6 +869,7 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
     noisy_counts = np.clip(np.array(list(value_counts.values())) + noise, 0, None).astype(int)
     for i, cat in enumerate(value_counts):
         value_counts[cat] = noisy_counts[i]
+    # NOTE: total_counts can be 0 in the edge case when the column only has null values
     total_counts = sum(value_counts.values())
 
     # 2. Collect all categories whose noisy count >= threshold
@@ -874,7 +877,7 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
     # 3. Compute the non-rare ratio
     noisy_total_counts = sum(selected.values())
-    non_rare_ratio = noisy_total_counts / total_counts
+    non_rare_ratio = noisy_total_counts / total_counts if total_counts > 0 else 0
 
     return list(selected.keys()), non_rare_ratio
 

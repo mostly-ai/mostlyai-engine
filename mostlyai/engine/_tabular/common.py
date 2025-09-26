@@ -20,11 +20,18 @@ import torch
 
 _LOG = logging.getLogger(__name__)
 
+DPLSTM_SUFFIXES: tuple = ("ih.weight", "ih.bias", "hh.weight", "hh.bias")
 
-def load_model_weights(model: torch.nn.Module, path: Path, device: torch.device):
-    try:
-        t00 = time.time()
-        model.load_state_dict(torch.load(f=path, map_location=device, weights_only=True))
-        _LOG.info(f"loaded model weights in {time.time() - t00:.2f}s")
-    except Exception as e:
-        _LOG.warning(f"failed to load model weights: {e}")
+
+def load_model_weights(model: torch.nn.Module, path: Path, device: torch.device) -> None:
+    t0 = time.time()
+    incompatible_keys = model.load_state_dict(torch.load(f=path, map_location=device, weights_only=True), strict=False)
+    missing_keys = incompatible_keys.missing_keys
+    unexpected_keys = incompatible_keys.unexpected_keys
+    # for DP-trained models, we expect extra keys from the DPLSTM layers (which is fine to ignore because we use standard LSTM layers during generation)
+    # but if there're any other missing or unexpected keys, an error should be raised
+    if len(missing_keys) > 0 or any(not k.endswith(DPLSTM_SUFFIXES) for k in unexpected_keys):
+        raise RuntimeError(
+            f"failed to load model weights due to incompatibility: {missing_keys = }, {unexpected_keys = }"
+        )
+    _LOG.info(f"loaded model weights in {time.time() - t0:.2f}s")
