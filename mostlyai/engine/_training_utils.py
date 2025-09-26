@@ -167,11 +167,10 @@ def gpu_memory_cleanup(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            result = func(*args, **kwargs)
+            return func(*args, **kwargs)
         finally:
             for _ in range(5):
                 gc.collect()
             torch.cuda.empty_cache()
-        return result
 
     return wrapper
