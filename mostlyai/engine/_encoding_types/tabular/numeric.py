@@ -401,10 +401,10 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
     # replace extreme values with min/max
     if stats["min"] is not None:
         reduced_min = _type_safe_numeric_series([stats["min"]], dtype).iloc[0]
-        values.loc[values < reduced_min] = reduced_min
+        values = values.where(values >= reduced_min, reduced_min)
     if stats["max"] is not None:
         reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
-        values.loc[values > reduced_max] = reduced_max
+        values = values.where(values <= reduced_max, reduced_max)
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
     is_not_nan = df["nan"] == 0

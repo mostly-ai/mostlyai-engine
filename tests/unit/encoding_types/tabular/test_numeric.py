@@ -420,6 +420,29 @@ class TestDigitEncode:
         encoded = encode_numeric(values, stats)
         pd.testing.assert_frame_equal(encoded, expected, check_index_type=False, check_dtype=False)
 
+    def test_pyarrow_dtype(self):
+        # converting pyarrow dtype to nullable dtype in some scenarios flips the `writable` flag on pd.DataFrame/Series
+        # which reults in .loc assignments being forbidden; this smoke test is to ensure we can work with pyarrow dtypes
+        stats = {
+            "encoding_type": ModelEncodingType.tabular_numeric_digit.value,
+            "cardinalities": {"E1": 10, "E0": 10},
+            "has_neg": False,
+            "has_nan": False,
+            "min_digits": _digit_to_int("0000000000000000000" + "00000000"),
+            "max_digits": _digit_to_int("0000000000000000099" + "00000000"),
+            "max_decimal": 1,
+            "min_decimal": 0,
+            "min": 0.0,
+            "max": 99.0,
+        }
+        values = pd.Series(np.repeat([10], 10), name="vals", dtype="int64[pyarrow]")
+        expected = pd.DataFrame(
+            [[1, 0]] * 10,  # 10
+            columns=["E1", "E0"],
+        )
+        encoded = encode_numeric(values, stats)
+        pd.testing.assert_frame_equal(encoded, expected)
+
 
 class TestDigitDecode:
     @pytest.fixture
