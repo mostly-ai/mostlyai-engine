@@ -31,6 +31,8 @@ def train(
     batch_size: int | None = None,
     gradient_accumulation_steps: int | None = None,
     enable_flexible_generation: bool = True,
+    # Tabular-only optional flag for predictor initialization
+    weight_initialization: bool | None = None,
     max_sequence_window: int | None = None,
     differential_privacy: DifferentialPrivacyConfig | dict | None = None,
     model_state_strategy: ModelStateStrategy = ModelStateStrategy.reset,
@@ -74,6 +76,8 @@ def train(
             batch_size=batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             enable_flexible_generation=enable_flexible_generation,
+            # forward when supported; ignore if None
+            weight_initialization=bool(weight_initialization) if weight_initialization is not None else False,
             differential_privacy=differential_privacy,
             update_progress=update_progress,
             upload_model_data_callback=upload_model_data_callback,
