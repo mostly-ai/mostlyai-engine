@@ -590,6 +590,7 @@ class TestTabularTrainingStrategy:
         # it's actually a fresh training, so the progress will look different
         with pytest.raises(AssertionError):
             pd.testing.assert_frame_equal(progress_resume.iloc[:2], progress_resume_without_checkpoint.iloc[:2])
+        generate(workspace_dir=workspace_before_training)
 
 
 def test_seed_generation(tmp_path):

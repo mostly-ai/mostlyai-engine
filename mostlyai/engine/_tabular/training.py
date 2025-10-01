@@ -63,6 +63,7 @@ from mostlyai.engine._training_utils import (
     ModelCheckpoint,
     ProgressMessage,
     check_early_training_exit,
+    gpu_memory_cleanup,
 )
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
 from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy
@@ -337,6 +338,7 @@ def _calculate_average_trn_loss(trn_sample_losses: list[torch.Tensor], n: int | 
 ################
 
 
+@gpu_memory_cleanup
 def train(
     *,
     model: str = "MOSTLY_AI/Medium",
@@ -462,6 +464,7 @@ def train(
                 model_size=model_size,
                 column_order=trn_column_order,
                 device=device,
+                with_dp=with_dp,
             )
         _LOG.info(f"model class: {argn.__class__.__name__}")
 
@@ -866,4 +869,5 @@ def train(
             progress.update(completed=steps, total=steps, message=progress_message)
             # ensure everything gets uploaded
             upload_model_data_callback()
+
     _LOG.info(f"TRAIN_TABULAR finished in {time.time() - t0:.2f}s")

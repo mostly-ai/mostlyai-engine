@@ -63,6 +63,7 @@ from mostlyai.engine._training_utils import (
     ModelCheckpoint,
     ProgressMessage,
     check_early_training_exit,
+    gpu_memory_cleanup,
 )
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
 from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy
@@ -277,6 +278,7 @@ def _gpu_estimate_max_batch_size(
     return batch_size
 
 
+@gpu_memory_cleanup
 def train(
     *,
     model: str = "MOSTLY_AI/LSTMFromScratch-3m",
@@ -865,4 +867,5 @@ def train(
             )
             # ensure everything gets uploaded
             upload_model_data_callback()
+
     _LOG.info(f"TRAIN_LANGUAGE finished in {time.time() - t0_:.2f}s")

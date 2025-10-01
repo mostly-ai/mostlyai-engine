@@ -1,6 +1,6 @@
 [project]
 name = "mostlyai-engine"
-version = "1.5.5"
+version = "1.5.7"
 description = "Synthetic Data Engine"
 authors = [{ name = "MOSTLY AI", email = "dev@mostly.ai" }]
 requires-python = ">=3.10"
@@ -25,31 +25,31 @@ classifiers = [
 ]
 
 dependencies = [
-    "setuptools>=77.0.3",  # similar to vllm 0.9.1
+    "setuptools>=77.0.3",  # similar to vllm 0.10.1.1
     "numpy>=2.0.0",
     "pandas~=2.2.0",
     "pyarrow>=16.0.0",
     "joblib>=1.4.2",
     "psutil>=5.9.5,<6",  # upgrade when colab psutil is updated
     "tokenizers>=0.21.0",
-    "transformers>=4.51.0,<4.54.0",  # update when vllm is updated to >0.10.1
+    "transformers>=4.55.0",  # updated (removed ,<4.54.0), similar to vllm 0.10.1.1
     "datasets>=3.0.0",
     "accelerate>=1.5.0",
     "peft>=0.12.0",
     "huggingface-hub[hf-xet]>=0.30.2",
     "opacus>=1.5.4",
-    "xgrammar>=0.1.19",  # for vllm 0.9.1 compatibility
+    "xgrammar>=0.1.21",  # for vllm 0.10.1.1 compatibility (=0.1.21)
     "json-repair>=0.47.0",
-    "torch>=2.7.0,<2.7.1",  # for vllm 0.9.1 compatibility
-    "torchaudio>=2.7.0,<2.7.1",  # for vllm 0.9.1 compatibility
-    "torchvision>=0.22.0,<0.22.1"  # for vllm 0.9.1 compatibility
+    "torch>=2.8.0,<2.9.0",  # for vllm 0.10.2 compatibility
+    "torchaudio>=2.8.0,<2.9.0",  # for vllm 0.10.2 compatibility
+    "torchvision>=0.23.0,<0.24.0"  # for vllm 0.10.2 compatibility
 ]
 
 [project.optional-dependencies]
 gpu = [
     "bitsandbytes==0.42.0; sys_platform == 'darwin'",
     "bitsandbytes>=0.45.5; sys_platform == 'linux'",
-    "vllm==0.9.1; sys_platform == 'linux' or sys_platform == 'darwin'",
+    "vllm==0.10.2; sys_platform == 'linux' or sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
