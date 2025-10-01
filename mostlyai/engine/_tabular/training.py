@@ -58,6 +58,7 @@ from mostlyai.engine._tabular.argn import (
     get_no_of_model_parameters,
 )
 from mostlyai.engine._tabular.common import load_model_weights
+from mostlyai.engine._tabular.initialization import apply_predictor_initialization
 from mostlyai.engine._training_utils import (
     EarlyStopper,
     ModelCheckpoint,
@@ -348,6 +349,8 @@ def train(
     gradient_accumulation_steps: int | None = None,
     max_sequence_window: int = 100,
     enable_flexible_generation: bool = True,
+    # Optional predictor initialization for flat tabular models
+    weight_initialization: bool = False,
     differential_privacy: DifferentialPrivacyConfig | dict | None = None,
     upload_model_data_callback: Callable | None = None,
     model_state_strategy: ModelStateStrategy | str = ModelStateStrategy.reset,
@@ -466,6 +469,15 @@ def train(
                 device=device,
                 with_dp=with_dp,
             )
+            # Optional empirical bias init and Xavier weight init applied post-construction
+            # NOTE: Only affects initial predictor biases/weights; no changes to calibration/finetuning.
+            if hasattr(argn, "predictors") and weight_initialization:
+                apply_predictor_initialization(
+                    argn=argn,
+                    workspace=workspace,
+                    tgt_cardinalities=tgt_cardinalities,
+                    alpha=1.0,
+                )
         _LOG.info(f"model class: {argn.__class__.__name__}")
 
         if isinstance(model_state_strategy, str):
