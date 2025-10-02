@@ -1,0 +1,10 @@
+{
+    "survived": "TABULAR_NUMERIC_AUTO",
+    "pclass": "TABULAR_NUMERIC_AUTO",
+    "sex": "TABULAR_CATEGORICAL",
+    "age": "TABULAR_NUMERIC_AUTO",
+    "sibsp": "TABULAR_NUMERIC_AUTO",
+    "parch": "TABULAR_NUMERIC_AUTO",
+    "fare": "TABULAR_NUMERIC_AUTO",
+    "embarked": "TABULAR_CATEGORICAL"
+}

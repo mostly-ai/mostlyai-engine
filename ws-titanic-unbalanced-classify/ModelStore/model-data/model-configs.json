@@ -1,0 +1,38 @@
+{
+    "model_id": "MOSTLY_AI/Medium",
+    "model_units": {
+        "embedder@tgt:t0/c0__cat": 3,
+        "embedder@tgt:t1/c1__cat": 4,
+        "embedder@tgt:t2/c2__cat": 3,
+        "embedder@tgt:t3/c3__cat": 10,
+        "embedder@tgt:t4/c4__cat": 8,
+        "embedder@tgt:t5/c5__cat": 9,
+        "embedder@tgt:t6/c6__cat": 10,
+        "embedder@tgt:t7/c7__cat": 4,
+        "regressor@tgt:t0/c0__cat": [
+            16
+        ],
+        "regressor@tgt:t1/c1__cat": [
+            16
+        ],
+        "regressor@tgt:t2/c2__cat": [
+            16
+        ],
+        "regressor@tgt:t3/c3__cat": [
+            64
+        ],
+        "regressor@tgt:t4/c4__cat": [
+            32
+        ],
+        "regressor@tgt:t5/c5__cat": [
+            32
+        ],
+        "regressor@tgt:t6/c6__cat": [
+            64
+        ],
+        "regressor@tgt:t7/c7__cat": [
+            16
+        ]
+    },
+    "enable_flexible_generation": true
+}
