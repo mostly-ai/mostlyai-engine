@@ -44,6 +44,7 @@ from mostlyai.engine._common import (
     get_cardinalities,
     get_columns_from_cardinalities,
     get_ctx_sequence_length,
+    get_empirical_probs_for_predictor_init,
     get_max_data_points_per_sample,
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
@@ -58,7 +59,6 @@ from mostlyai.engine._tabular.argn import (
     get_no_of_model_parameters,
 )
 from mostlyai.engine._tabular.common import load_model_weights
-from mostlyai.engine._tabular.initialization import apply_predictor_initialization
 from mostlyai.engine._training_utils import (
     EarlyStopper,
     ModelCheckpoint,
@@ -349,7 +349,7 @@ def train(
     gradient_accumulation_steps: int | None = None,
     max_sequence_window: int = 100,
     enable_flexible_generation: bool = True,
-    # Optional predictor initialization for flat tabular models
+    # TODO: temporary flag for easy experimentation; to be removed later
     weight_initialization: bool = False,
     differential_privacy: DifferentialPrivacyConfig | dict | None = None,
     upload_model_data_callback: Callable | None = None,
@@ -440,6 +440,12 @@ def train(
         _LOG.info(f"{max_sequence_window=}")
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
+        empirical_probs_for_predictor_init = (
+            get_empirical_probs_for_predictor_init(workspace.encoded_data_trn.fetch_all()[0], tgt_cardinalities)
+            if weight_initialization and not with_dp
+            else None
+        )
+
         # the line below fixes issue with growing epoch time for later epochs
         # https://discuss.pytorch.org/t/training-time-gets-slower-and-slower-on-cpu/145483
         torch.set_flush_denormal(True)
@@ -447,37 +453,24 @@ def train(
         _LOG.info("create training model")
         model_checkpoint = TabularModelCheckpoint(workspace=workspace)
         argn: SequentialModel | FlatModel
+        model_kwargs = {
+            "tgt_cardinalities": tgt_cardinalities,
+            "ctx_cardinalities": ctx_cardinalities,
+            "ctxseq_len_median": ctx_seq_len_median,
+            "model_size": model_size,
+            "column_order": trn_column_order,
+            "device": device,
+            "with_dp": with_dp,  # this flag decides whether the model is initialized with LSTM or DPLSTM layers
+            "empirical_probs_for_predictor_init": empirical_probs_for_predictor_init,
+        }
         if is_sequential:
             argn = SequentialModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
+                **model_kwargs,
                 tgt_seq_len_median=tgt_seq_len_median,
                 tgt_seq_len_max=tgt_seq_len_max,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_size,
-                column_order=trn_column_order,
-                device=device,
-                with_dp=with_dp,  # this flag decides whether the model is initialized with LSTM or DPLSTM layers
             )
         else:
-            argn = FlatModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_size,
-                column_order=trn_column_order,
-                device=device,
-                with_dp=with_dp,
-            )
-            # Optional empirical bias init and Xavier weight init applied post-construction
-            # NOTE: Only affects initial predictor biases/weights; no changes to calibration/finetuning.
-            if hasattr(argn, "predictors") and weight_initialization:
-                apply_predictor_initialization(
-                    argn=argn,
-                    workspace=workspace,
-                    tgt_cardinalities=tgt_cardinalities,
-                    alpha=1.0,
-                )
+            argn = FlatModel(**model_kwargs)
         _LOG.info(f"model class: {argn.__class__.__name__}")
 
         if isinstance(model_state_strategy, str):

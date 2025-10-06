@@ -618,6 +618,26 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
+def get_empirical_probs_for_predictor_init(
+    first_encoded_part: Path, tgt_cardinalities: dict[str, int], alpha: float = 1.0
+) -> dict[str, np.ndarray]:
+    counts_map: dict[str, np.ndarray] = {
+        sub_col: np.zeros(int(k), dtype=np.float64) for sub_col, k in tgt_cardinalities.items()
+    }
+    df_part = pd.read_parquet(first_encoded_part)
+    assert set(tgt_cardinalities.keys()) == set(df_part.columns)
+    for sub_col in df_part.columns:
+        vc = df_part[sub_col].value_counts().to_dict()
+        for code, count in vc.items():
+            counts_map[sub_col][int(code)] += float(count)
+    # estimate the probabilities and apply Laplace smoothing
+    for sub_col, counts in counts_map.items():
+        denom = counts.sum() + alpha * counts.shape[0]
+        probs = np.clip((counts + alpha) / max(float(denom), 1e-12), a_min=1e-12, a_max=None)
+        counts_map[sub_col] = probs
+    return counts_map
+
+
 def _get_log_histogram_edges(idx: int, bins: int = 64) -> tuple[float, float]:
     """
     Modified from OpenDP's SmartNoise SDK (MIT License)

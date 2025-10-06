@@ -702,6 +702,8 @@ class Predictors(nn.Module):
         cardinalities: dict[str, int],
         regressors_dims: dict[str, int],
         device: torch.device,
+        empirical_probs: dict[str, int] | None = None,
+        alpha: float = 1.0,  # additive smoothing strength for Laplace smoothing
     ):
         super().__init__()
 
@@ -710,10 +712,22 @@ class Predictors(nn.Module):
         self.device = device
 
         self.predictors = nn.ModuleDict()
+        empirical_probs = empirical_probs or {}
 
         for sub_col, dim_output in self.cardinalities.items():
             dim_input = self.regressors_dims[sub_col]
             self.predictors[sub_col] = nn.Linear(in_features=dim_input, out_features=dim_output, device=self.device)
+            if empirical_probs.get(sub_col) is not None:
+                _LOG.info(f"initializing predictor bias for {sub_col} with empirical log probabilities")
+                nn.init.xavier_uniform_(self.predictors[sub_col].weight)
+                with torch.no_grad():
+                    self.predictors[sub_col].bias.copy_(
+                        torch.as_tensor(
+                            np.log(empirical_probs[sub_col]),
+                            dtype=self.predictors[sub_col].bias.dtype,
+                            device=device,
+                        )
+                    )
 
     def forward(self, x: torch.Tensor, sub_col: str) -> torch.Tensor:
         return self.predictors[sub_col](x)
@@ -872,6 +886,7 @@ class FlatModel(nn.Module):
         column_order: list[str] | None,
         device: torch.device,
         with_dp: bool = False,
+        empirical_probs_for_predictor_init: dict[str, int] | None = None,
     ):
         super().__init__()
 
@@ -926,6 +941,7 @@ class FlatModel(nn.Module):
             cardinalities=self.tgt_cardinalities,
             regressors_dims=self.regressors.dims_output,
             device=device,
+            empirical_probs=empirical_probs_for_predictor_init if not with_dp else None,
         )
 
     def _handle_context(
@@ -1155,6 +1171,7 @@ class SequentialModel(nn.Module):
         column_order: list[str] | None,
         device: torch.device,
         with_dp: bool = False,
+        empirical_probs_for_predictor_init: dict[str, int] | None = None,
     ):
         super().__init__()
 
@@ -1228,6 +1245,7 @@ class SequentialModel(nn.Module):
             cardinalities=self.tgt_cardinalities,
             regressors_dims=self.regressors.dims_output,
             device=device,
+            empirical_probs=empirical_probs_for_predictor_init if not with_dp else None,
         )
 
     def _repeat_flat_context(self, flat_ctx: list[torch.Tensor], repetition: int) -> list[torch.Tensor]:
