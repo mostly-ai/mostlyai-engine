@@ -441,7 +441,9 @@ def train(
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
         empirical_probs_for_predictor_init = (
-            get_empirical_probs_for_predictor_init(workspace.encoded_data_trn.fetch_all()[0], tgt_cardinalities)
+            get_empirical_probs_for_predictor_init(
+                workspace.encoded_data_trn.fetch_all()[0], tgt_cardinalities, is_sequential
+            )
             if weight_initialization and not with_dp
             else None
         )

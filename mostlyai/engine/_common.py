@@ -619,17 +619,35 @@ class FixedSizeSampleBuffer:
 
 
 def get_empirical_probs_for_predictor_init(
-    first_encoded_part: Path, tgt_cardinalities: dict[str, int], alpha: float = 1.0
+    first_encoded_part: Path, tgt_cardinalities: dict[str, int], is_sequential: bool, alpha: float = 1.0
 ) -> dict[str, np.ndarray]:
+    # figure out which columns have NaN from the list of sub columns
+    has_nan_map = {col: False for col in get_columns_from_cardinalities(tgt_cardinalities)}
+    for sub_col in tgt_cardinalities.keys():
+        col, sub_col_suffix = sub_col.split(PREFIX_SUB_COLUMN)
+        if sub_col_suffix == "nan":
+            has_nan_map[col] = True
     counts_map: dict[str, np.ndarray] = {
         sub_col: np.zeros(int(k), dtype=np.float64) for sub_col, k in tgt_cardinalities.items()
     }
     df_part = pd.read_parquet(first_encoded_part)
-    assert set(tgt_cardinalities.keys()) == set(df_part.columns)
-    for sub_col in df_part.columns:
-        vc = df_part[sub_col].value_counts().to_dict()
-        for code, count in vc.items():
-            counts_map[sub_col][int(code)] += float(count)
+    # for sequential models, we will use the probs of the first time step for weight initialization
+    if is_sequential:
+        for sub_col in df_part.columns:
+            df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
+    for sub_col in tgt_cardinalities.keys():
+        col, _ = sub_col.split(PREFIX_SUB_COLUMN)
+        nan_sub_col = sub_col.split(PREFIX_SUB_COLUMN)[0] + PREFIX_SUB_COLUMN + "nan"
+        vc: dict[int, int]
+        if has_nan_map[col] is True and sub_col != nan_sub_col and (df_part[nan_sub_col] == 0).sum() > 0:
+            # exclude NaN rows from the count if
+            # - the column has NaN but has at least one non-NaN row
+            # - the current sub column is not the NaN sub column
+            vc = df_part[df_part[nan_sub_col] == 0][sub_col].value_counts().to_dict()
+        else:
+            vc = df_part[sub_col].value_counts().to_dict()
+        for category_code, count in vc.items():
+            counts_map[sub_col][category_code] += count
     # estimate the probabilities and apply Laplace smoothing
     for sub_col, counts in counts_map.items():
         denom = counts.sum() + alpha * counts.shape[0]

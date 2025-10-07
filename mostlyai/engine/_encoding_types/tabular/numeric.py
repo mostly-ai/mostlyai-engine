@@ -114,8 +114,8 @@ def split_sub_columns_digit(
 
     columns = [f"E{i}" for i in np.arange(max_decimal, min_decimal - 1, -1)]
     if values.isna().all():
-        # when all values are NaN, fill each digit position with random digits [0-9]
-        df = pd.DataFrame(np.random.randint(0, 10, size=(len(values), len(columns))), columns=columns)
+        # handle special case when all values are nan
+        df = pd.DataFrame({c: [0] * len(values) for c in columns})
     else:
         # convert to float64 as `np.format_float_positional` doesn't support Float64
         values = values.astype("float64")
@@ -133,35 +133,8 @@ def split_sub_columns_digit(
         values_str = values_str.str[(49 - max_decimal) : (49 - min_decimal + 1)]
         df = values_str.str.split("", n=max_decimal - min_decimal + 2, expand=True)
         df = df.drop(columns=[0, max_decimal - min_decimal + 2])
+        df = df.fillna("0")
         df.columns = columns
-        # For rows where original value is NaN, fill digit positions by sampling
-        # from the empirical per-digit distributions estimated from non-NaN rows.
-        nan_rows = values.isna().to_numpy()
-        if nan_rows.any():
-            non_nan_mask = ~nan_rows
-            digits = np.array([str(d) for d in range(10)])
-            # Build probability vectors for each digit column based on non-NaN rows
-            prob_list: list[np.ndarray] = []
-            for col in columns:
-                vc = df.loc[non_nan_mask, col].value_counts(normalize=True)
-                if vc.empty:
-                    probs = np.full(10, 1.0 / 10.0, dtype=float)
-                else:
-                    probs = np.zeros(10, dtype=float)
-                    for ch, p in vc.items():
-                        if isinstance(ch, str) and len(ch) == 1 and ch.isdigit():
-                            probs[int(ch)] = float(p)
-                    if probs.sum() <= 0:
-                        probs = np.full(10, 1.0 / 10.0, dtype=float)
-                    else:
-                        probs = probs / probs.sum()
-                prob_list.append(probs)
-            # Sample for NaN rows per column
-            n_nan = int(nan_rows.sum())
-            sampled = np.empty((n_nan, len(columns)), dtype=object)
-            for j, probs in enumerate(prob_list):
-                sampled[:, j] = np.random.choice(digits, size=n_nan, p=probs)
-            df.loc[nan_rows, :] = sampled
     df.insert(0, "nan", values.isna())
     df.insert(1, "neg", (~values.isna()) & (values < 0))
     df = df.astype("int")
@@ -434,11 +407,12 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
         values = values.where((values.isna()) | (values <= reduced_max), reduced_max)
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
+    is_not_nan = df["nan"] == 0
     # normalize values to `[0, max_digit-min_digit]`
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         key = f"E{d}"
         # subtract minimum value
-        df[key] = df[key] - stats["min_digits"][key]
+        df[key] = df[key].where(~is_not_nan, df[key] - stats["min_digits"][key])
         # ensure that any value is mapped onto valid value range
         df[key] = np.minimum(df[key], stats["max_digits"][key] - stats["min_digits"][key])
         df[key] = np.maximum(df[key], 0)

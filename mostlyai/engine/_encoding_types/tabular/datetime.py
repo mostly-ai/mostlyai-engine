@@ -170,50 +170,14 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
         values.loc[values > reduced_max] = reduced_max
     # split to sub_columns
     df = split_sub_columns_datetime(values)
-    is_nan = df["nan"] == 1
-    is_not_nan = ~is_nan
+    is_not_nan = df["nan"] == 0
     # encode values so that each datetime part ranges from 0 to `max_value-min_value`
     for key in DATETIME_PARTS:
         # subtract minimum value
-        df[key] = df[key] - stats["min_values"][key]
-        # clamp to valid range
+        df[key] = df[key].where(~is_not_nan, df[key] - stats["min_values"][key])
+        # ensure that any value is mapped onto valid value range
         df[key] = np.minimum(df[key], stats["max_values"][key] - stats["min_values"][key])
         df[key] = np.maximum(df[key], 0)
-
-    # If NaNs exist, sample encoded subcolumns for NaN rows from empirical distribution of encoded non-NaN rows
-    if stats["has_nan"] and is_nan.any():
-        nan_count = int(is_nan.sum())
-        for key in DATETIME_PARTS:
-            non_vals = df.loc[is_not_nan, key]
-            # empirical histogram on encoded values
-            counts = non_vals.value_counts()
-            if counts.empty:
-                # fallback: all zeros
-                df.loc[is_nan, key] = 0
-                continue
-            support = counts.index.to_numpy()
-            freq = counts.values.astype(float)
-            prob = freq / freq.sum()
-            # Largest remainder allocation to match histogram as closely as possible
-            ideal = prob * nan_count
-            base = np.floor(ideal).astype(int)
-            remainder = nan_count - int(base.sum())
-            if remainder > 0:
-                frac = ideal - base
-                # pick indices with largest fractional parts
-                order = np.argsort(-frac, kind="stable")
-                base[order[:remainder]] += 1
-            # prepare assigned values
-            assigned = np.repeat(support, base)
-            # in rare pathological cases, ensure size matches exactly
-            if assigned.size < nan_count:
-                fill_idx = np.random.choice(len(support), size=nan_count - assigned.size, p=prob)
-                assigned = np.concatenate([assigned, support[fill_idx]])
-            elif assigned.size > nan_count:
-                assigned = assigned[:nan_count]
-            # shuffle assignment across NaN rows for randomness
-            rng_idx = np.random.permutation(nan_count)
-            df.loc[is_nan, key] = assigned[rng_idx]
     if not stats["has_nan"]:
         df.drop(["nan"], inplace=True, axis=1)
     if not stats["has_time"]:
@@ -253,21 +217,8 @@ def split_sub_columns_datetime(values: pd.Series) -> pd.DataFrame:
         "ms_E0": pd.Series(np.floor((parts[:, 6] / 1_000) % 10)),
     }
     df = pd.DataFrame(sub_columns)
-
-    # Only cast numeric parts; keep nan as int after conversion below
-    for k in [
-        "year",
-        "month",
-        "day",
-        "hour",
-        "minute",
-        "second",
-        "ms_E2",
-        "ms_E1",
-        "ms_E0",
-    ]:
-        df[k] = df[k].astype("int")
-    df["nan"] = df["nan"].astype("int")
+    df = df.fillna(0)
+    df = df.astype("int")
     return df
 
 
