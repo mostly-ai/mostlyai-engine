@@ -622,7 +622,7 @@ def get_empirical_probs_for_predictor_init(
     first_encoded_part: Path, tgt_cardinalities: dict[str, int], is_sequential: bool, alpha: float = 1.0
 ) -> dict[str, np.ndarray]:
     # figure out which columns have NaN from the list of sub columns
-    has_nan_map = {col: False for col in get_columns_from_cardinalities(tgt_cardinalities)}
+    has_nan_map: dict[str, bool] = {col: False for col in get_columns_from_cardinalities(tgt_cardinalities)}
     for sub_col in tgt_cardinalities.keys():
         col, sub_col_suffix = sub_col.split(PREFIX_SUB_COLUMN)
         if sub_col_suffix == "nan":
@@ -631,13 +631,13 @@ def get_empirical_probs_for_predictor_init(
         sub_col: np.zeros(int(k), dtype=np.float64) for sub_col, k in tgt_cardinalities.items()
     }
     df_part = pd.read_parquet(first_encoded_part)
-    # for sequential models, we will use the probs of the first time step for weight initialization
+    # for sequential models, we will use the empirical probs of the first time step for weight initialization
     if is_sequential:
         for sub_col in df_part.columns:
             df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
     for sub_col in tgt_cardinalities.keys():
         col, _ = sub_col.split(PREFIX_SUB_COLUMN)
-        nan_sub_col = sub_col.split(PREFIX_SUB_COLUMN)[0] + PREFIX_SUB_COLUMN + "nan"
+        nan_sub_col = f"{col}{PREFIX_SUB_COLUMN}nan"
         vc: dict[int, int]
         if has_nan_map[col] is True and sub_col != nan_sub_col and (df_part[nan_sub_col] == 0).sum() > 0:
             # exclude NaN rows from the count if

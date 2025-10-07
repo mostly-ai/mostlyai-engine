@@ -702,8 +702,7 @@ class Predictors(nn.Module):
         cardinalities: dict[str, int],
         regressors_dims: dict[str, int],
         device: torch.device,
-        empirical_probs: dict[str, int] | None = None,
-        alpha: float = 1.0,  # additive smoothing strength for Laplace smoothing
+        empirical_probs: dict[str, np.ndarray] | None = None,
     ):
         super().__init__()
 
@@ -713,12 +712,13 @@ class Predictors(nn.Module):
 
         self.predictors = nn.ModuleDict()
         empirical_probs = empirical_probs or {}
+        if empirical_probs:
+            _LOG.info("initializing predictor bias with empirical log probabilities")
 
         for sub_col, dim_output in self.cardinalities.items():
             dim_input = self.regressors_dims[sub_col]
             self.predictors[sub_col] = nn.Linear(in_features=dim_input, out_features=dim_output, device=self.device)
-            if empirical_probs.get(sub_col) is not None:
-                _LOG.info(f"initializing predictor bias for {sub_col} with empirical log probabilities")
+            if empirical_probs:
                 nn.init.xavier_uniform_(self.predictors[sub_col].weight)
                 with torch.no_grad():
                     self.predictors[sub_col].bias.copy_(
@@ -886,7 +886,7 @@ class FlatModel(nn.Module):
         column_order: list[str] | None,
         device: torch.device,
         with_dp: bool = False,
-        empirical_probs_for_predictor_init: dict[str, int] | None = None,
+        empirical_probs_for_predictor_init: dict[str, np.ndarray] | None = None,
     ):
         super().__init__()
 
@@ -1171,7 +1171,7 @@ class SequentialModel(nn.Module):
         column_order: list[str] | None,
         device: torch.device,
         with_dp: bool = False,
-        empirical_probs_for_predictor_init: dict[str, int] | None = None,
+        empirical_probs_for_predictor_init: dict[str, np.ndarray] | None = None,
     ):
         super().__init__()
 
