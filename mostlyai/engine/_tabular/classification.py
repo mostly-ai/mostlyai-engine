@@ -30,6 +30,11 @@ from mostlyai.engine._common import (
     get_cardinalities,
     get_sub_columns_from_cardinalities,
 )
+from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_UNKNOWN_TOKEN
+from mostlyai.engine._encoding_types.tabular.numeric import (
+    NUMERIC_BINNED_UNKNOWN_TOKEN,
+    NUMERIC_DISCRETE_UNKNOWN_TOKEN,
+)
 from mostlyai.engine._tabular.argn import FlatModel
 from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.generation import _resolve_gen_column_order
@@ -62,7 +67,8 @@ def classify(
     model_configs = workspace.model_configs.read()
 
     # Validate inputs
-    missing = [c for c in features + [target] if c not in data.columns]
+    requested_cols = list(set(features + [target]))
+    missing = [c for c in requested_cols if c not in data.columns]
     if missing:
         raise ValueError(f"Missing columns in data: {missing}")
 
@@ -73,13 +79,15 @@ def classify(
 
     # Determine desired column order: [features, target, rest]
     column_stats: dict[str, Any] = tgt_stats["columns"]
+    # Build ARGN order for features first
+    ordering_cols = list(dict.fromkeys(features))
     feat_argn = [
         get_argn_name(
             argn_processor=column_stats[col][ARGN_PROCESSOR],
             argn_table=column_stats[col][ARGN_TABLE],
             argn_column=column_stats[col][ARGN_COLUMN],
         )
-        for col in features
+        for col in ordering_cols
         if col in column_stats
     ]
     if target not in column_stats:
@@ -90,9 +98,11 @@ def classify(
         argn_column=column_stats[target][ARGN_COLUMN],
     )
 
+    # Resolve generation column order consistent with generation
     default_order = _resolve_gen_column_order(
         column_stats=tgt_stats["columns"],
         cardinalities=tgt_cardinalities,
+        fairness=None,
     )
     rest = [c for c in default_order if c not in feat_argn + [target_argn]]
     classify_order = feat_argn + [target_argn] + rest
@@ -147,7 +157,8 @@ def classify(
     x = ctxflt_inputs | ctxseq_inputs
 
     # Encode feature seed and pass as fixed_values
-    seed_df = data[features].copy()
+    seed_cols = list(dict.fromkeys(features))
+    seed_df = data[seed_cols].copy()
     seed_encoded, _, _ = encode_df(df=seed_df, stats=tgt_stats)
     fixed_values = {
         col: torch.as_tensor(seed_encoded[col].to_numpy(), device=device).type(torch.int)
@@ -161,8 +172,8 @@ def classify(
         raise RuntimeError("Failed to resolve target sub-columns")
     target_first_sub = target_subs[0]
 
-    # Forward to get target probabilities
-    _, probs_dct = model(
+    # Fetch probabilities for the target sub-column
+    outputs_dct, probs_dct = model(
         x,
         mode="gen",
         batch_size=len(seed_df),
@@ -181,6 +192,28 @@ def classify(
     proba_np = probs.detach().cpu().numpy()
     codes = tgt_stats["columns"].get(target, {}).get("codes") or {}
     inv_codes = {v: k for k, v in codes.items()} if isinstance(codes, dict) else {}
+
+    # Zero-out rare/unknown token probability when there are no rare categories
+    no_of_rare = tgt_stats["columns"].get(target, {}).get("no_of_rare_categories", 0)
+    if isinstance(codes, dict) and no_of_rare == 0:
+        unknown_keys = [
+            CATEGORICAL_UNKNOWN_TOKEN,
+            NUMERIC_BINNED_UNKNOWN_TOKEN,
+            NUMERIC_DISCRETE_UNKNOWN_TOKEN,
+        ]
+        changed = False
+        for unk in unknown_keys:
+            if unk in codes:
+                idx = codes[unk]
+                if 0 <= idx < proba_np.shape[1]:
+                    proba_np[:, idx] = 0.0
+                    changed = True
+        if changed:
+            rs = proba_np.sum(axis=1, keepdims=True)
+            rs[rs == 0.0] = 1.0
+            proba_np = proba_np / rs
+
+    # Construct output dataframe with probabilities
     cols = [f"proba_{inv_codes.get(i, i)}" for i in range(proba_np.shape[1])]
     proba_df = pd.DataFrame(proba_np, columns=cols, index=seed_df.index)
 
