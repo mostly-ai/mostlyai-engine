@@ -253,21 +253,7 @@ def split_sub_columns_datetime(values: pd.Series) -> pd.DataFrame:
         "ms_E0": pd.Series(np.floor((parts[:, 6] / 1_000) % 10)),
     }
     df = pd.DataFrame(sub_columns)
-
-    # Only cast numeric parts; keep nan as int after conversion below
-    for k in [
-        "year",
-        "month",
-        "day",
-        "hour",
-        "minute",
-        "second",
-        "ms_E2",
-        "ms_E1",
-        "ms_E0",
-    ]:
-        df[k] = df[k].astype("int")
-    df["nan"] = df["nan"].astype("int")
+    df = df.astype("int")
     return df
 
 

@@ -136,31 +136,29 @@ def split_sub_columns_digit(
         df.columns = columns
         # For rows where original value is NaN, fill digit positions by sampling
         # from the empirical per-digit distributions estimated from non-NaN rows.
-        nan_rows = values.isna().to_numpy()
+        nan_rows = values.isna()
         if nan_rows.any():
-            non_nan_mask = ~nan_rows
             digits = np.array([str(d) for d in range(10)])
+            uniform_probs = np.full(10, 1.0 / 10.0, dtype=float)
             # Build probability vectors for each digit column based on non-NaN rows
-            prob_list: list[np.ndarray] = []
+            per_digit_prob_list: list[np.ndarray] = []
             for col in columns:
-                vc = df.loc[non_nan_mask, col].value_counts(normalize=True)
+                vc = df.loc[~nan_rows, col].value_counts(normalize=True)
                 if vc.empty:
-                    probs = np.full(10, 1.0 / 10.0, dtype=float)
+                    per_digit_probs = uniform_probs
                 else:
-                    probs = np.zeros(10, dtype=float)
-                    for ch, p in vc.items():
-                        if isinstance(ch, str) and len(ch) == 1 and ch.isdigit():
-                            probs[int(ch)] = float(p)
-                    if probs.sum() <= 0:
-                        probs = np.full(10, 1.0 / 10.0, dtype=float)
-                    else:
-                        probs = probs / probs.sum()
-                prob_list.append(probs)
+                    per_digit_probs = np.zeros(10, dtype=float)
+                    for value, count in vc.items():
+                        per_digit_probs[int(value)] = float(count)
+                    per_digit_probs = (
+                        per_digit_probs / per_digit_probs.sum() if per_digit_probs.sum() > 0 else uniform_probs
+                    )
+                per_digit_prob_list.append(per_digit_probs)
             # Sample for NaN rows per column
             n_nan = int(nan_rows.sum())
             sampled = np.empty((n_nan, len(columns)), dtype=object)
-            for j, probs in enumerate(prob_list):
-                sampled[:, j] = np.random.choice(digits, size=n_nan, p=probs)
+            for j, per_digit_probs in enumerate(per_digit_prob_list):
+                sampled[:, j] = np.random.choice(digits, size=n_nan, p=per_digit_probs)
             df.loc[nan_rows, :] = sampled
     df.insert(0, "nan", values.isna())
     df.insert(1, "neg", (~values.isna()) & (values < 0))
