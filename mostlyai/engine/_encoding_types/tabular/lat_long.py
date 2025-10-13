@@ -348,6 +348,36 @@ def encode_latlong(
         encoded_quads[quad] = encode_categorical(quads[quad], stats)
 
     encoded_quadtile = encode_character(quads["QUADTILE"], column_stats["quadtile_characters"])
+
+    # Sample each column independently from non-NA distributions for NaN rows
+    nan_mask = quads["nan"] == 1
+    if nan_mask.any():
+        non_nan_mask = ~nan_mask
+        n_samples = nan_mask.sum()
+
+        # Combine both QUAD columns and P columns for sampling
+        all_encoded = pd.concat([encoded_quads, encoded_quadtile], axis=1)
+
+        for col in all_encoded.columns:
+            non_na_values = all_encoded.loc[non_nan_mask, col]
+
+            if len(non_na_values) > 0:
+                # Get the unique values and their probabilities from non-NA data
+                value_counts = non_na_values.value_counts()
+                values_array = value_counts.index.values
+                probs = value_counts.values / value_counts.sum()
+
+                # Sample independently for each NaN row
+                sampled_values = np.random.choice(values_array, size=n_samples, replace=True, p=probs)
+
+                # Fill in the NaN positions with sampled values
+                all_encoded.loc[nan_mask, col] = sampled_values
+
+        # Split back into encoded_quads and encoded_quadtile
+        if not encoded_quads.empty:
+            encoded_quads = all_encoded[encoded_quads.columns]
+        encoded_quadtile = all_encoded[encoded_quadtile.columns]
+
     if column_stats["has_nan"]:
         encoded_quadtile["nan"] = quads["nan"]
     df = pd.concat([encoded_quads, encoded_quadtile], axis=1)
