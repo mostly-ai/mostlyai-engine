@@ -636,16 +636,7 @@ def get_empirical_probs_for_predictor_init(
         for sub_col in df_part.columns:
             df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
     for sub_col in tgt_cardinalities.keys():
-        col, _ = sub_col.split(PREFIX_SUB_COLUMN)
-        nan_sub_col = f"{col}{PREFIX_SUB_COLUMN}nan"
-        vc: dict[int, int]
-        if has_nan_map[col] is True and sub_col != nan_sub_col and (df_part[nan_sub_col] == 0).sum() > 0:
-            # exclude NaN rows from the count if
-            # - the column has NaN but has at least one non-NaN row
-            # - the current sub column is not the NaN sub column
-            vc = df_part[df_part[nan_sub_col] == 0][sub_col].value_counts().to_dict()
-        else:
-            vc = df_part[sub_col].value_counts().to_dict()
+        vc: dict[int, int] = df_part[sub_col].value_counts().to_dict()
         for category_code, count in vc.items():
             counts_map[sub_col][category_code] += count
     # estimate the probabilities and apply Laplace smoothing
