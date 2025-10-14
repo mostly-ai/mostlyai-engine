@@ -27,6 +27,7 @@ from dateutil import parser  # type: ignore
 from mostlyai.engine._common import (
     ANALYZE_MIN_MAX_TOP_N,
     ANALYZE_REDUCE_MIN_MAX_N,
+    calculate_empirical_probs,
     compute_log_histogram,
     dp_approx_bounds,
     get_stochastic_rare_threshold,
@@ -170,8 +171,6 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
         values.loc[values > reduced_max] = reduced_max
     # split to sub_columns
     df = split_sub_columns_datetime(values)
-    is_nan = df["nan"] == 1
-    is_not_nan = ~is_nan
     # encode values so that each datetime part ranges from 0 to `max_value-min_value`
     for key in DATETIME_PARTS:
         # subtract minimum value
@@ -180,46 +179,26 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
         df[key] = np.minimum(df[key], stats["max_values"][key] - stats["min_values"][key])
         df[key] = np.maximum(df[key], 0)
 
-    # If NaNs exist, sample encoded subcolumns for NaN rows from empirical distribution of encoded non-NaN rows
-    if stats["has_nan"] and is_nan.any():
-        nan_count = int(is_nan.sum())
-        for key in DATETIME_PARTS:
-            non_vals = df.loc[is_not_nan, key]
-            # empirical histogram on encoded values
-            counts = non_vals.value_counts()
-            if counts.empty:
-                # fallback: all zeros
-                df.loc[is_nan, key] = 0
-                continue
-            support = counts.index.to_numpy()
-            freq = counts.values.astype(float)
-            prob = freq / freq.sum()
-            # Largest remainder allocation to match histogram as closely as possible
-            ideal = prob * nan_count
-            base = np.floor(ideal).astype(int)
-            remainder = nan_count - int(base.sum())
-            if remainder > 0:
-                frac = ideal - base
-                # pick indices with largest fractional parts
-                order = np.argsort(-frac, kind="stable")
-                base[order[:remainder]] += 1
-            # prepare assigned values
-            assigned = np.repeat(support, base)
-            # in rare pathological cases, ensure size matches exactly
-            if assigned.size < nan_count:
-                fill_idx = np.random.choice(len(support), size=nan_count - assigned.size, p=prob)
-                assigned = np.concatenate([assigned, support[fill_idx]])
-            elif assigned.size > nan_count:
-                assigned = assigned[:nan_count]
-            # shuffle assignment across NaN rows for randomness
-            rng_idx = np.random.permutation(nan_count)
-            df.loc[is_nan, key] = assigned[rng_idx]
-    if not stats["has_nan"]:
-        df.drop(["nan"], inplace=True, axis=1)
     if not stats["has_time"]:
         df.drop(["hour", "minute", "second"], inplace=True, axis=1)
     if not stats["has_ms"]:
         df.drop(["ms_E2", "ms_E1", "ms_E0"], inplace=True, axis=1)
+
+    # If NaNs exist, sample encoded subcolumns for NaN rows from empirical distribution of encoded non-NaN rows
+    if stats["has_nan"]:
+        nan_mask = df["nan"] == 1
+        n_nan = nan_mask.sum()
+        columns = [key for key in DATETIME_PARTS if key in stats["cardinalities"]]
+        for col in columns:
+            cardinality = stats["cardinalities"][col]
+            probs = calculate_empirical_probs(
+                df.loc[~nan_mask, col],
+                cardinality=cardinality,
+            )
+            categories = np.arange(len(probs), dtype=np.int8)
+            df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
+    else:
+        df.drop(["nan"], inplace=True, axis=1)
     return df
 
 

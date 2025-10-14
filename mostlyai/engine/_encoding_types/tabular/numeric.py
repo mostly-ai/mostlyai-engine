@@ -31,6 +31,7 @@ import pandas as pd
 from mostlyai.engine._common import (
     ANALYZE_MIN_MAX_TOP_N,
     ANALYZE_REDUCE_MIN_MAX_N,
+    calculate_empirical_probs,
     compute_log_histogram,
     dp_approx_bounds,
     dp_non_rare,
@@ -136,30 +137,17 @@ def split_sub_columns_digit(
         df.columns = columns
         # For rows where original value is NaN, fill digit positions by sampling
         # from the empirical per-digit distributions estimated from non-NaN rows.
-        nan_rows = values.isna()
-        if nan_rows.any():
-            digits = np.array([str(d) for d in range(10)])
-            uniform_probs = np.full(10, 1.0 / 10.0, dtype=float)
-            # Build probability vectors for each digit column based on non-NaN rows
-            per_digit_prob_list: list[np.ndarray] = []
+        nan_mask = values.isna()
+        if nan_mask.any():
+            n_nan = nan_mask.sum()
+            cardinality = 10
+            categories = np.array([str(d) for d in range(cardinality)])
             for col in columns:
-                vc = df.loc[~nan_rows, col].value_counts(normalize=True)
-                if vc.empty:
-                    per_digit_probs = uniform_probs
-                else:
-                    per_digit_probs = np.zeros(10, dtype=float)
-                    for value, count in vc.items():
-                        per_digit_probs[int(value)] = float(count)
-                    per_digit_probs = (
-                        per_digit_probs / per_digit_probs.sum() if per_digit_probs.sum() > 0 else uniform_probs
-                    )
-                per_digit_prob_list.append(per_digit_probs)
-            # Sample for NaN rows per column
-            n_nan = int(nan_rows.sum())
-            sampled = np.empty((n_nan, len(columns)), dtype=object)
-            for j, per_digit_probs in enumerate(per_digit_prob_list):
-                sampled[:, j] = np.random.choice(digits, size=n_nan, p=per_digit_probs)
-            df.loc[nan_rows, :] = sampled
+                probs = calculate_empirical_probs(
+                    df.loc[~nan_mask, col],
+                    cardinality=cardinality,
+                )
+                df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
     df.insert(0, "nan", values.isna())
     df.insert(1, "neg", (~values.isna()) & (values < 0))
     df = df.astype("int")

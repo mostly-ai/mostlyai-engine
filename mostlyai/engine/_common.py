@@ -621,30 +621,20 @@ class FixedSizeSampleBuffer:
 def get_empirical_probs_for_predictor_init(
     first_encoded_part: Path, tgt_cardinalities: dict[str, int], is_sequential: bool, alpha: float = 1.0
 ) -> dict[str, np.ndarray]:
-    # figure out which columns have NaN from the list of sub columns
-    has_nan_map: dict[str, bool] = {col: False for col in get_columns_from_cardinalities(tgt_cardinalities)}
-    for sub_col in tgt_cardinalities.keys():
-        col, sub_col_suffix = sub_col.split(PREFIX_SUB_COLUMN)
-        if sub_col_suffix == "nan":
-            has_nan_map[col] = True
-    counts_map: dict[str, np.ndarray] = {
-        sub_col: np.zeros(int(k), dtype=np.float64) for sub_col, k in tgt_cardinalities.items()
-    }
     df_part = pd.read_parquet(first_encoded_part)
     # for sequential models, we will use the empirical probs of the first time step for weight initialization
     if is_sequential:
         for sub_col in df_part.columns:
             df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
-    for sub_col in tgt_cardinalities.keys():
-        vc: dict[int, int] = df_part[sub_col].value_counts().to_dict()
-        for category_code, count in vc.items():
-            counts_map[sub_col][category_code] += count
-    # estimate the probabilities and apply Laplace smoothing
-    for sub_col, counts in counts_map.items():
-        denom = counts.sum() + alpha * counts.shape[0]
-        probs = np.clip((counts + alpha) / max(float(denom), 1e-12), a_min=1e-12, a_max=None)
-        counts_map[sub_col] = probs
-    return counts_map
+
+    probs_map: dict[str, np.ndarray] = {}
+    for sub_col, cardinality in tgt_cardinalities.items():
+        probs_map[sub_col] = calculate_empirical_probs(
+            df_part[sub_col],
+            cardinality=cardinality,
+            smoothing_alpha=alpha,
+        )
+    return probs_map
 
 
 def _get_log_histogram_edges(idx: int, bins: int = 64) -> tuple[float, float]:
@@ -913,3 +903,48 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
 def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
     return min_threshold + int(noise_multiplier * np.random.uniform())
+
+
+def calculate_empirical_probs(
+    encoded_values: pd.Series,
+    cardinality: int,
+    smoothing_alpha: float = 0.0,
+) -> np.ndarray:
+    """
+    Calculate empirical probabilities from a series of categorical values.
+
+    This is a unified helper function for computing probability distributions
+    from value counts, used across different encoding types (lat_long, datetime,
+    numeric_digit) and for predictor weight initialization.
+
+    Args:
+        encoded_values: Series of encoded categorical values (integers) of a subcolumn.
+        cardinality: Expected number of categories.
+        smoothing_alpha: Laplace smoothing parameter. If 0, no smoothing is applied.
+            For predictor init, typically use alpha=1.0.
+
+    Returns:
+        Array of probabilities summing to 1.0.
+    """
+    vc = encoded_values.value_counts()
+
+    if vc.empty:
+        # fallback to uniform distribution
+        return np.full(cardinality, 1.0 / cardinality, dtype=np.float64)
+
+    # Fixed-size output for all categories
+    counts = np.zeros(cardinality, dtype=np.float64)
+    for idx, count in vc.items():
+        counts[int(idx)] = float(count)
+
+    # Apply Laplace smoothing
+    if smoothing_alpha > 0:
+        total = counts.sum() + smoothing_alpha * len(counts)
+        probs = (counts + smoothing_alpha) / max(total, 1e-12)
+        probs = np.clip(probs, a_min=1e-12, a_max=None)
+    else:
+        # No smoothing: simple normalization
+        total = counts.sum()
+        probs = counts / max(total, 1e-12)
+
+    return probs
