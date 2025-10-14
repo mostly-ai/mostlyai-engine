@@ -340,7 +340,7 @@ def test_max_training_time(input_data, tmp_path_factory):
     assert elapsed_time < 10
 
 
-def test_reproducibility(input_data, tmp_path_factory):
+def test_reproducibility(input_data, tmp_path_factory, cleanup_joblib_pool):
     df = input_data[0]
     ws_1 = tmp_path_factory.mktemp("ws_1")
     ws_2 = tmp_path_factory.mktemp("ws_2")
