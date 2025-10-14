@@ -123,23 +123,10 @@ def test_datetime_empty(tmp_path):
 
 
 def test_datetime_noempties(tmp_path):
-    # values = pd.to_datetime(pd.Series(["2020-05-24", "2021-05-24", "2022-05-24"], name="value"))
-    values = pd.to_datetime(
-        pd.Series(
-            [
-                None,
-                "1978-05-24 12:23:43",
-                "1976-06-22 17:32:00",
-                "1992-12-24 01:32:59",
-                None,
-            ],
-            name="date",
-            dtype="datetime64[us]",
-        )
-    )
+    values = pd.to_datetime(pd.Series(["2020-05-24", "2021-05-24", "2022-05-24"], name="value"))
     root_keys = pd.Series(range(len(values)), name="id")
     stats = analyze_reduce_datetime([analyze_datetime(values, root_keys)], value_protection=False)
-    # values = pd.to_datetime(pd.Series([pd.NaT, pd.NaT, pd.NaT], name="value"))
+    values = pd.to_datetime(pd.Series([pd.NaT, pd.NaT, pd.NaT], name="value"))
     df_encoded = encode_datetime(values, stats)
     df_decoded = decode_datetime(df_encoded, stats)
     assert all(df_decoded.notna())
