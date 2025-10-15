@@ -19,7 +19,12 @@ Character encoding splits any value into its characters, and encodes each positi
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
+from mostlyai.engine._common import (
+    calculate_empirical_probs,
+    dp_non_rare,
+    get_stochastic_rare_threshold,
+    safe_convert_string,
+)
 
 UNKNOWN_TOKEN = "\0"
 MAX_LENGTH_CHARS = 50
@@ -94,13 +99,24 @@ def encode_character(values: pd.Series, stats: dict, _: pd.Series | None = None)
     values = safe_convert_string(values)
     max_string_length = stats["max_string_length"]
     df_split = split_sub_columns_character(values, max_string_length)
-    if not stats["has_nan"]:
-        df_split.drop(["nan"], axis=1, inplace=True)
     for idx in range(max_string_length):
         sub_col = f"P{idx}"
         np_codes = np.array(pd.Categorical(df_split[sub_col], categories=stats["codes"][sub_col]).codes)
         np.place(np_codes, np_codes == -1, 0)
         df_split[sub_col] = np_codes
+    if stats["has_nan"]:
+        nan_mask = df_split["nan"] == 1
+        columns = [col for col in df_split.columns if col.startswith("P")]
+        for col in columns:
+            cardinality = stats["cardinalities"][col]
+            probs = calculate_empirical_probs(
+                df_split.loc[~nan_mask, col],
+                cardinality=cardinality,
+            )
+            categories = np.arange(len(probs), dtype=df_split[col].dtype)
+            df_split.loc[nan_mask, col] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
+    else:
+        df_split.drop(["nan"], axis=1, inplace=True)
     return df_split
 
 
