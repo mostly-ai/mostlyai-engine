@@ -425,7 +425,7 @@ def train(
         _LOG.info(f"{model_state_strategy=}")
         if model_state_strategy in [ModelStateStrategy.resume, ModelStateStrategy.reuse]:
             _LOG.info("load existing model weights")
-            torch.serialization.add_safe_globals([np.core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
+            torch.serialization.add_safe_globals([np._core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
             resume_from_last_checkpoint = True
             model_id_or_path = workspace.model_path
         else:  # ModelStateStrategy.reset

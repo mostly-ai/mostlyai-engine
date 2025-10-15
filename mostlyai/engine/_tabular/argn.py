@@ -739,7 +739,7 @@ def _make_permutation_mask(
         order = torch.randperm(n_cols)
 
     # convert order into a binary mask consisting of 0s and 1s
-    idx = np.argsort(order)
+    idx = torch.argsort(order)
     ones = torch.ones(n_cols, n_cols, dtype=torch.int32, device=device)
     mask = torch.tril(ones, diagonal=-1)  # strict lower triangular matrix
     mask = mask[idx, :][:, idx].bool()  # re-order rows and columns

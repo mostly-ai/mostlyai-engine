@@ -476,7 +476,7 @@ def train(
         _LOG.info(f"{model_state_strategy=}")
         if model_state_strategy in [ModelStateStrategy.resume, ModelStateStrategy.reuse]:
             _LOG.info("load existing model weights")
-            torch.serialization.add_safe_globals([np.core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
+            torch.serialization.add_safe_globals([np._core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
             load_model_weights(model=argn, path=workspace.model_tabular_weights_path, device=device)
         else:  # ModelStateStrategy.reset
             _LOG.info("remove existing checkpoint files")
