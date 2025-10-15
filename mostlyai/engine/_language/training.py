@@ -709,6 +709,7 @@ def train(
                     # FIXME approximation, should be divided by total sum of number of tokens in the batch
                     #  as in _calculate_per_label_losses, also the final sample may be smaller than the batch size.
                     if with_dp:
+                        warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
                         step_loss = outputs.loss
                         step_loss.backward()
                     else:

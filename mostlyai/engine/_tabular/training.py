@@ -702,6 +702,8 @@ def train(
                 # backward pass
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
+                    if with_dp:
+                        warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
                     step_loss.backward()
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on
