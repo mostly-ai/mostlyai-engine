@@ -115,8 +115,7 @@ def split_sub_columns_digit(
 
     columns = [f"E{i}" for i in np.arange(max_decimal, min_decimal - 1, -1)]
     if values.isna().all():
-        # when all values are NaN, fill each digit position with random digits [0-9]
-        df = pd.DataFrame(np.random.randint(0, 10, size=(len(values), len(columns))), columns=columns)
+        df = pd.DataFrame({c: [0] * len(values) for c in columns})
     else:
         # convert to float64 as `np.format_float_positional` doesn't support Float64
         values = values.astype("float64")
@@ -134,22 +133,12 @@ def split_sub_columns_digit(
         values_str = values_str.str[(49 - max_decimal) : (49 - min_decimal + 1)]
         df = values_str.str.split("", n=max_decimal - min_decimal + 2, expand=True)
         df = df.drop(columns=[0, max_decimal - min_decimal + 2])
+        df = df.fillna("0")
         df.columns = columns
-        # For rows where original value is NaN, fill digit positions by sampling
-        # from the empirical per-digit distributions estimated from non-NaN rows.
-        nan_mask = values.isna()
-        if nan_mask.any():
-            n_nan = nan_mask.sum()
-            cardinality = 10
-            categories = np.array([str(d) for d in range(cardinality)])
-            for col in columns:
-                probs = calculate_empirical_probs(
-                    df.loc[~nan_mask, col],
-                    cardinality=cardinality,
-                )
-                df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
     df.insert(0, "nan", values.isna())
     df.insert(1, "neg", (~values.isna()) & (values < 0))
+    # temporarily fill NaN with 0 for type conversion to int
+    # these will be replaced by sampled values during encoding
     df = df.astype("int")
     return df
 
@@ -420,6 +409,7 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
         values = values.where((values.isna()) | (values <= reduced_max), reduced_max)
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
+
     # normalize values to `[0, max_digit-min_digit]`
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         key = f"E{d}"
@@ -428,10 +418,24 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
         # ensure that any value is mapped onto valid value range
         df[key] = np.minimum(df[key], stats["max_digits"][key] - stats["min_digits"][key])
         df[key] = np.maximum(df[key], 0)
-
     # ensure that encoded digits are mapped onto valid value range
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         df[f"E{d}"] = np.minimum(df[f"E{d}"], stats["max_digits"][f"E{d}"])
+    # For rows where original value is NaN, fill digit positions and sign by sampling
+    # from the empirical distributions estimated from non-NaN rows.
+    nan_mask = values.isna()
+    if nan_mask.any():
+        n_nan = nan_mask.sum()
+        columns = ["neg"] if stats["has_neg"] else []
+        columns = [col for col in df.columns if col.startswith("E")]
+        for col in columns:
+            cardinality = stats["cardinalities"][col]
+            categories = np.arange(cardinality, dtype=df[col].dtype)
+            probs = calculate_empirical_probs(
+                df.loc[~nan_mask, col],
+                cardinality=cardinality,
+            )
+            df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
     if not stats["has_nan"]:
         df.drop("nan", inplace=True, axis=1)
     if not stats["has_neg"]:
