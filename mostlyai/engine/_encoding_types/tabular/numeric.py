@@ -31,10 +31,10 @@ import pandas as pd
 from mostlyai.engine._common import (
     ANALYZE_MIN_MAX_TOP_N,
     ANALYZE_REDUCE_MIN_MAX_N,
-    calculate_empirical_probs,
     compute_log_histogram,
     dp_approx_bounds,
     dp_non_rare,
+    fill_sub_columns_of_nan,
     find_distinct_bins,
     get_stochastic_rare_threshold,
     safe_convert_numeric,
@@ -421,25 +421,12 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
     # ensure that encoded digits are mapped onto valid value range
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         df[f"E{d}"] = np.minimum(df[f"E{d}"], stats["max_digits"][f"E{d}"])
-    # For rows where original value is NaN, fill digit positions and sign by sampling
-    # from the empirical distributions estimated from non-NaN rows.
-    nan_mask = values.isna()
-    if nan_mask.any():
-        n_nan = nan_mask.sum()
-        columns = ["neg"] if stats["has_neg"] else []
-        columns = [col for col in df.columns if col.startswith("E")]
-        for col in columns:
-            cardinality = stats["cardinalities"][col]
-            categories = np.arange(cardinality, dtype=df[col].dtype)
-            probs = calculate_empirical_probs(
-                df.loc[~nan_mask, col],
-                cardinality=cardinality,
-            )
-            df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
-    if not stats["has_nan"]:
-        df.drop("nan", inplace=True, axis=1)
     if not stats["has_neg"]:
         df.drop("neg", inplace=True, axis=1)
+    if stats["has_nan"]:
+        df = fill_sub_columns_of_nan(df, stats)
+    else:
+        df.drop("nan", inplace=True, axis=1)
     return df
 
 

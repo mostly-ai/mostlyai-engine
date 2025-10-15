@@ -948,3 +948,26 @@ def calculate_empirical_probs(
         probs = counts / max(total, 1e-12)
 
     return probs
+
+
+def fill_sub_columns_of_nan(encoded_df: pd.DataFrame, column_stats: dict) -> pd.DataFrame:
+    """
+    Fill sub-columns of NaN values with sampled values from the empirical distributions estimated from non-NaN rows.
+    This is used for filling NaN values of the following encoding types to avoid bias towards 0 during training:
+    - TABULAR_NUMERIC_DIGIT
+    - TABULAR_DATETIME
+    - TABULAR_LAT_LONG
+    - TABULAR_CHARACTER
+    """
+    columns_to_fill = [col for col in column_stats["cardinalities"].keys() if col.split(PREFIX_SUB_COLUMN)[-1] != "nan"]
+    nan_mask = encoded_df["nan"] == 1
+    n_nan = nan_mask.sum()
+    for col in columns_to_fill:
+        cardinality = column_stats["cardinalities"][col]
+        categories = np.arange(cardinality, dtype=encoded_df[col].dtype)
+        probs = calculate_empirical_probs(
+            encoded_df.loc[~nan_mask, col],
+            cardinality=cardinality,
+        )
+        encoded_df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
+    return encoded_df

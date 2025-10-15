@@ -27,9 +27,9 @@ from dateutil import parser  # type: ignore
 from mostlyai.engine._common import (
     ANALYZE_MIN_MAX_TOP_N,
     ANALYZE_REDUCE_MIN_MAX_N,
-    calculate_empirical_probs,
     compute_log_histogram,
     dp_approx_bounds,
+    fill_sub_columns_of_nan,
     get_stochastic_rare_threshold,
     safe_convert_datetime,
 )
@@ -184,19 +184,8 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
     if not stats["has_ms"]:
         df.drop(["ms_E2", "ms_E1", "ms_E0"], inplace=True, axis=1)
 
-    # If NaNs exist, sample encoded subcolumns for NaN rows from empirical distribution of encoded non-NaN rows
     if stats["has_nan"]:
-        nan_mask = df["nan"] == 1
-        n_nan = nan_mask.sum()
-        columns = [key for key in DATETIME_PARTS if key in stats["cardinalities"]]
-        for col in columns:
-            cardinality = stats["cardinalities"][col]
-            probs = calculate_empirical_probs(
-                df.loc[~nan_mask, col],
-                cardinality=cardinality,
-            )
-            categories = np.arange(len(probs), dtype=np.int8)
-            df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
+        df = fill_sub_columns_of_nan(df, stats)
     else:
         df.drop(["nan"], inplace=True, axis=1)
     return df

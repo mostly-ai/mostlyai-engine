@@ -20,8 +20,8 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from mostlyai.engine._common import (
-    calculate_empirical_probs,
     dp_non_rare,
+    fill_sub_columns_of_nan,
     get_stochastic_rare_threshold,
     safe_convert_string,
 )
@@ -356,19 +356,9 @@ def encode_latlong(
 
     df = pd.concat([encoded_quads, encoded_quadtile], axis=1)
     if column_stats["has_nan"]:
-        # Sample each column independently from non-NA distributions for NaN rows
-        nan_mask = quads["nan"] == 1
-        n_nan = nan_mask.sum()
-        for col in df.columns:
-            cardinality = column_stats["cardinalities"].get(col)
-            probs = calculate_empirical_probs(
-                df.loc[~nan_mask, col],
-                cardinality=cardinality,
-            )
-            categories = np.arange(len(probs), dtype=df[col].dtype)
-            df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
-        # append nan column
         df["nan"] = quads["nan"]
+        df = fill_sub_columns_of_nan(df, column_stats)
+        # append nan column
 
     return df
 
