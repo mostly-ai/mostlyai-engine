@@ -634,7 +634,9 @@ def train(
             # therefore, we choose RDP instead as it is more stable and provides comparable privacy guarantees
             dp_accountant = "rdp"  # hard-coded for now
             _LOG.info(f"{dp_config=}, {dp_accountant=}")
-            privacy_engine = PrivacyEngine(accountant=dp_accountant)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, message=".*Secure RNG turned off*")
+                privacy_engine = PrivacyEngine(accountant=dp_accountant)
             if model_state_strategy == ModelStateStrategy.resume and workspace.model_dp_accountant_path.exists():
                 _LOG.info("restore DP accountant state")
                 torch.serialization.add_safe_globals([getattr, PRVAccountant, RDPAccountant, GaussianAccountant])
