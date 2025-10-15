@@ -221,6 +221,9 @@ def split_sub_columns_datetime(values: pd.Series) -> pd.DataFrame:
         "ms_E0": pd.Series(np.floor((parts[:, 6] / 1_000) % 10)),
     }
     df = pd.DataFrame(sub_columns)
+    # temporarily fill NaN with 0 for type conversion to int
+    # these will be replaced by sampled values during encoding
+    df = df.fillna(0)
     df = df.astype("int")
     return df
 

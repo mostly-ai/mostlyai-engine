@@ -358,7 +358,6 @@ def encode_latlong(
     if column_stats["has_nan"]:
         df["nan"] = quads["nan"]
         df = fill_sub_columns_of_nan(df, column_stats)
-        # append nan column
 
     return df
 
