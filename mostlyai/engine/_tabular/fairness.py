@@ -182,8 +182,8 @@ def get_fairness_transforms(
         for sensitive_group, target_quantiles in conditional_target_quantiles.items():
             transforms[i][sensitive_group] = partial(
                 torch_interp,
-                xp=torch.as_tensor(target_quantiles[:, i], device=device),
-                fp=torch.as_tensor(marginal_target_quantiles[:, i], device=device),
+                xp=torch.as_tensor(target_quantiles[:, i], device=device).contiguous(),
+                fp=torch.as_tensor(marginal_target_quantiles[:, i], device=device).contiguous(),
             )
 
     _LOG.info("fairness: created transforms")
@@ -217,7 +217,7 @@ def apply_fairness_transforms(
                         sensitive_values == torch.as_tensor(group, device=device).tile((probs.shape[0], 1)),
                         dim=1,
                     ),
-                    transform(probs[:, i]),
+                    transform(probs[:, i].contiguous()),
                     probs[:, i],
                 )
         # normalize transformed probabilities to make sure they sum to 1

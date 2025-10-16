@@ -483,7 +483,7 @@ def train(
         _LOG.info(f"{model_state_strategy=}")
         if model_state_strategy in [ModelStateStrategy.resume, ModelStateStrategy.reuse]:
             _LOG.info("load existing model weights")
-            torch.serialization.add_safe_globals([np.core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
+            torch.serialization.add_safe_globals([np._core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
             load_model_weights(model=argn, path=workspace.model_tabular_weights_path, device=device)
         else:  # ModelStateStrategy.reset
             _LOG.info("remove existing checkpoint files")
@@ -641,7 +641,9 @@ def train(
             # therefore, we choose RDP instead as it is more stable and provides comparable privacy guarantees
             dp_accountant = "rdp"  # hard-coded for now
             _LOG.info(f"{dp_config=}, {dp_accountant=}")
-            privacy_engine = PrivacyEngine(accountant=dp_accountant)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, message=".*Secure RNG turned off*")
+                privacy_engine = PrivacyEngine(accountant=dp_accountant)
             if model_state_strategy == ModelStateStrategy.resume and workspace.model_dp_accountant_path.exists():
                 _LOG.info("restore DP accountant state")
                 torch.serialization.add_safe_globals([getattr, PRVAccountant, RDPAccountant, GaussianAccountant])
@@ -707,6 +709,8 @@ def train(
                 # backward pass
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
+                    if with_dp:
+                        warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
                     step_loss.backward()
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on

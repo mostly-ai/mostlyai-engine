@@ -425,7 +425,7 @@ def train(
         _LOG.info(f"{model_state_strategy=}")
         if model_state_strategy in [ModelStateStrategy.resume, ModelStateStrategy.reuse]:
             _LOG.info("load existing model weights")
-            torch.serialization.add_safe_globals([np.core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
+            torch.serialization.add_safe_globals([np._core.multiarray.scalar, np.dtype, np.dtypes.Float64DType])
             resume_from_last_checkpoint = True
             model_id_or_path = workspace.model_path
         else:  # ModelStateStrategy.reset
@@ -637,7 +637,9 @@ def train(
             # therefore, we choose RDP instead as it is more stable and provides comparable privacy guarantees
             dp_accountant = "rdp"  # hard-coded for now
             _LOG.info(f"{dp_config=}, {dp_accountant=}")
-            privacy_engine = PrivacyEngine(accountant=dp_accountant)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, message=".*Secure RNG turned off*")
+                privacy_engine = PrivacyEngine(accountant=dp_accountant)
             if model_state_strategy == ModelStateStrategy.resume and workspace.model_dp_accountant_path.exists():
                 _LOG.info("restore DP accountant state")
                 torch.serialization.add_safe_globals([getattr, PRVAccountant, RDPAccountant, GaussianAccountant])
@@ -707,6 +709,7 @@ def train(
                     # FIXME approximation, should be divided by total sum of number of tokens in the batch
                     #  as in _calculate_per_label_losses, also the final sample may be smaller than the batch size.
                     if with_dp:
+                        warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
                         step_loss = outputs.loss
                         step_loss.backward()
                     else:
