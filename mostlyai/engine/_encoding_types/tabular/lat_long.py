@@ -21,7 +21,7 @@ from numpy.typing import NDArray
 
 from mostlyai.engine._common import (
     dp_non_rare,
-    fill_sub_columns_of_nan,
+    fill_nan_with_non_nan_distribution,
     get_stochastic_rare_threshold,
     safe_convert_string,
 )
@@ -345,6 +345,7 @@ def encode_latlong(
     context_keys: pd.Series | None = None,
 ) -> pd.DataFrame:
     values = safe_convert_string(values)
+    values, nan_mask = fill_nan_with_non_nan_distribution(values, column_stats)
     # split to sub_columns
     quads = split_sub_columns_latlong(values)
     encoded_quads = pd.DataFrame()  # empty DF to include all the ModelEncodingType.tabular_categorical quads
@@ -356,8 +357,8 @@ def encode_latlong(
 
     df = pd.concat([encoded_quads, encoded_quadtile], axis=1)
     if column_stats["has_nan"]:
-        df["nan"] = quads["nan"]
-        df = fill_sub_columns_of_nan(df, column_stats)
+        df["nan"] = nan_mask
+        # df = fill_sub_columns_of_nan(df, column_stats)
 
     return df
 

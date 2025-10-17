@@ -29,7 +29,7 @@ from mostlyai.engine._common import (
     ANALYZE_REDUCE_MIN_MAX_N,
     compute_log_histogram,
     dp_approx_bounds,
-    fill_sub_columns_of_nan,
+    fill_nan_with_non_nan_distribution,
     get_stochastic_rare_threshold,
     safe_convert_datetime,
 )
@@ -169,6 +169,7 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
     if stats["max"] is not None:
         reduced_max = pd.Series([stats["max"]], dtype=values.dtype).iloc[0]
         values.loc[values > reduced_max] = reduced_max
+    values, nan_mask = fill_nan_with_non_nan_distribution(values, stats)
     # split to sub_columns
     df = split_sub_columns_datetime(values)
     # encode values so that each datetime part ranges from 0 to `max_value-min_value`
@@ -185,7 +186,8 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
         df.drop(["ms_E2", "ms_E1", "ms_E0"], inplace=True, axis=1)
 
     if stats["has_nan"]:
-        df = fill_sub_columns_of_nan(df, stats)
+        df["nan"] = nan_mask
+        # df = fill_sub_columns_of_nan(df, stats)
     else:
         df.drop(["nan"], inplace=True, axis=1)
     return df

@@ -969,5 +969,25 @@ def fill_sub_columns_of_nan(encoded_df: pd.DataFrame, column_stats: dict) -> pd.
             encoded_df.loc[~nan_mask, col],
             cardinality=cardinality,
         )
+        # NOTE: an alternative will be to use the largest remainder method
         encoded_df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
     return encoded_df
+
+
+def fill_nan_with_non_nan_distribution(values: pd.Series, column_stats: dict) -> tuple[pd.Series, pd.Series]:
+    """
+    Fill NaN values with values from the empirical distributions estimated from non-NaN rows.
+    This is used for filling NaN values of the following encoding types to avoid bias towards 0 during training:
+    - TABULAR_NUMERIC_DIGIT
+    - TABULAR_DATETIME
+    - TABULAR_LAT_LONG
+    - TABULAR_CHARACTER
+    """
+    nan_mask = values.isna()
+    vc = values.value_counts(normalize=True)
+    if vc.empty:
+        return values, nan_mask.astype(int)
+    probs = vc.values
+    categories = vc.index
+    values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
+    return values, nan_mask.astype(int)
