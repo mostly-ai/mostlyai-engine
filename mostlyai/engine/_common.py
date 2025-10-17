@@ -618,6 +618,25 @@ class FixedSizeSampleBuffer:
         self.n_clears += 1
 
 
+def get_empirical_probs_for_predictor_init(
+    first_encoded_part: Path, tgt_cardinalities: dict[str, int], is_sequential: bool, alpha: float = 1.0
+) -> dict[str, np.ndarray]:
+    df_part = pd.read_parquet(first_encoded_part)
+    # for sequential models, we will use the empirical probs of the first time step for weight initialization
+    if is_sequential:
+        for sub_col in df_part.columns:
+            df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
+
+    probs_map: dict[str, np.ndarray] = {}
+    for sub_col, cardinality in tgt_cardinalities.items():
+        probs_map[sub_col] = calculate_empirical_probs(
+            df_part[sub_col],
+            cardinality=cardinality,
+            smoothing_alpha=alpha,
+        )
+    return probs_map
+
+
 def _get_log_histogram_edges(idx: int, bins: int = 64) -> tuple[float, float]:
     """
     Modified from OpenDP's SmartNoise SDK (MIT License)
@@ -884,3 +903,91 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
 def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
     return min_threshold + int(noise_multiplier * np.random.uniform())
+
+
+def calculate_empirical_probs(
+    encoded_values: pd.Series,
+    cardinality: int,
+    smoothing_alpha: float = 0.0,
+) -> np.ndarray:
+    """
+    Calculate empirical probabilities from a series of categorical values.
+
+    This is a unified helper function for computing probability distributions
+    from value counts, used across different encoding types (lat_long, datetime,
+    numeric_digit) and for predictor weight initialization.
+
+    Args:
+        encoded_values: Series of encoded categorical values (integers) of a subcolumn.
+        cardinality: Expected number of categories.
+        smoothing_alpha: Laplace smoothing parameter. If 0, no smoothing is applied.
+            For predictor init, typically use alpha=1.0.
+
+    Returns:
+        Array of probabilities summing to 1.0.
+    """
+    vc = encoded_values.value_counts()
+
+    if vc.empty:
+        # fallback to uniform distribution
+        return np.full(cardinality, 1.0 / cardinality, dtype=np.float64)
+
+    # Fixed-size output for all categories
+    counts = np.zeros(cardinality, dtype=np.float64)
+    for idx, count in vc.items():
+        counts[int(idx)] = float(count)
+
+    # Apply Laplace smoothing
+    if smoothing_alpha > 0:
+        total = counts.sum() + smoothing_alpha * len(counts)
+        probs = (counts + smoothing_alpha) / max(total, 1e-12)
+        probs = np.clip(probs, a_min=1e-12, a_max=None)
+    else:
+        # No smoothing: simple normalization
+        total = counts.sum()
+        probs = counts / max(total, 1e-12)
+
+    return probs
+
+
+def fill_sub_columns_of_nan(encoded_df: pd.DataFrame, column_stats: dict) -> pd.DataFrame:
+    """
+    Fill sub-columns of NaN values with sampled values from the empirical distributions estimated from non-NaN rows.
+    This is used for filling NaN values of the following encoding types to avoid bias towards 0 during training:
+    - TABULAR_NUMERIC_DIGIT
+    - TABULAR_DATETIME
+    - TABULAR_LAT_LONG
+    - TABULAR_CHARACTER
+    """
+    columns_to_fill = [col for col in column_stats["cardinalities"].keys() if col.split(PREFIX_SUB_COLUMN)[-1] != "nan"]
+    nan_mask = encoded_df["nan"] == 1
+    n_nan = nan_mask.sum()
+    for col in columns_to_fill:
+        cardinality = column_stats["cardinalities"][col]
+        categories = np.arange(cardinality, dtype=encoded_df[col].dtype)
+        probs = calculate_empirical_probs(
+            encoded_df.loc[~nan_mask, col],
+            cardinality=cardinality,
+        )
+        # NOTE: an alternative will be to use the largest remainder method
+        encoded_df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
+    return encoded_df
+
+
+def fill_nan_with_non_nan_distribution(values: pd.Series, column_stats: dict) -> tuple[pd.Series, pd.Series]:
+    """
+    Fill NaN values with values from the empirical distributions estimated from non-NaN rows.
+    This is used for filling NaN values of the following encoding types to avoid bias towards 0 during training:
+    - TABULAR_NUMERIC_DIGIT
+    - TABULAR_DATETIME
+    - TABULAR_LAT_LONG
+    - TABULAR_CHARACTER
+    """
+    nan_mask = values.isna()
+    vc = values.value_counts(normalize=True)
+    if vc.empty:
+        return values, nan_mask.astype(int)
+    probs = vc.values
+    categories = vc.index
+    values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
+    return values, nan_mask.astype(int)

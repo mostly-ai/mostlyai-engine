@@ -34,6 +34,7 @@ from mostlyai.engine._common import (
     compute_log_histogram,
     dp_approx_bounds,
     dp_non_rare,
+    fill_nan_with_non_nan_distribution,
     find_distinct_bins,
     get_stochastic_rare_threshold,
     safe_convert_numeric,
@@ -114,7 +115,6 @@ def split_sub_columns_digit(
 
     columns = [f"E{i}" for i in np.arange(max_decimal, min_decimal - 1, -1)]
     if values.isna().all():
-        # handle special case when all values are nan
         df = pd.DataFrame({c: [0] * len(values) for c in columns})
     else:
         # convert to float64 as `np.format_float_positional` doesn't support Float64
@@ -137,6 +137,8 @@ def split_sub_columns_digit(
         df.columns = columns
     df.insert(0, "nan", values.isna())
     df.insert(1, "neg", (~values.isna()) & (values < 0))
+    # temporarily fill NaN with 0 for type conversion to int
+    # these will be replaced by sampled values during encoding
     df = df.astype("int")
     return df
 
@@ -405,25 +407,28 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
     if stats["max"] is not None:
         reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
         values = values.where((values.isna()) | (values <= reduced_max), reduced_max)
+    values, nan_mask = fill_nan_with_non_nan_distribution(values, stats)
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
-    is_not_nan = df["nan"] == 0
+
     # normalize values to `[0, max_digit-min_digit]`
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         key = f"E{d}"
         # subtract minimum value
-        df[key] = df[key].where(~is_not_nan, df[key] - stats["min_digits"][key])
+        df[key] = df[key] - stats["min_digits"][key]
         # ensure that any value is mapped onto valid value range
         df[key] = np.minimum(df[key], stats["max_digits"][key] - stats["min_digits"][key])
         df[key] = np.maximum(df[key], 0)
-
     # ensure that encoded digits are mapped onto valid value range
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         df[f"E{d}"] = np.minimum(df[f"E{d}"], stats["max_digits"][f"E{d}"])
-    if not stats["has_nan"]:
-        df.drop("nan", inplace=True, axis=1)
     if not stats["has_neg"]:
         df.drop("neg", inplace=True, axis=1)
+    if stats["has_nan"]:
+        df["nan"] = nan_mask
+        # df = fill_sub_columns_of_nan(df, stats)
+    else:
+        df.drop("nan", inplace=True, axis=1)
     return df
 
 

@@ -19,7 +19,12 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
+from mostlyai.engine._common import (
+    dp_non_rare,
+    fill_nan_with_non_nan_distribution,
+    get_stochastic_rare_threshold,
+    safe_convert_string,
+)
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_UNKNOWN_TOKEN,
     encode_categorical,
@@ -340,6 +345,7 @@ def encode_latlong(
     context_keys: pd.Series | None = None,
 ) -> pd.DataFrame:
     values = safe_convert_string(values)
+    values, nan_mask = fill_nan_with_non_nan_distribution(values, column_stats)
     # split to sub_columns
     quads = split_sub_columns_latlong(values)
     encoded_quads = pd.DataFrame()  # empty DF to include all the ModelEncodingType.tabular_categorical quads
@@ -348,9 +354,12 @@ def encode_latlong(
         encoded_quads[quad] = encode_categorical(quads[quad], stats)
 
     encoded_quadtile = encode_character(quads["QUADTILE"], column_stats["quadtile_characters"])
-    if column_stats["has_nan"]:
-        encoded_quadtile["nan"] = quads["nan"]
+
     df = pd.concat([encoded_quads, encoded_quadtile], axis=1)
+    if column_stats["has_nan"]:
+        df["nan"] = nan_mask
+        # df = fill_sub_columns_of_nan(df, column_stats)
+
     return df
 
 
