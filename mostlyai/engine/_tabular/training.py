@@ -350,7 +350,7 @@ def train(
     max_sequence_window: int = 100,
     enable_flexible_generation: bool = True,
     # TODO: temporary flag for easy experimentation; to be removed later
-    weight_initialization: bool = False,
+    weight_initialization: bool = True,
     differential_privacy: DifferentialPrivacyConfig | dict | None = None,
     upload_model_data_callback: Callable | None = None,
     model_state_strategy: ModelStateStrategy | str = ModelStateStrategy.reset,

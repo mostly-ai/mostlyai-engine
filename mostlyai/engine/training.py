@@ -77,7 +77,7 @@ def train(
             gradient_accumulation_steps=gradient_accumulation_steps,
             enable_flexible_generation=enable_flexible_generation,
             # TODO: temporary flag for easy experimentation; to be removed later
-            weight_initialization=bool(weight_initialization) if weight_initialization is not None else False,
+            weight_initialization=bool(weight_initialization) if weight_initialization is not None else True,
             differential_privacy=differential_privacy,
             update_progress=update_progress,
             upload_model_data_callback=upload_model_data_callback,
