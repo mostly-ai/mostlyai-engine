@@ -345,6 +345,9 @@ def encode_latlong(
     context_keys: pd.Series | None = None,
 ) -> pd.DataFrame:
     values = safe_convert_string(values)
+    latitude_longitude = split_str_to_latlong(values)
+    nan_mask = latitude_longitude.isna().any(axis=1)
+    values[nan_mask] = np.nan
     values, nan_mask = fill_nan_with_non_nan_distribution(values, column_stats)
     # split to sub_columns
     quads = split_sub_columns_latlong(values)
