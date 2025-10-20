@@ -626,11 +626,24 @@ def get_empirical_probs_for_predictor_init(
     if is_sequential:
         for sub_col in df_part.columns:
             df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
-
+    # check which columns have a separate NaN sub column
+    has_nan_map: dict[str, bool] = {col: False for col in get_columns_from_cardinalities(tgt_cardinalities)}
+    for col in has_nan_map.keys():
+        has_nan_map[col] = f"{col}{PREFIX_SUB_COLUMN}nan" in tgt_cardinalities
     probs_map: dict[str, np.ndarray] = {}
     for sub_col, cardinality in tgt_cardinalities.items():
+        col, _ = sub_col.split(PREFIX_SUB_COLUMN)
+        nan_sub_col = f"{col}{PREFIX_SUB_COLUMN}nan"
+        if has_nan_map[col] is True and sub_col != nan_sub_col and (df_part[nan_sub_col] == 0).sum() > 0:
+            # exclude NaN rows from the calculation if
+            # - this column has a separate NaN sub column
+            # - the NaN sub column has at least one non-NaN row
+            # - this sub column is not the NaN sub column
+            df_part_sub_col = df_part.loc[df_part[nan_sub_col] == 0, sub_col]
+        else:
+            df_part_sub_col = df_part[sub_col]
         probs_map[sub_col] = calculate_empirical_probs(
-            df_part[sub_col],
+            df_part_sub_col,
             cardinality=cardinality,
             smoothing_alpha=alpha,
         )
