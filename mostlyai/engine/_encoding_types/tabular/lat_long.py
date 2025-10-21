@@ -21,8 +21,8 @@ from numpy.typing import NDArray
 
 from mostlyai.engine._common import (
     dp_non_rare,
-    fill_nan_with_non_nan_distribution,
     get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
     safe_convert_string,
 )
 from mostlyai.engine._encoding_types.tabular.categorical import (
@@ -348,7 +348,7 @@ def encode_latlong(
     latitude_longitude = split_str_to_latlong(values)
     nan_mask = latitude_longitude.isna().any(axis=1)
     values[nan_mask] = np.nan
-    values, nan_mask = fill_nan_with_non_nan_distribution(values, column_stats)
+    values, nan_mask = impute_from_non_nan_distribution(values, column_stats)
     # split to sub_columns
     quads = split_sub_columns_latlong(values)
     encoded_quads = pd.DataFrame()  # empty DF to include all the ModelEncodingType.tabular_categorical quads
@@ -360,8 +360,8 @@ def encode_latlong(
 
     df = pd.concat([encoded_quads, encoded_quadtile], axis=1)
     if column_stats["has_nan"]:
+        # FIXME: consider moving nan sub column as the first column
         df["nan"] = nan_mask
-        # df = fill_sub_columns_of_nan(df, column_stats)
 
     return df
 

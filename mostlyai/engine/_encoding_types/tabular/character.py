@@ -21,8 +21,8 @@ import pandas as pd
 
 from mostlyai.engine._common import (
     dp_non_rare,
-    fill_nan_with_non_nan_distribution,
     get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
     safe_convert_string,
 )
 
@@ -97,7 +97,7 @@ def analyze_reduce_character(
 
 def encode_character(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
     values = safe_convert_string(values)
-    values, nan_mask = fill_nan_with_non_nan_distribution(values, stats)
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     max_string_length = stats["max_string_length"]
     df_split = split_sub_columns_character(values, max_string_length)
     for idx in range(max_string_length):

@@ -963,38 +963,22 @@ def calculate_empirical_probs(
     return probs
 
 
-def fill_sub_columns_of_nan(encoded_df: pd.DataFrame, column_stats: dict) -> pd.DataFrame:
+def impute_from_non_nan_distribution(values: pd.Series, column_stats: dict) -> tuple[pd.Series, pd.Series]:
     """
-    Fill sub-columns of NaN values with sampled values from the empirical distributions estimated from non-NaN rows.
-    This is used for filling NaN values of the following encoding types to avoid bias towards 0 during training:
+    Impute NaNs with values from the empirical distributions of non-NaN rows.
+    This is helpful especially in the low-data regime to avoid bias towards strong artificial patterns.
+    It is applied when encoding columns with the following encoding types:
     - TABULAR_NUMERIC_DIGIT
     - TABULAR_DATETIME
     - TABULAR_LAT_LONG
     - TABULAR_CHARACTER
-    """
-    columns_to_fill = [col for col in column_stats["cardinalities"].keys() if col.split(PREFIX_SUB_COLUMN)[-1] != "nan"]
-    nan_mask = encoded_df["nan"] == 1
-    n_nan = nan_mask.sum()
-    for col in columns_to_fill:
-        cardinality = column_stats["cardinalities"][col]
-        categories = np.arange(cardinality, dtype=encoded_df[col].dtype)
-        probs = calculate_empirical_probs(
-            encoded_df.loc[~nan_mask, col],
-            cardinality=cardinality,
-        )
-        # NOTE: an alternative will be to use the largest remainder method
-        encoded_df.loc[nan_mask, col] = np.random.choice(categories, size=n_nan, p=probs)
-    return encoded_df
 
+    Args:
+        values: Series of values before encoding.
+        column_stats: Column statistics.
 
-def fill_nan_with_non_nan_distribution(values: pd.Series, column_stats: dict) -> tuple[pd.Series, pd.Series]:
-    """
-    Fill NaN values with values from the empirical distributions estimated from non-NaN rows.
-    This is used for filling NaN values of the following encoding types to avoid bias towards 0 during training:
-    - TABULAR_NUMERIC_DIGIT
-    - TABULAR_DATETIME
-    - TABULAR_LAT_LONG
-    - TABULAR_CHARACTER
+    Returns:
+        tuple[pd.Series, pd.Series]: The series with imputed values and the mask of NaNs.
     """
     nan_mask = values.isna()
     vc = values.value_counts(normalize=True)
@@ -1002,5 +986,6 @@ def fill_nan_with_non_nan_distribution(values: pd.Series, column_stats: dict) ->
         return values, nan_mask.astype(int)
     probs = vc.values
     categories = vc.index
+    # NOTE: an alternative will be to use the largest remainder method
     values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
     return values, nan_mask.astype(int)

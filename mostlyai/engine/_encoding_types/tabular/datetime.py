@@ -29,8 +29,8 @@ from mostlyai.engine._common import (
     ANALYZE_REDUCE_MIN_MAX_N,
     compute_log_histogram,
     dp_approx_bounds,
-    fill_nan_with_non_nan_distribution,
     get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
     safe_convert_datetime,
 )
 from mostlyai.engine._dtypes import is_date_dtype, is_timestamp_dtype
@@ -169,7 +169,7 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
     if stats["max"] is not None:
         reduced_max = pd.Series([stats["max"]], dtype=values.dtype).iloc[0]
         values.loc[values > reduced_max] = reduced_max
-    values, nan_mask = fill_nan_with_non_nan_distribution(values, stats)
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     # split to sub_columns
     df = split_sub_columns_datetime(values)
     # encode values so that each datetime part ranges from 0 to `max_value-min_value`

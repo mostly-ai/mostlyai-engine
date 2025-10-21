@@ -34,9 +34,9 @@ from mostlyai.engine._common import (
     compute_log_histogram,
     dp_approx_bounds,
     dp_non_rare,
-    fill_nan_with_non_nan_distribution,
     find_distinct_bins,
     get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
     safe_convert_numeric,
 )
 from mostlyai.engine._dtypes import is_float_dtype, is_integer_dtype
@@ -407,7 +407,7 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
     if stats["max"] is not None:
         reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
         values = values.where((values.isna()) | (values <= reduced_max), reduced_max)
-    values, nan_mask = fill_nan_with_non_nan_distribution(values, stats)
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
 
@@ -426,7 +426,6 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
         df.drop("neg", inplace=True, axis=1)
     if stats["has_nan"]:
         df["nan"] = nan_mask
-        # df = fill_sub_columns_of_nan(df, stats)
     else:
         df.drop("nan", inplace=True, axis=1)
     return df
