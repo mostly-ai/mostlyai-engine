@@ -341,26 +341,27 @@ def analyze_reduce_latlong(
 
 def encode_latlong(
     values: pd.Series,
-    column_stats: dict,
+    stats: dict,
     context_keys: pd.Series | None = None,
 ) -> pd.DataFrame:
     values = safe_convert_string(values)
+    # convert invalid entries to NaNs before imputation
     latitude_longitude = split_str_to_latlong(values)
-    nan_mask = latitude_longitude.isna().any(axis=1)
-    values[nan_mask] = np.nan
-    values, nan_mask = impute_from_non_nan_distribution(values, column_stats)
+    invalid_entry_or_nan_mask = latitude_longitude.isna().any(axis=1)
+    values[invalid_entry_or_nan_mask] = np.nan
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     # split to sub_columns
     quads = split_sub_columns_latlong(values)
     encoded_quads = pd.DataFrame()  # empty DF to include all the ModelEncodingType.tabular_categorical quads
-    for quad, value_counts in column_stats["quad_codes"].items():
+    for quad, value_counts in stats["quad_codes"].items():
         stats = {"codes": value_counts}
         encoded_quads[quad] = encode_categorical(quads[quad], stats)
 
-    encoded_quadtile = encode_character(quads["QUADTILE"], column_stats["quadtile_characters"])
+    encoded_quadtile = encode_character(quads["QUADTILE"], stats["quadtile_characters"])
 
     df = pd.concat([encoded_quads, encoded_quadtile], axis=1)
-    if column_stats["has_nan"]:
-        # FIXME: consider moving nan sub column as the first column
+    if stats["has_nan"]:
+        # FIXME: consider moving nan sub column to the beginning
         df["nan"] = nan_mask
 
     return df
