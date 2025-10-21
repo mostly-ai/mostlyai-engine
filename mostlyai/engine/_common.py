@@ -928,17 +928,16 @@ def get_empirical_probs_for_predictor_init(
         vc = df_part_sub_col.value_counts()
         if vc.empty:
             # fallback to uniform distribution
-            probs_map[sub_col] = np.full(cardinality, 1.0 / cardinality, dtype=np.float64)
+            probs_map[sub_col] = np.full(cardinality, 1.0 / cardinality)
         else:
-            counts = np.zeros(cardinality, dtype=np.float64)
+            counts = np.zeros(cardinality)
             for idx, count in vc.items():
                 counts[int(idx)] = float(count)
             # apply Laplace smoothing
-            if alpha > 0:
-                total = counts.sum() + alpha * len(counts)
-                probs = (counts + alpha) / max(total, 1e-12)
-                probs = np.clip(probs, a_min=1e-12, a_max=None)
-            probs_map[sub_col] = probs
+            alpha = max(0.0, alpha)
+            total = counts.sum() + alpha * len(counts)
+            probs_map[sub_col] = (counts + alpha) / max(total, 1e-12)
+            probs_map[sub_col] = np.clip(probs_map[sub_col], a_min=1e-12, a_max=None)
     return probs_map
 
 
