@@ -354,8 +354,8 @@ def encode_latlong(
     quads = split_sub_columns_latlong(values)
     encoded_quads = pd.DataFrame()  # empty DF to include all the ModelEncodingType.tabular_categorical quads
     for quad, value_counts in stats["quad_codes"].items():
-        stats = {"codes": value_counts}
-        encoded_quads[quad] = encode_categorical(quads[quad], stats)
+        quad_stats = {"codes": value_counts}
+        encoded_quads[quad] = encode_categorical(quads[quad], quad_stats)
 
     encoded_quadtile = encode_character(quads["QUADTILE"], stats["quadtile_characters"])
 
