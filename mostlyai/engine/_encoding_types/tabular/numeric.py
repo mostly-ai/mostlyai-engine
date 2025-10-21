@@ -115,6 +115,7 @@ def split_sub_columns_digit(
 
     columns = [f"E{i}" for i in np.arange(max_decimal, min_decimal - 1, -1)]
     if values.isna().all():
+        # handle special case when all values are nan
         df = pd.DataFrame({c: [0] * len(values) for c in columns})
     else:
         # convert to float64 as `np.format_float_positional` doesn't support Float64
@@ -137,8 +138,6 @@ def split_sub_columns_digit(
         df.columns = columns
     df.insert(0, "nan", values.isna())
     df.insert(1, "neg", (~values.isna()) & (values < 0))
-    # temporarily fill NaN with 0 for type conversion to int
-    # these will be replaced by sampled values during encoding
     df = df.astype("int")
     return df
 
