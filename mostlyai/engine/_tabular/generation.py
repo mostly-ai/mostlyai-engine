@@ -366,6 +366,7 @@ def _fix_rare_token_probs(
 def _fix_imputation_probs(
     stats: dict,
     imputation: ImputationConfig | None = None,
+    seed_data: pd.DataFrame | None = None,
 ) -> dict[str, dict[str, CodeProbabilities]]:
     imputation = imputation.columns if imputation is not None else []
     _LOG.info(f"imputation: {imputation}")
@@ -374,6 +375,11 @@ def _fix_imputation_probs(
         if col not in stats["columns"]:
             _LOG.info(f"imputed [{col}] not found in stats")
             continue
+
+        # check if this column has NULL values in seed_data
+        if seed_data is not None and col in seed_data.columns and seed_data[col].isna().any():
+            continue  # skip imputation for this column
+
         col_stats = stats["columns"][col]
         encoding_type = col_stats["encoding_type"]
         # null_name will be either None, "na" or "nan"
@@ -752,7 +758,7 @@ def generate(
 
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
-        imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation)
+        imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation, seed_data)
         rebalancing_fixed_probs = _fix_rebalancing_probs(tgt_stats, rebalancing)
         fixed_probs = _translate_fixed_probs(
             fixed_probs=_deepmerge(
