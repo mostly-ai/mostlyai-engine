@@ -107,7 +107,6 @@ def encode_character(values: pd.Series, stats: dict, _: pd.Series | None = None)
         df_split[sub_col] = np_codes
     if stats["has_nan"]:
         df_split["nan"] = nan_mask
-        # df_split = fill_sub_columns_of_nan(df_split, stats)
     else:
         df_split.drop(["nan"], axis=1, inplace=True)
     return df_split

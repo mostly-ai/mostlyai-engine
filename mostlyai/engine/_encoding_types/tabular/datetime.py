@@ -187,7 +187,6 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
 
     if stats["has_nan"]:
         df["nan"] = nan_mask
-        # df = fill_sub_columns_of_nan(df, stats)
     else:
         df.drop(["nan"], inplace=True, axis=1)
     return df
