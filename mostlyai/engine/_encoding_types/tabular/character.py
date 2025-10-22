@@ -19,7 +19,12 @@ Character encoding splits any value into its characters, and encodes each positi
 import numpy as np
 import pandas as pd
 
-from mostlyai.engine._common import dp_non_rare, get_stochastic_rare_threshold, safe_convert_string
+from mostlyai.engine._common import (
+    dp_non_rare,
+    get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
+    safe_convert_string,
+)
 
 UNKNOWN_TOKEN = "\0"
 MAX_LENGTH_CHARS = 50
@@ -92,15 +97,18 @@ def analyze_reduce_character(
 
 def encode_character(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
     values = safe_convert_string(values)
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     max_string_length = stats["max_string_length"]
     df_split = split_sub_columns_character(values, max_string_length)
-    if not stats["has_nan"]:
-        df_split.drop(["nan"], axis=1, inplace=True)
     for idx in range(max_string_length):
         sub_col = f"P{idx}"
         np_codes = np.array(pd.Categorical(df_split[sub_col], categories=stats["codes"][sub_col]).codes)
         np.place(np_codes, np_codes == -1, 0)
         df_split[sub_col] = np_codes
+    if stats["has_nan"]:
+        df_split["nan"] = nan_mask
+    else:
+        df_split.drop(["nan"], axis=1, inplace=True)
     return df_split
 
 

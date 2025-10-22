@@ -30,6 +30,7 @@ from mostlyai.engine._common import (
     compute_log_histogram,
     dp_approx_bounds,
     get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
     safe_convert_datetime,
 )
 from mostlyai.engine._dtypes import is_date_dtype, is_timestamp_dtype
@@ -168,22 +169,26 @@ def encode_datetime(values: pd.Series, stats: dict, _: pd.Series | None = None) 
     if stats["max"] is not None:
         reduced_max = pd.Series([stats["max"]], dtype=values.dtype).iloc[0]
         values.loc[values > reduced_max] = reduced_max
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     # split to sub_columns
     df = split_sub_columns_datetime(values)
-    is_not_nan = df["nan"] == 0
     # encode values so that each datetime part ranges from 0 to `max_value-min_value`
     for key in DATETIME_PARTS:
         # subtract minimum value
-        df[key] = df[key].where(~is_not_nan, df[key] - stats["min_values"][key])
-        # ensure that any value is mapped onto valid value range
+        df[key] = df[key] - stats["min_values"][key]
+        # clamp to valid range
         df[key] = np.minimum(df[key], stats["max_values"][key] - stats["min_values"][key])
         df[key] = np.maximum(df[key], 0)
-    if not stats["has_nan"]:
-        df.drop(["nan"], inplace=True, axis=1)
+
     if not stats["has_time"]:
         df.drop(["hour", "minute", "second"], inplace=True, axis=1)
     if not stats["has_ms"]:
         df.drop(["ms_E2", "ms_E1", "ms_E0"], inplace=True, axis=1)
+
+    if stats["has_nan"]:
+        df["nan"] = nan_mask
+    else:
+        df.drop(["nan"], inplace=True, axis=1)
     return df
 
 

@@ -36,6 +36,7 @@ from mostlyai.engine._common import (
     dp_non_rare,
     find_distinct_bins,
     get_stochastic_rare_threshold,
+    impute_from_non_nan_distribution,
     safe_convert_numeric,
 )
 from mostlyai.engine._dtypes import is_float_dtype, is_integer_dtype
@@ -405,25 +406,27 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
     if stats["max"] is not None:
         reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
         values = values.where((values.isna()) | (values <= reduced_max), reduced_max)
+    values, nan_mask = impute_from_non_nan_distribution(values, stats)
     # split to sub_columns
     df = split_sub_columns_digit(values, stats["max_decimal"], stats["min_decimal"])
-    is_not_nan = df["nan"] == 0
+
     # normalize values to `[0, max_digit-min_digit]`
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         key = f"E{d}"
         # subtract minimum value
-        df[key] = df[key].where(~is_not_nan, df[key] - stats["min_digits"][key])
+        df[key] = df[key] - stats["min_digits"][key]
         # ensure that any value is mapped onto valid value range
         df[key] = np.minimum(df[key], stats["max_digits"][key] - stats["min_digits"][key])
         df[key] = np.maximum(df[key], 0)
-
     # ensure that encoded digits are mapped onto valid value range
     for d in np.arange(stats["max_decimal"], stats["min_decimal"] - 1, -1):
         df[f"E{d}"] = np.minimum(df[f"E{d}"], stats["max_digits"][f"E{d}"])
-    if not stats["has_nan"]:
-        df.drop("nan", inplace=True, axis=1)
     if not stats["has_neg"]:
         df.drop("neg", inplace=True, axis=1)
+    if stats["has_nan"]:
+        df["nan"] = nan_mask
+    else:
+        df.drop("nan", inplace=True, axis=1)
     return df
 
 
