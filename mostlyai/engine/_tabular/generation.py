@@ -366,7 +366,6 @@ def _fix_rare_token_probs(
 def _fix_imputation_probs(
     stats: dict,
     imputation: ImputationConfig | None = None,
-    seed_data: pd.DataFrame | None = None,
 ) -> dict[str, dict[str, CodeProbabilities]]:
     imputation = imputation.columns if imputation is not None else []
     _LOG.info(f"imputation: {imputation}")
@@ -375,10 +374,6 @@ def _fix_imputation_probs(
         if col not in stats["columns"]:
             _LOG.info(f"imputed [{col}] not found in stats")
             continue
-
-        # check if this column has NULL values in seed_data
-        if seed_data is not None and col in seed_data.columns and seed_data[col].isna().any():
-            continue  # skip imputation for this column
 
         col_stats = stats["columns"][col]
         encoding_type = col_stats["encoding_type"]
@@ -586,6 +581,7 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
+    imputation: ImputationConfig | None = None,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -622,6 +618,8 @@ def decode_buffered_samples(
     df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True) if seed_data else pd.DataFrame()
     if not df_seed.empty:
         seed_columns = [col for col in df_seed.columns]
+        imputation_columns = imputation.columns if imputation is not None else []
+
         if is_sequential:
             # overwrite first steps of each sequence in synthetic data with values from seed data
             df_syn["__SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
@@ -636,12 +634,26 @@ def decode_buffered_samples(
             )
             # project df_overwrite onto df_syn
             seed_rows = df_overwrite["__INDICATOR"] == "both"
-            df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
+            for col in seed_columns:
+                if col in imputation_columns:
+                    # only overwrite non-NULL values for imputed columns
+                    non_null_mask = seed_rows & df_overwrite[col].notna()
+                    df_syn.loc[non_null_mask, col] = df_overwrite.loc[non_null_mask, col]
+                else:
+                    # overwrite all values (including NULLs) for non-imputed columns
+                    df_syn.loc[seed_rows, col] = df_overwrite.loc[seed_rows, col]
             df_syn.drop(columns=["__SEQ_IDX"], inplace=True)
             df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
         else:
-            # for flat data, just overwrite all seed columns
-            df_syn[seed_columns] = df_seed[seed_columns].copy()
+            # for flat data, overwrite seed columns, but conditionally for imputed columns
+            for col in seed_columns:
+                if col in imputation_columns:
+                    # only overwrite non-NULL values for imputed columns
+                    non_null_mask = df_seed[col].notna()
+                    df_syn.loc[non_null_mask, col] = df_seed.loc[non_null_mask, col]
+                else:
+                    # overwrite all values (including NULLs) for non-imputed columns
+                    df_syn[col] = df_seed[col].copy()
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
@@ -758,7 +770,7 @@ def generate(
 
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
-        imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation, seed_data)
+        imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation)
         rebalancing_fixed_probs = _fix_rebalancing_probs(tgt_stats, rebalancing)
         fixed_probs = _translate_fixed_probs(
             fixed_probs=_deepmerge(
@@ -1166,6 +1178,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
+                            imputation=imputation,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1230,6 +1243,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
+                    imputation=imputation,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1245,6 +1259,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
+                imputation=imputation,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()

@@ -180,33 +180,6 @@ class TestFixImputationProbs:
         fixed_probs = _fix_imputation_probs(stats=self.get_stats(), imputation=ImputationConfig(columns=["no_nulls"]))
         assert fixed_probs == {}
 
-    @pytest.mark.parametrize(
-        "seed_data,expected_imputation",
-        [
-            # case 1: seed data with NULLs - should NOT suppress NULL generation
-            (pd.DataFrame({"cat": ["A", None, "B"]}), False),
-            # case 2: seed data without NULLs - should suppress NULL generation
-            (pd.DataFrame({"cat": ["A", "B", "C"]}), True),
-            # case 3: no seed data - should suppress NULL generation (current behavior)
-            (None, True),
-        ],
-    )
-    def test_conditional_imputation_with_null_seeds(self, seed_data, expected_imputation):
-        """test that imputation can conditionally allow NULL generation based on seed data"""
-        stats = self.get_stats()
-        imputation = ImputationConfig(columns=["cat"])
-
-        # call the function with seed_data parameter
-        fixed_probs = _fix_imputation_probs(stats=stats, imputation=imputation, seed_data=seed_data)
-
-        if expected_imputation:
-            # should impute NULL and RARE tokens
-            expected = {"cat": {CATEGORICAL_SUB_COL_SUFFIX: {0: 0.0, 1: 0.0}}}
-            assert fixed_probs == expected
-        else:
-            # should allow NULL generation (empty dict means no imputation)
-            assert fixed_probs == {}
-
 
 class TestFixRebalancingProbs:
     def get_stats(self) -> dict:
