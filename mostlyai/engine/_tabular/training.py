@@ -44,6 +44,7 @@ from mostlyai.engine._common import (
     get_cardinalities,
     get_columns_from_cardinalities,
     get_ctx_sequence_length,
+    get_empirical_probs_for_predictor_init,
     get_max_data_points_per_sample,
     get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
@@ -390,7 +391,7 @@ def train(
         max_training_time = max(0.0, max_training_time) * 60  # convert to seconds
         _LOG.info(f"{max_training_time=}s")
         max_epochs = max(0.0, max_epochs)
-        max_epochs_cap = math.ceil((trn_cnt + val_cnt) / 50)
+        max_epochs_cap = math.ceil((trn_cnt + val_cnt) / 25)
         if max_epochs_cap < max_epochs:
             _LOG.info(f"{max_epochs=} -> max_epochs={max_epochs_cap} due to small sample size")
             max_epochs = max_epochs_cap
@@ -437,6 +438,14 @@ def train(
         _LOG.info(f"{max_sequence_window=}")
         ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
+        empirical_probs_for_predictor_init = (
+            get_empirical_probs_for_predictor_init(
+                workspace.encoded_data_trn.fetch_all()[0], tgt_cardinalities, is_sequential
+            )
+            if not with_dp
+            else None
+        )
+
         # the line below fixes issue with growing epoch time for later epochs
         # https://discuss.pytorch.org/t/training-time-gets-slower-and-slower-on-cpu/145483
         torch.set_flush_denormal(True)
@@ -444,28 +453,24 @@ def train(
         _LOG.info("create training model")
         model_checkpoint = TabularModelCheckpoint(workspace=workspace)
         argn: SequentialModel | FlatModel
+        model_kwargs = {
+            "tgt_cardinalities": tgt_cardinalities,
+            "ctx_cardinalities": ctx_cardinalities,
+            "ctxseq_len_median": ctx_seq_len_median,
+            "model_size": model_size,
+            "column_order": trn_column_order,
+            "device": device,
+            "with_dp": with_dp,  # this flag decides whether the model is initialized with LSTM or DPLSTM layers
+            "empirical_probs_for_predictor_init": empirical_probs_for_predictor_init,
+        }
         if is_sequential:
             argn = SequentialModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
+                **model_kwargs,
                 tgt_seq_len_median=tgt_seq_len_median,
                 tgt_seq_len_max=tgt_seq_len_max,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_size,
-                column_order=trn_column_order,
-                device=device,
-                with_dp=with_dp,  # this flag decides whether the model is initialized with LSTM or DPLSTM layers
             )
         else:
-            argn = FlatModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_size,
-                column_order=trn_column_order,
-                device=device,
-                with_dp=with_dp,
-            )
+            argn = FlatModel(**model_kwargs)
         _LOG.info(f"model class: {argn.__class__.__name__}")
 
         if isinstance(model_state_strategy, str):

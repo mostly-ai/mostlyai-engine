@@ -49,7 +49,7 @@ class TestSplitSubColumnsDigit:
     def test_max_min_specified(self):
         values = pd.Series([21047147.89, -910635.287793, pd.NA], dtype="Float64")
         actual = split_sub_columns_digit(values, max_decimal=7, min_decimal=-6)
-        expected = pd.DataFrame(
+        expected_non_nan = pd.DataFrame(
             [
                 # _ints(
                 #     "__"        null position, sign position
@@ -58,11 +58,12 @@ class TestSplitSubColumnsDigit:
                 # )
                 _ints("00" + "21047147" + "890000"),
                 _ints("01" + "00910635" + "287793"),
-                _ints("10" + "00000000" + "000000"),
             ],
             columns=_digit_cols(7, -6),
         )
-        pd.testing.assert_frame_equal(actual, expected)
+        pd.testing.assert_frame_equal(actual[values.notna()], expected_non_nan)
+        # NaN rows will have nan=1 and some sampled values for the other columns
+        assert (actual[values.isna()]["nan"] == 1).all()
 
     def test_default_max_min(self):
         values = pd.Series([0.2997, 0.1546, 71.46, 4.1, 364210.16, 0.00999999977648])
@@ -346,29 +347,29 @@ class TestDigitEncode:
 
     def test_known_positives_negatives_nulls(self, stats):
         values = pd.Series(np.repeat([10, -20, 0.1, -0.2, pd.NA], 100), name="vals")
-        expected = pd.DataFrame(
+        expected_non_nan = pd.DataFrame(
             [[0, 0, 1, 0, 0]] * 100  # 10
             + [[0, 1, 2, 0, 0]] * 100  # -20
             + [[0, 0, 0, 0, 1]] * 100  # 0.1
-            + [[0, 1, 0, 0, 2]] * 100  # -0.2
-            + [[1, 0, 0, 0, 0]] * 100,  # None
+            + [[0, 1, 0, 0, 2]] * 100,  # -0.2
             columns=["nan", "neg", "E1", "E0", "E-1"],
         )
         encoded = encode_numeric(values, stats)
-        pd.testing.assert_frame_equal(encoded, expected)
+        pd.testing.assert_frame_equal(encoded[values.notna()], expected_non_nan)
+        # NaN rows will have nan=1 and some sampled values for the other columns
+        assert (encoded[values.isna()]["nan"] == 1).all()
 
     def test_unknown_nulls_and_negatives(self, stats):
         stats["has_neg"] = False
         stats["has_nan"] = False
         values = pd.Series(np.repeat([10, -20, pd.NA], 100), name="vals")
-        expected = pd.DataFrame(
+        expected_non_nan = pd.DataFrame(
             [[1, 0, 0]] * 100  # 10
-            + [[2, 0, 0]] * 100  # -20 -> 20
-            + [[0, 0, 0]] * 100,  # None -> 0
+            + [[2, 0, 0]] * 100,  # -20 -> 20
             columns=["E1", "E0", "E-1"],
         )
         encoded = encode_numeric(values, stats)
-        pd.testing.assert_frame_equal(encoded, expected)
+        pd.testing.assert_frame_equal(encoded[values.notna()], expected_non_nan)
 
     def test_values_outside_of_bounds(self, stats):
         values = pd.Series(np.repeat([999, 0.999], 100), name="vals")

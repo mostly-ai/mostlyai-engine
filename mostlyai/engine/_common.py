@@ -884,3 +884,86 @@ def dp_non_rare(value_counts: dict[str, int], epsilon: float, threshold: int = 5
 
 def get_stochastic_rare_threshold(min_threshold: int = 5, noise_multiplier: float = 3) -> int:
     return min_threshold + int(noise_multiplier * np.random.uniform())
+
+
+def get_empirical_probs_for_predictor_init(
+    first_encoded_part: Path, tgt_cardinalities: dict[str, int], is_sequential: bool, alpha: float = 1.0
+) -> dict[str, np.ndarray]:
+    """
+    Calculate empirical probabilities of each sub column from the first partition of encoded data.
+    The probabilities will be used for predictor layer initialization.
+
+    Args:
+        first_encoded_part: Path to the first partition of encoded data.
+        tgt_cardinalities: Mapping from column name to its cardinality.
+        is_sequential: Whether the model is sequential.
+        alpha: Laplace smoothing parameter. If smaller or equal to 0, no smoothing is applied.
+
+    Returns:
+        dict[str, np.ndarray]: Mapping from sub column name to its empirical probabilities.
+    """
+    df_part = pd.read_parquet(first_encoded_part)
+    # for sequential models, we will use the empirical probs of the first time step for weight initialization
+    if is_sequential:
+        for sub_col in df_part.columns:
+            df_part[sub_col] = df_part[sub_col].apply(lambda x: x[0] if isinstance(x, np.ndarray) else x)
+    # check which columns have a separate NaN sub column
+    has_nan_map = {
+        col: f"{col}{PREFIX_SUB_COLUMN}nan" in tgt_cardinalities
+        for col in get_columns_from_cardinalities(tgt_cardinalities)
+    }
+    probs_map: dict[str, np.ndarray] = {}
+    for sub_col, cardinality in tgt_cardinalities.items():
+        col, _ = sub_col.split(PREFIX_SUB_COLUMN)
+        nan_sub_col = f"{col}{PREFIX_SUB_COLUMN}nan"
+        if has_nan_map[col] is True and sub_col != nan_sub_col and (df_part[nan_sub_col] == 0).sum() > 0:
+            # exclude NaN rows from the calculation if
+            # - this column has a separate NaN sub column
+            # - the NaN sub column has at least one non-NaN row
+            # - this sub column is not the NaN sub column
+            df_part_sub_col = df_part.loc[df_part[nan_sub_col] == 0, sub_col]
+        else:
+            df_part_sub_col = df_part[sub_col]
+        # calculate empirical probabilities
+        vc = df_part_sub_col.value_counts()
+        if vc.empty:
+            # fallback to uniform distribution
+            probs_map[sub_col] = np.full(cardinality, 1.0 / cardinality)
+        else:
+            counts = np.zeros(cardinality)
+            for idx, count in vc.items():
+                counts[int(idx)] = float(count)
+            # apply Laplace smoothing
+            alpha = max(0.0, alpha)
+            total = counts.sum() + alpha * len(counts)
+            probs_map[sub_col] = (counts + alpha) / max(total, 1e-12)
+            probs_map[sub_col] = np.clip(probs_map[sub_col], a_min=1e-12, a_max=None)
+    return probs_map
+
+
+def impute_from_non_nan_distribution(values: pd.Series, column_stats: dict) -> tuple[pd.Series, pd.Series]:
+    """
+    Impute NaNs with values from the empirical distributions of non-NaN rows.
+    This is helpful especially in the low-data regime to avoid bias towards strong artificial patterns.
+    It is applied when encoding columns with the following encoding types:
+    - TABULAR_NUMERIC_DIGIT
+    - TABULAR_DATETIME
+    - TABULAR_LAT_LONG
+    - TABULAR_CHARACTER
+
+    Args:
+        values: Series of values before encoding.
+        column_stats: Column statistics.
+
+    Returns:
+        tuple[pd.Series, pd.Series]: The series with imputed values and the mask of NaNs.
+    """
+    nan_mask = values.isna()
+    vc = values.value_counts(normalize=True)
+    if vc.empty:
+        return values, nan_mask.astype(int)
+    probs = vc.values
+    categories = vc.index
+    # NOTE: an alternative will be to use the largest remainder method
+    values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
+    return values, nan_mask.astype(int)
