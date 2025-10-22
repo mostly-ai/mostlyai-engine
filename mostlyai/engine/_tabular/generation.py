@@ -93,6 +93,10 @@ from mostlyai.engine.domain import (
 
 _LOG = logging.getLogger(__name__)
 
+# sentinel value to indicate "generate this row" in fixed_values for imputation
+FIXED_VALUES_SENTINEL = -1
+
+
 DUMMY_CONTEXT_KEY = "__dummy_context_key"
 
 
@@ -202,6 +206,73 @@ def _generate_primary_keys(size: int, type: Literal["uuid", "int"] = "uuid") -> 
         )
     else:
         return pd.Series(range(size), dtype="int")
+
+
+def _create_fixed_values_with_imputation(
+    seed_encoded: pd.DataFrame,
+    seed_data: pd.DataFrame,
+    imputation: ImputationConfig | None,
+    tgt_stats: dict,
+    tgt_sub_columns: list[str],
+    device: torch.device,
+    unsqueeze: bool = False,
+) -> tuple[dict[str, torch.Tensor], set[str]]:
+    """
+    create fixed_values with sentinel markers for NULL positions in imputed columns.
+
+    :param seed_encoded: encoded seed data
+    :param seed_data: original seed data (to check for NULLs)
+    :param imputation: imputation configuration
+    :param tgt_stats: target statistics
+    :param tgt_sub_columns: target sub-columns
+    :param device: torch device
+    :param unsqueeze: whether to unsqueeze the tensor (for sequential)
+    :return: (fixed_values dict, set of sub-columns with sentinels)
+    """
+    imputation_columns = imputation.columns if imputation is not None else []
+
+    # map imputed columns to their sub-column names
+    col_to_sub_cols = {}
+    if imputation_columns:
+        for col in imputation_columns:
+            if col in tgt_stats["columns"]:
+                col_stats = tgt_stats["columns"][col]
+                sub_cols = [
+                    get_argn_name(
+                        argn_processor=col_stats[ARGN_PROCESSOR],
+                        argn_table=col_stats[ARGN_TABLE],
+                        argn_column=col_stats[ARGN_COLUMN],
+                        argn_sub_column=sub_col,
+                    )
+                    for sub_col in col_stats.get("cardinalities", {}).keys()
+                ]
+                col_to_sub_cols[col] = sub_cols
+
+    fixed_values = {}
+    imputed_sub_cols_with_sentinels = set()
+
+    for col in seed_encoded.columns:
+        if col not in tgt_sub_columns:
+            continue
+
+        values = torch.as_tensor(seed_encoded[col].to_numpy(), device=device).type(torch.int)
+
+        # check if this sub-column belongs to an imputed column
+        for orig_col, sub_cols in col_to_sub_cols.items():
+            if col in sub_cols and orig_col in seed_data.columns:
+                null_mask = seed_data[orig_col].isna()
+                if null_mask.any():
+                    values = values.clone()
+                    values[null_mask.values] = FIXED_VALUES_SENTINEL
+                    imputed_sub_cols_with_sentinels.add(col)
+                break
+
+        if unsqueeze:
+            values = torch.unsqueeze(values, dim=-1)
+
+        fixed_values[col] = values
+
+    return fixed_values, imputed_sub_cols_with_sentinels
 
 
 def _batch_df(df: pd.DataFrame, no_of_batches: int) -> pd.DataFrame:
@@ -1091,15 +1162,17 @@ def generate(
 
                     # fix seeded columns
                     seed_vals = {}
+                    imputed_sentinels = set()
                     if len(seed_step_encoded) > 0:
-                        seed_vals = {
-                            col: torch.unsqueeze(
-                                torch.as_tensor(seed_step_encoded[col].to_numpy(), device=model.device).type(torch.int),
-                                dim=-1,
-                            )
-                            for col in seed_batch_encoded.columns
-                            if col in tgt_sub_columns
-                        }
+                        seed_vals, imputed_sentinels = _create_fixed_values_with_imputation(
+                            seed_encoded=seed_step_encoded,
+                            seed_data=seed_step,
+                            imputation=imputation,
+                            tgt_stats=tgt_stats,
+                            tgt_sub_columns=tgt_sub_columns,
+                            device=model.device,
+                            unsqueeze=True,
+                        )
 
                     fixed_values = sidx_vals | slen_vals | ridx_vals | sdec_vals | seed_vals
                     out_dct, history, history_state = model(
@@ -1108,6 +1181,7 @@ def generate(
                         batch_size=step_size,
                         fixed_probs=fixed_probs,
                         fixed_values=fixed_values,
+                        imputed_sub_cols_with_sentinels=imputed_sentinels,
                         temperature=sampling_temperature,
                         top_p=sampling_top_p,
                         history=history,
@@ -1203,11 +1277,18 @@ def generate(
                     if col.startswith(CTXSEQ)
                 }
                 x = ctxflt_inputs | ctxseq_inputs
-                fixed_values = {
-                    col: torch.as_tensor(seed_batch_encoded[col].to_numpy(), device=model.device).type(torch.int)
-                    for col in seed_batch_encoded.columns
-                    if col in tgt_sub_columns
-                }
+
+                # identify imputed columns that have NULLs in this batch
+                # and get their encoded sub-column names
+                fixed_values, imputed_sentinels = _create_fixed_values_with_imputation(
+                    seed_encoded=seed_batch_encoded,
+                    seed_data=seed_batch,
+                    imputation=imputation,
+                    tgt_stats=tgt_stats,
+                    tgt_sub_columns=tgt_sub_columns,
+                    device=model.device,
+                    unsqueeze=False,
+                )
 
                 out_dct, _ = model(
                     x,
@@ -1215,6 +1296,7 @@ def generate(
                     batch_size=batch_size,
                     fixed_probs=fixed_probs,
                     fixed_values=fixed_values,
+                    imputed_sub_cols_with_sentinels=imputed_sentinels,
                     temperature=sampling_temperature,
                     top_p=sampling_top_p,
                     fairness_transforms=fairness_transforms,

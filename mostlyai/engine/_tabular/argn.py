@@ -45,6 +45,11 @@ from mostlyai.engine._common import (
 )
 from mostlyai.engine._tabular.fairness import apply_fairness_transforms
 
+# import sentinel for imputation
+# Import done conditionally to avoid circular dependency
+# Actual import happens in generation.py
+FIXED_VALUES_SENTINEL = -1
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -963,6 +968,7 @@ class FlatModel(nn.Module):
         batch_size: int | None = None,
         fixed_probs=None,
         fixed_values=None,
+        imputed_sub_cols_with_sentinels: set[str] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         return_probs: list[str] | None = None,
@@ -1038,7 +1044,51 @@ class FlatModel(nn.Module):
 
                 # if sub column is fixed, skip sampling and use that value
                 if sub_col in fixed_values:
-                    out = fixed_values[sub_col]
+                    fixed_val = fixed_values[sub_col]
+
+                    # check if this column has sentinel values requiring partial generation
+                    if imputed_sub_cols_with_sentinels and sub_col in imputed_sub_cols_with_sentinels:
+                        # need to sample and merge with fixed values
+                        # collect previous sub column embeddings for current column
+                        prev_sub_col_embeds = [
+                            tgt_embeds[sub_col]
+                            for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        ]
+
+                        # regressor
+                        regressor_in = context + [col_embeddings] + prev_sub_col_embeds
+                        xs = self.regressors(regressor_in, sub_col)
+
+                        # predictor
+                        xs = self.predictors(xs, sub_col)
+
+                        # softmax to probs
+                        xs = nn.Softmax(dim=-1)(xs)
+
+                        # keep probabilities (used e.g. for fairness)
+                        if sub_col in return_probs:
+                            probs[sub_col] = xs
+
+                        # apply fairness transform when generating the target sub column
+                        if fairness_transforms:
+                            xs = apply_fairness_transforms(sub_col, xs, outputs, fairness_transforms)
+
+                        # sample
+                        sampled = torch.squeeze(
+                            _sample(
+                                probs=xs,
+                                temperature=temperature,
+                                top_p=top_p,
+                                fixed_probs=fixed_probs.get(sub_col),
+                            ),
+                            dim=-1,
+                        )
+
+                        # use sampled where sentinel, fixed otherwise
+                        out = torch.where(fixed_val == FIXED_VALUES_SENTINEL, sampled, fixed_val)
+                    else:
+                        # all fixed, fast path
+                        out = fixed_val
 
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
@@ -1244,6 +1294,7 @@ class SequentialModel(nn.Module):
         batch_size: int | None = None,
         fixed_probs=None,
         fixed_values=None,
+        imputed_sub_cols_with_sentinels: set[str] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         history=None,
@@ -1377,7 +1428,48 @@ class SequentialModel(nn.Module):
 
                 # if sub column is fixed, skip sampling and use that value
                 if sub_col in fixed_values:
-                    out = fixed_values[sub_col]
+                    fixed_val = fixed_values[sub_col]
+
+                    # check if this column has sentinel values requiring partial generation
+                    if imputed_sub_cols_with_sentinels and sub_col in imputed_sub_cols_with_sentinels:
+                        # need to sample and merge with fixed values
+                        # collect previous sub column embeddings for current column
+                        prev_sub_col_embeds = {
+                            sub_col: tgt_embeds[sub_col]
+                            for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        }
+                        if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                            # RIDX sub-columns should not see SLEN sub-columns
+                            prev_sub_col_embeds = {
+                                k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                                for k, v in prev_sub_col_embeds.items()
+                            }
+                        prev_sub_col_embeds = list(prev_sub_col_embeds.values())
+
+                        # regressor
+                        regressor_in = context_history + [col_embeddings] + prev_sub_col_embeds
+                        xs = self.regressors(regressor_in, sub_col)
+
+                        # predictor
+                        xs = self.predictors(xs, sub_col)
+
+                        # sample
+                        xs = nn.Softmax(dim=-1)(xs)
+                        sampled = torch.squeeze(
+                            _sample(
+                                probs=xs,
+                                temperature=temperature,
+                                top_p=top_p,
+                                fixed_probs=fixed_probs.get(sub_col),
+                            ),
+                            dim=-1,
+                        ).unsqueeze(-1)
+
+                        # use sampled where sentinel, fixed otherwise
+                        out = torch.where(fixed_val == FIXED_VALUES_SENTINEL, sampled, fixed_val)
+                    else:
+                        # all fixed, fast path
+                        out = fixed_val
 
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column

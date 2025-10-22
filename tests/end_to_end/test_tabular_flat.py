@@ -229,6 +229,68 @@ def test_imputation(input_data, tmp_path_factory):
         assert syn[k].isna().mean() == 0
 
 
+def test_seed_imputation_with_nulls(input_data, tmp_path_factory):
+    """test that imputation fills in NULL values in seed data during generation"""
+    df = input_data[0]
+    workspace_dir = tmp_path_factory.mktemp("workspace-seed-imputation")
+
+    # setup with columns that support NULLs
+    tgt_encoding_types = {
+        "amount": ModelEncodingType.tabular_numeric_auto,
+        "product_type": ModelEncodingType.tabular_categorical,
+        "datetime": ModelEncodingType.tabular_datetime,
+    }
+
+    # train a model
+    split(
+        tgt_data=df[["id"] + list(tgt_encoding_types.keys())],
+        tgt_primary_key="id",
+        tgt_encoding_types=tgt_encoding_types,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    train(max_epochs=5, enable_flexible_generation=True, workspace_dir=workspace_dir)
+
+    # create seed data with some NULL values
+    seed_data = pd.DataFrame(
+        {
+            "amount": [10, None, 30, None, 50],  # has NULLs
+            "product_type": ["A", "B", None, "C", None],  # has NULLs
+        }
+    )
+
+    # generate with imputation for columns with NULLs
+    generate(
+        seed_data=seed_data,
+        imputation={"columns": ["amount", "product_type"]},
+        workspace_dir=workspace_dir,
+    )
+
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+
+    # verify output has exactly 5 rows
+    assert len(syn) == 5
+
+    # verify imputed columns have NO NULLs
+    assert syn["amount"].isna().sum() == 0, "amount should have no NULLs after imputation"
+    assert syn["product_type"].isna().sum() == 0, "product_type should have no NULLs after imputation"
+
+    # verify non-NULL seed values are preserved
+    assert syn.loc[0, "amount"] == 10
+    assert syn.loc[2, "amount"] == 30
+    assert syn.loc[4, "amount"] == 50
+    assert syn.loc[0, "product_type"] == "A"
+    assert syn.loc[1, "product_type"] == "B"
+    assert syn.loc[3, "product_type"] == "C"
+
+    # verify NULL seed values were replaced (not NULL anymore)
+    assert pd.notna(syn.loc[1, "amount"])
+    assert pd.notna(syn.loc[3, "amount"])
+    assert pd.notna(syn.loc[2, "product_type"])
+    assert pd.notna(syn.loc[4, "product_type"])
+
+
 def test_zero_column(input_data, tmp_path_factory):
     df = input_data[0]
     workspace_dir = tmp_path_factory.mktemp("workspace-zero-column")
