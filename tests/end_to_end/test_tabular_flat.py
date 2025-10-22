@@ -143,7 +143,7 @@ class TestTabularFlatWithoutContext:
         syn_a = syn[syn["product_type"] == "A"].reset_index(drop=True)
         syn_b = syn[syn["product_type"] == "B"].reset_index(drop=True)
         # given the fixed amount values, the price of product A should be ~70% of the price of product B
-        assert abs(1 - syn_b["price"] * 0.7 / syn_a["price"]).median() < 0.05
+        assert abs(1 - syn_b["price"] * 0.7 / syn_a["price"]).median() < 0.02
 
     def test_seed_special_cases(self, workspace_after_training):
         workspace_dir = workspace_after_training
@@ -176,7 +176,7 @@ class TestTabularFlatWithoutContext:
         )
         syn = pd.read_parquet(workspace_dir / "SyntheticData")
         # the frequency of the producer should be close to the specified probabilities
-        assert (syn["producer"].value_counts(normalize=True) - 0.2).mean() < 0.01
+        assert (syn["producer"].value_counts(normalize=True) - 0.2).mean() < 0.005
 
     @pytest.mark.parametrize(
         "target_column, sensitive_columns",
@@ -454,13 +454,13 @@ class TestTabularFlatWithContext:
         syn_tgt = pd.read_parquet(workspace_dir / "SyntheticData")
 
         match_producer = (syn_tgt.loc[syn_ctx["product_type"] == "A", "product_type_id"] == ord("A")).mean()
-        assert match_producer > 0.9
+        assert match_producer > 0.95
 
         # quantiles of datetime should not be too far apart
         syn_time, orig_time = syn_tgt["datetime"], orig_tgt["datetime"]
-        assert abs((syn_time.quantile(0.1) - orig_time.quantile(0.1)).days) < 365 * 3
-        assert abs((syn_time.quantile(0.5) - orig_time.quantile(0.5)).days) < 365
-        assert abs((syn_time.quantile(0.9) - orig_time.quantile(0.9)).days) < 365 * 3
+        assert abs((syn_time.quantile(0.1) - orig_time.quantile(0.1)).days) < 365
+        assert abs((syn_time.quantile(0.5) - orig_time.quantile(0.5)).days) < 90
+        assert abs((syn_time.quantile(0.9) - orig_time.quantile(0.9)).days) < 365
 
         # check consistency between date and datetime
         assert (syn_ctx["date"].dt.year == syn_tgt["datetime"].dt.year).mean() > 0.9
@@ -473,5 +473,5 @@ class TestTabularFlatWithContext:
         syn_latlong_mean = syn_latlong.dropna().astype(float).mean()
         tgt_geo_na_ratio = (orig_latlong.isna().any(axis=1)).mean()
         syn_geo_na_ratio = (syn_latlong.isna().any(axis=1)).mean()
-        assert abs(tgt_geo_na_ratio - syn_geo_na_ratio) < 0.1
-        assert np.allclose(orig_latlong_mean.values, syn_latlong_mean.values, atol=0.2)
+        assert abs(tgt_geo_na_ratio - syn_geo_na_ratio) < 0.02
+        assert np.allclose(orig_latlong_mean.values, syn_latlong_mean.values, atol=0.1)
