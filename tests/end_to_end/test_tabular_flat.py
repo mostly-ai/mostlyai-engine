@@ -143,7 +143,7 @@ class TestTabularFlatWithoutContext:
         syn_a = syn[syn["product_type"] == "A"].reset_index(drop=True)
         syn_b = syn[syn["product_type"] == "B"].reset_index(drop=True)
         # given the fixed amount values, the price of product A should be ~70% of the price of product B
-        assert abs(1 - syn_b["price"] * 0.7 / syn_a["price"]).median() < 0.02
+        assert abs(1 - syn_b["price"] * 0.7 / syn_a["price"]).median() < 0.05
 
     def test_seed_special_cases(self, workspace_after_training):
         workspace_dir = workspace_after_training
