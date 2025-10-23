@@ -1,0 +1,221 @@
+================================================================================
+                    PERFORMANCE OPTIMIZATION ROADMAP
+================================================================================
+
+CURRENT PERFORMANCE (100K rows, 14 mixed-type columns, n_jobs=1)
+================================================================================
+ANALYZE: 11.47s  (8,718 rows/sec)   [█████████████████████████ 79%]
+ENCODE:   3.14s  (31,885 rows/sec)  [███████ 21%]
+TOTAL:   14.61s
+================================================================================
+
+
+TOP 5 BOTTLENECKS (by time spent)
+================================================================================
+1. compute_log_histogram        4.06s  [███████████████ 28%]  🔴 CRITICAL
+2. split_sub_columns_digit      3.69s  [██████████████ 25%]   🔴 CRITICAL
+3. String splitting (regex)     3.06s  [████████████ 21%]     🟡 HIGH
+4. is_a_list (3M calls!)        1.09s  [████ 7%]              🔴 CRITICAL
+5. is_sequential checks         1.29s  [████ 9%]              🟡 HIGH
+   Other                        1.42s  [█████ 10%]
+================================================================================
+
+
+OPTIMIZATION PHASES
+================================================================================
+
+PHASE 1: QUICK WINS (1-2 days)                     Expected: 14.61s → ~11s
+────────────────────────────────────────────────────────────────────────────
+✅ 1. Column-level sequential detection           Saves: 1.09s
+   - Replace 3M is_a_list calls with 14 checks
+   - File: mostlyai/engine/_common.py:201
+
+✅ 2. Sample-based is_sequential                   Saves: 1.00s
+   - Check first 100 values instead of all
+   - File: mostlyai/engine/_common.py:205
+
+✅ 3. Cache histogram edges                        Saves: 0.50s
+   - Reuse bins across similar columns
+   - File: mostlyai/engine/_common.py:636
+
+✅ 4. Reduce type conversions                      Saves: 0.30s
+   - Minimize astype() calls
+────────────────────────────────────────────────────────────────────────────
+SUBTOTAL:                                          Saves: 2.89s (~20%)
+
+
+PHASE 2: MAJOR OPTIMIZATIONS (3-5 days)            Expected: 11s → ~3.5s
+────────────────────────────────────────────────────────────────────────────
+✅ 1. Vectorize compute_log_histogram              Saves: 3.50s
+   - Use np.histogram() instead of Python loops
+   - Consider numba JIT for additional speedup
+   - File: mostlyai/engine/_common.py:636
+
+✅ 2. Math-based digit splitting                   Saves: 3.00s
+   - Use (val // 10**pos) % 10 instead of str ops
+   - Add numba JIT for parallel processing
+   - File: mostlyai/engine/_encoding_types/tabular/numeric.py:108
+
+✅ 3. Vectorize string splitting                   Saves: 2.00s
+   - Use numpy array views instead of regex
+   - File: mostlyai/engine/_encoding_types/tabular/character.py
+────────────────────────────────────────────────────────────────────────────
+SUBTOTAL:                                          Saves: 8.50s (~58%)
+
+
+PHASE 3: ADVANCED (5-10 days)                      Expected: 3.5s → ~1.7s
+────────────────────────────────────────────────────────────────────────────
+✅ Numba/Cython for hot loops                      Saves: 1.00s
+✅ Zero-copy operations                            Saves: 0.50s
+✅ Memory layout optimization                      Saves: 0.30s
+────────────────────────────────────────────────────────────────────────────
+SUBTOTAL:                                          Saves: 1.80s (~12%)
+
+
+PHASE 4: PARALLELIZATION (with n_jobs=4)          Expected: 1.7s → ~0.6s
+────────────────────────────────────────────────────────────────────────────
+✅ Column-level parallelization                    3-4x speedup
+✅ Shared memory for DataFrames                    Additional 1.2x
+────────────────────────────────────────────────────────────────────────────
+SUBTOTAL:                                          Additional 3-4x
+
+
+================================================================================
+                        PROJECTED PERFORMANCE
+================================================================================
+
+CURRENT:        14.61s  [████████████████████████████████████████] 100%
+After Phase 1:  11.00s  [███████████████████████████████]          75%
+After Phase 2:   3.50s  [██████████]                               24%
+After Phase 3:   1.70s  [█████]                                    12%
+After Phase 4:   0.60s  [██]                                        4%
+
+TOTAL SPEEDUP: 24x faster  (14.61s → 0.60s)
+
+Throughput improvement:
+  - Current:  6,800 rows/sec
+  - Final:  166,000 rows/sec  (24x)
+
+
+================================================================================
+                    OPTIMIZATION IMPLEMENTATION
+================================================================================
+
+See detailed examples in: optimization_examples.py
+
+Example - Optimized compute_log_histogram:
+┌────────────────────────────────────────────────────────────────────┐
+│ def compute_log_histogram_optimized(values, n_bins=100):          │
+│     log_vals = np.log10(np.abs(values) + 1e-10)                   │
+│     counts, edges = np.histogram(log_vals, bins=n_bins)           │
+│     return {"counts": counts.tolist(), "edges": edges.tolist()}   │
+└────────────────────────────────────────────────────────────────────┘
+
+Example - Optimized digit splitting:
+┌────────────────────────────────────────────────────────────────────┐
+│ @numba.jit(nopython=True, parallel=True)                           │
+│ def extract_digits(values, max_digits):                            │
+│     result = np.zeros((len(values), max_digits), dtype=np.int8)   │
+│     for i in numba.prange(len(values)):                            │
+│         val = abs(int(values[i]))                                  │
+│         for j in range(max_digits):                                │
+│             result[i, j] = (val // 10**j) % 10                     │
+│     return result                                                  │
+└────────────────────────────────────────────────────────────────────┘
+
+Example - Eliminate is_a_list checks:
+┌────────────────────────────────────────────────────────────────────┐
+│ # Before: Check every value (3M times)                             │
+│ for val in series:                                                 │
+│     if is_a_list(val): ...  # Slow!                                │
+│                                                                     │
+│ # After: Check once per column (14 times)                          │
+│ is_seq = is_column_sequential(series)  # Check first few values   │
+│ if is_seq:                                                          │
+│     # Process as sequential                                        │
+└────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+                        FILES TO MODIFY
+================================================================================
+
+Priority 1 (Critical Impact):
+  1. mostlyai/engine/_common.py
+     - compute_log_histogram() [line 636] → Save 3.5s
+     - is_a_list() [line 201]             → Save 1.1s
+     - is_sequential() [line 205]         → Save 1.0s
+
+  2. mostlyai/engine/_encoding_types/tabular/numeric.py
+     - split_sub_columns_digit() [line 108] → Save 3.0s
+
+Priority 2 (High Impact):
+  3. mostlyai/engine/_encoding_types/tabular/character.py
+     - String splitting operations → Save 2.0s
+
+  4. mostlyai/engine/_tabular/encoding.py
+     - encode_df() [line 181] → Refactor sequential detection
+
+  5. mostlyai/engine/analysis.py
+     - _analyze_col() [line 514] → Optimize column analysis
+
+
+================================================================================
+                        TESTING & VALIDATION
+================================================================================
+
+1. Unit Tests
+   ✓ Test each optimized function independently
+   ✓ Ensure output matches original implementation
+   ✓ Test edge cases (empty, nulls, single row)
+
+2. Integration Tests
+   ✓ Run full analyze + encode pipeline
+   ✓ Compare stats.json files (should be identical)
+   ✓ Verify encoded data correctness
+
+3. Performance Tests
+   ✓ Profile before/after each optimization
+   ✓ Measure speedup on various dataset sizes
+   ✓ Test with different column type mixes
+
+4. Regression Tests
+   ✓ Run existing test suite
+   ✓ Ensure no behavioral changes
+
+
+================================================================================
+                        NEXT STEPS
+================================================================================
+
+1. ✅ Review PROFILING_ANALYSIS.md for detailed analysis
+2. ✅ Study optimization_examples.py for implementation examples
+3. ⬜ Implement Phase 1 (Quick Wins) - 1-2 days
+4. ⬜ Measure actual speedup achieved
+5. ⬜ Implement Phase 2 (Major Optimizations) - 3-5 days
+6. ⬜ Re-profile and measure improvements
+7. ⬜ Consider Phase 3/4 based on requirements
+
+
+================================================================================
+                        PROFILING ARTIFACTS
+================================================================================
+
+Generated Files:
+  ✓ profiling_results/analyze_profile.txt  - Detailed ANALYZE profile
+  ✓ profiling_results/encode_profile.txt   - Detailed ENCODE profile
+  ✓ PROFILING_ANALYSIS.md                  - Complete analysis
+  ✓ PROFILING_SUMMARY.md                   - Executive summary
+  ✓ optimization_examples.py               - Implementation examples
+  ✓ profile_analyze_encode_v2.py           - Profiling script
+
+To re-run profiling:
+  $ uv run python profile_analyze_encode_v2.py
+
+To test optimizations:
+  $ uv run python optimization_examples.py
+
+
+================================================================================
+                            END OF REPORT
+================================================================================
