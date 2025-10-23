@@ -231,7 +231,7 @@ def _regroup_partial_sequences_by_length(
     return ctx_data, len(new_batches)
 
 
-def _regroup_by_null_pattern(
+def _regroup_flat_by_null_pattern(
     ctx_data: pd.DataFrame,
     seed_data: pd.DataFrame,
     ctx_primary_key: str,
@@ -274,6 +274,69 @@ def _regroup_by_null_pattern(
     ctx_data = ctx_data.drop(columns=["__NULL_PATTERN", "__COMPOSITE_KEY"]).reset_index(drop=True)
 
     return ctx_data, num_batches
+
+
+def _regroup_sequential_by_null_pattern(
+    ctx_data: pd.DataFrame,
+    seed_data: pd.DataFrame,
+    ctx_primary_key: str,
+    tgt_context_key: str,
+    imputation_columns: list[str],
+) -> tuple[pd.DataFrame, int]:
+    """regroup batches so that sequences with the same trailing NULL pattern are together"""
+    # only consider columns that are BOTH in imputation_columns AND in seed_data
+    relevant_columns = [col for col in imputation_columns if col in seed_data.columns]
+
+    # early exit: no relevant columns
+    if not relevant_columns or seed_data[relevant_columns].isna().all().all():
+        return ctx_data, ctx_data["__BATCH"].nunique()
+
+    # compute trailing NULL pattern for each sequence
+    # a column has "trailing NULLs" if the last N rows are NULL for that column
+    def get_trailing_null_pattern(group: pd.DataFrame) -> tuple:
+        """returns tuple of bools: True if column has trailing NULLs that should be imputed"""
+        pattern = []
+        for col in relevant_columns:
+            col_values = group[col].reset_index(drop=True)
+            # find the last non-null index
+            non_null_mask = col_values.notna()
+            if non_null_mask.any():
+                # get the position of the last non-null value
+                last_non_null_idx = non_null_mask[::-1].idxmax()
+                # check if there are any rows after the last non-null value
+                has_trailing_nulls = last_non_null_idx < len(col_values) - 1
+            else:
+                # all values are NULL
+                has_trailing_nulls = True
+            pattern.append(has_trailing_nulls)
+        return tuple(pattern)
+
+    seed_data_grouped = seed_data.groupby(tgt_context_key, sort=False)
+    null_patterns = seed_data_grouped.apply(
+        get_trailing_null_pattern,
+        include_groups=False,
+    ).rename("__NULL_PATTERN")
+
+    # early exit: all NULL patterns are the same
+    if null_patterns.nunique() == 1:
+        return ctx_data, ctx_data["__BATCH"].nunique()
+
+    # add __NULL_PATTERN to ctx_data
+    # keys not in seed_data get empty tuple pattern "()" - these will be grouped together
+    ctx_data = ctx_data.assign(__NULL_PATTERN=ctx_data[ctx_primary_key].map(null_patterns).fillna("()"))
+
+    # regroup batches - similar to _regroup_partial_sequences_by_length
+    # we need to maintain the batch order and partial sequence length grouping
+    new_batches = []
+    for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
+        for _, new_batch_df in old_batch_df.groupby("__NULL_PATTERN", sort=False):
+            new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
+            new_batches.append(new_batch_df)
+
+    # rebuild ctx_data; drop temporary __NULL_PATTERN column
+    ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__NULL_PATTERN"]).reset_index(drop=True)
+
+    return ctx_data, len(new_batches)
 
 
 def _reshape_pt_to_pandas(
@@ -997,10 +1060,17 @@ def generate(
             ctx_data, no_of_batches = _regroup_partial_sequences_by_length(
                 ctx_data, seed_data, ctx_primary_key, tgt_context_key
             )
+            # regroup by trailing NULL pattern for sequential imputation
+            if imputation and seed_data is not None and len(seed_data) > 0:
+                ctx_data, no_of_batches = _regroup_sequential_by_null_pattern(
+                    ctx_data, seed_data, ctx_primary_key, tgt_context_key, imputation.columns
+                )
 
-        # regroup by NULL pattern if imputation is enabled (flat data only for now)
+        # regroup by NULL pattern if imputation is enabled (flat data only)
         if imputation and seed_data is not None and len(seed_data) > 0 and not is_sequential:
-            ctx_data, no_of_batches = _regroup_by_null_pattern(ctx_data, seed_data, ctx_primary_key, imputation.columns)
+            ctx_data, no_of_batches = _regroup_flat_by_null_pattern(
+                ctx_data, seed_data, ctx_primary_key, imputation.columns
+            )
 
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)

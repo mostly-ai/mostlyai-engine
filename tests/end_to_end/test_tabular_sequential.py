@@ -718,3 +718,117 @@ def test_deterministic_lengths(tmp_path):
     syn_first = syn.groupby(key).first()
     match_rate = (syn_first["slen"] == syn_first["countdown"] + 1).value_counts(normalize=True)[True]
     assert match_rate > 0.95
+
+
+def test_sequential_imputation_with_null_patterns(tmp_path):
+    """test that sequences with different trailing NULL patterns are regrouped correctly"""
+    workspace_dir = tmp_path / "ws"
+    key = "sequence_id"
+    n_sequences = 1_000
+
+    # create training data with 2 columns
+    keys = np.arange(n_sequences)
+    seq_lens = np.random.randint(5, 10, size=n_sequences)
+
+    sequence_ids = np.concatenate([np.repeat(k, ln) for k, ln in zip(keys, seq_lens)])
+    col_a = np.concatenate([np.arange(ln) for ln in seq_lens])  # simple counter
+    col_b = np.concatenate([np.arange(ln) * 10 for ln in seq_lens])  # counter * 10
+
+    tgt = pd.DataFrame(
+        {
+            key: sequence_ids,
+            "col_a": col_a,
+            "col_b": col_b,
+        }
+    )
+    ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
+
+    split(
+        tgt_data=tgt,
+        tgt_context_key=key,
+        ctx_data=ctx,
+        ctx_primary_key=key,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir, value_protection=False)
+    encode(workspace_dir=workspace_dir)
+    train(workspace_dir=workspace_dir, max_epochs=5)
+
+    # create seed data with different trailing NULL patterns
+    # this test validates that the regrouping by null pattern works
+    n_seed_keys = 200
+    seed_keys = np.arange(n_seed_keys)
+    seed_len = 3
+
+    seed_data_parts = []
+
+    # group 1: trailing NULLs in col_a only (50 sequences)
+    for k in seed_keys[:50]:
+        seed_data_parts.append(
+            pd.DataFrame(
+                {
+                    key: [k] * seed_len,
+                    "col_a": [0, 1, None],
+                    "col_b": [0, 10, 20],
+                }
+            )
+        )
+
+    # group 2: trailing NULLs in col_b only (50 sequences)
+    for k in seed_keys[50:100]:
+        seed_data_parts.append(
+            pd.DataFrame(
+                {
+                    key: [k] * seed_len,
+                    "col_a": [0, 1, 2],
+                    "col_b": [0, 10, None],
+                }
+            )
+        )
+
+    # group 3: trailing NULLs in both (50 sequences)
+    for k in seed_keys[100:150]:
+        seed_data_parts.append(
+            pd.DataFrame(
+                {
+                    key: [k] * seed_len,
+                    "col_a": [0, 1, None],
+                    "col_b": [0, 10, None],
+                }
+            )
+        )
+
+    # group 4: no trailing NULLs (50 sequences)
+    for k in seed_keys[150:200]:
+        seed_data_parts.append(
+            pd.DataFrame(
+                {
+                    key: [k] * seed_len,
+                    "col_a": [0, 1, 2],
+                    "col_b": [0, 10, 20],
+                }
+            )
+        )
+
+    seed_data = pd.concat(seed_data_parts, ignore_index=True)
+    seed_ctx = pd.DataFrame({key: seed_keys})
+
+    # generate with imputation - the main goal is to test regrouping works without errors
+    from mostlyai.engine.domain import ImputationConfig
+
+    generate(
+        workspace_dir=workspace_dir,
+        ctx_data=seed_ctx,
+        seed_data=seed_data,
+        imputation=ImputationConfig(columns=["col_a", "col_b"]),
+    )
+
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+
+    # verify that synthetic data was generated successfully
+    assert len(syn) > 0, "Expected synthetic data to be generated"
+    # verify that all seed sequences have corresponding synthetic sequences
+    assert set(seed_keys).issubset(set(syn[key].unique())), "All seed keys should have synthetic sequences"
+    # verify that sequences have at least the seed length
+    syn_lens = syn.groupby(key).size()
+    assert (syn_lens >= seed_len).all(), "All sequences should be at least as long as seed length"
