@@ -37,6 +37,7 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
+    SEED_NULL_SENTINEL,
     SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
@@ -1054,7 +1055,54 @@ class FlatModel(nn.Module):
 
                 # if sub column is fixed, skip sampling and use that value
                 if sub_col in fixed_values:
-                    out = fixed_values[sub_col]
+                    fixed_vals = fixed_values[sub_col]
+                    # Check for sentinel values indicating positions to sample
+                    has_sentinel = (fixed_vals == SEED_NULL_SENTINEL).any()
+
+                    if has_sentinel:
+                        # Mixed mode: some positions fixed, some sampled
+                        sentinel_mask = fixed_vals == SEED_NULL_SENTINEL
+
+                        # collect previous sub column embeddings for current column
+                        prev_sub_col_embeds = [
+                            tgt_embeds[sub_col]
+                            for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        ]
+
+                        # regressor
+                        regressor_in = context + [col_embeddings] + prev_sub_col_embeds
+                        xs = self.regressors(regressor_in, sub_col)
+
+                        # predictor
+                        xs = self.predictors(xs, sub_col)
+
+                        # softmax to probs
+                        xs = nn.Softmax(dim=-1)(xs)
+
+                        # keep probabilities (used e.g. for fairness)
+                        if sub_col in return_probs:
+                            probs[sub_col] = xs
+
+                        # apply fairness transform when generating the target sub column
+                        if fairness_transforms:
+                            xs = apply_fairness_transforms(sub_col, xs, outputs, fairness_transforms)
+
+                        # sample for sentinel positions
+                        sampled_vals = torch.squeeze(
+                            _sample(
+                                probs=xs,
+                                temperature=temperature,
+                                top_p=top_p,
+                                fixed_probs=fixed_probs.get(sub_col),
+                            ),
+                            dim=-1,
+                        )
+
+                        # merge: use fixed values where not sentinel, sampled values where sentinel
+                        out = torch.where(sentinel_mask, sampled_vals, fixed_vals)
+                    else:
+                        # All positions are fixed, no sampling needed
+                        out = fixed_vals
 
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
@@ -1395,7 +1443,49 @@ class SequentialModel(nn.Module):
 
                 # if sub column is fixed, skip sampling and use that value
                 if sub_col in fixed_values:
-                    out = fixed_values[sub_col]
+                    fixed_vals = fixed_values[sub_col]
+                    # Check for sentinel values indicating positions to sample
+                    has_sentinel = (fixed_vals == SEED_NULL_SENTINEL).any()
+
+                    if has_sentinel:
+                        # Mixed mode: some positions fixed, some sampled
+                        sentinel_mask = fixed_vals == SEED_NULL_SENTINEL
+
+                        # collect previous sub column embeddings for current column
+                        prev_sub_col_embeds = {
+                            sub_col: tgt_embeds[sub_col]
+                            for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        }
+                        if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
+                            # RIDX sub-columns should not see SLEN sub-columns
+                            prev_sub_col_embeds = {
+                                k: torch.zeros_like(v) if k.startswith(SLEN_SUB_COLUMN_PREFIX) else v
+                                for k, v in prev_sub_col_embeds.items()
+                            }
+                        prev_sub_col_embeds = list(prev_sub_col_embeds.values())
+
+                        # regressor
+                        regressor_in = context_history + [col_embeddings] + prev_sub_col_embeds
+                        xs = self.regressors(regressor_in, sub_col)
+
+                        # predictor
+                        xs = self.predictors(xs, sub_col)
+
+                        # sample for sentinel positions
+                        xs = nn.Softmax(dim=-1)(xs)
+                        xs = torch.squeeze(xs[:, -1:, :], -2)  # take only last element
+                        sampled_vals = _sample(
+                            probs=xs,
+                            temperature=temperature,
+                            top_p=top_p,
+                            fixed_probs=fixed_probs.get(sub_col),
+                        )
+
+                        # merge: use fixed values where not sentinel, sampled values where sentinel
+                        out = torch.where(sentinel_mask, sampled_vals, fixed_vals)
+                    else:
+                        # All positions are fixed, no sampling needed
+                        out = fixed_vals
 
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column

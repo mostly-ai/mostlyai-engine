@@ -229,6 +229,65 @@ def test_imputation(input_data, tmp_path_factory):
         assert syn[k].isna().mean() == 0
 
 
+def test_imputation_with_null_seed(input_data, tmp_path_factory):
+    """Test that NULL values in seed data for imputation columns are sampled, not preserved."""
+    df = input_data[0]
+    workspace_dir = tmp_path_factory.mktemp("workspace-imputation-null-seed")
+
+    # Use columns that support nulls
+    tgt_encoding_types = {
+        "amount": ModelEncodingType.tabular_numeric_auto,
+        "product_type": ModelEncodingType.tabular_categorical,
+    }
+
+    split(
+        tgt_data=df[["id"] + list(tgt_encoding_types.keys())],
+        tgt_primary_key="id",
+        tgt_encoding_types=tgt_encoding_types,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    train(max_epochs=1, enable_flexible_generation=True, workspace_dir=workspace_dir)
+
+    # Create seed data with NULLs in imputation columns
+    seed_data = pd.DataFrame(
+        {
+            "id": ["1", "2", "3", "4", "5"],
+            "amount": [25, None, 35, None, 45],  # Mix of values and NULLs
+            "product_type": ["A", "B", None, "A", None],  # Mix of values and NULLs
+        }
+    )
+
+    generate(
+        seed_data=seed_data,
+        imputation={"columns": list(tgt_encoding_types.keys())},
+        workspace_dir=workspace_dir,
+    )
+
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+
+    # Verify no NULLs in output (imputation should work)
+    assert syn["amount"].isna().sum() == 0, "Imputation should prevent NULLs in amount column"
+    assert syn["product_type"].isna().sum() == 0, "Imputation should prevent NULLs in product_type column"
+
+    # Verify that non-NULL seed values are preserved
+    assert syn.loc[0, "amount"] == 25, "Non-NULL seed value should be preserved"
+    assert syn.loc[2, "amount"] == 35, "Non-NULL seed value should be preserved"
+    assert syn.loc[4, "amount"] == 45, "Non-NULL seed value should be preserved"
+
+    assert syn.loc[0, "product_type"] == "A", "Non-NULL seed value should be preserved"
+    assert syn.loc[1, "product_type"] == "B", "Non-NULL seed value should be preserved"
+    assert syn.loc[3, "product_type"] == "A", "Non-NULL seed value should be preserved"
+
+    # Verify that NULL positions were sampled (not NULL in output)
+    assert pd.notna(syn.loc[1, "amount"]), "NULL seed position should be sampled"
+    assert pd.notna(syn.loc[3, "amount"]), "NULL seed position should be sampled"
+
+    assert pd.notna(syn.loc[2, "product_type"]), "NULL seed position should be sampled"
+    assert pd.notna(syn.loc[4, "product_type"]), "NULL seed position should be sampled"
+
+
 def test_zero_column(input_data, tmp_path_factory):
     df = input_data[0]
     workspace_dir = tmp_path_factory.mktemp("workspace-zero-column")

@@ -55,6 +55,7 @@ RIDX_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # rever
 SLEN_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
 SDEC_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
+SEED_NULL_SENTINEL = -1  # Sentinel value to mark seed positions that should be sampled instead of fixed
 
 # the latest version of the model uses SIDX/SLEN/RIDX positional column
 DEFAULT_HAS_SLEN = True
