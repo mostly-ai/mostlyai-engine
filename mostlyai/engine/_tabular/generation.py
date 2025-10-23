@@ -753,26 +753,33 @@ def decode_buffered_samples(
             df_syn.drop(columns=["__SEQ_IDX"], inplace=True)
             df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
         else:
-            # for flat data, merge seed columns into synthetic data on context key
+            # for flat data, overwrite seed columns using merge to handle reordered rows
+            # for non-impute columns: override all values
+            # for impute columns: override only non-NULL seed values (let model impute NULL values)
             impute_columns = impute_columns or []
 
-            # merge to align seed with synthetic based on context key
-            df_overwrite = df_syn[[tgt_context_key]].merge(
+            # use merge on context key to properly align seed values with synthetic data
+            df_overwrite = pd.merge(
+                df_syn[[tgt_context_key]].copy(),
                 df_seed,
                 on=tgt_context_key,
                 how="left",
+                suffixes=("", "_seed"),
             )
 
             # overwrite columns based on imputation logic
-            columns_to_overwrite = [col for col in df_overwrite.columns if col != tgt_context_key]
-            for col in columns_to_overwrite:
-                if col not in impute_columns:
-                    # non-impute columns: override all values
-                    df_syn[col] = df_overwrite[col]
-                else:
-                    # impute columns: override only non-NULL seed values
-                    mask = df_overwrite[col].notna()
-                    df_syn.loc[mask, col] = df_overwrite.loc[mask, col]
+            for col in seed_columns:
+                if col == tgt_context_key:
+                    continue  # skip the key column itself
+                seed_col_name = col if col in df_overwrite.columns else f"{col}_seed"
+                if seed_col_name in df_overwrite.columns:
+                    if col not in impute_columns:
+                        # non-impute columns: override all values
+                        df_syn[col] = df_overwrite[seed_col_name]
+                    else:
+                        # impute columns: override only non-NULL seed values
+                        mask = df_overwrite[seed_col_name].notna()
+                        df_syn.loc[mask, col] = df_overwrite.loc[mask, seed_col_name]
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")

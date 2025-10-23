@@ -588,11 +588,13 @@ def get_positional_cardinalities(
 def persist_data_part(df: pd.DataFrame, output_path: Path, infix: str):
     t0 = time.time()
     part_fn = f"part.{infix}.parquet"
-    # save without index for clean reading; ensure at least one column for shape preservation
-    if len(df.columns) == 0:
-        df = df.copy()
-        df[EMPTY_COLUMN] = range(len(df))
-    df.to_parquet(output_path / part_fn, index=False)
+    # save without index for clean reading; add dummy column for shape preservation when rows > 0 but columns = 0
+    if len(df.columns) == 0 and len(df) > 0:
+        df_to_save = df.copy()
+        df_to_save[EMPTY_COLUMN] = range(len(df))
+    else:
+        df_to_save = df
+    df_to_save.to_parquet(output_path / part_fn, index=False)
     _LOG.info(f"persisted {df.shape} to `{part_fn}` in {time.time() - t0:.2f}s")
 
 
