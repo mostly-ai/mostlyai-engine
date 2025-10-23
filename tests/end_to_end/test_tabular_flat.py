@@ -246,6 +246,74 @@ def test_zero_column(input_data, tmp_path_factory):
     assert "id" in syn.columns
 
 
+def test_seed_imputation(input_data, tmp_path_factory):
+    """test that imputation strictly preserves correlations via conditional generation"""
+    df = input_data[0]
+    workspace_dir = tmp_path_factory.mktemp("workspace-imputation-correlation")
+
+    # train on data with strong price -> price_category correlation
+    tgt_encoding_types = {
+        "amount": ModelEncodingType.tabular_numeric_auto,
+        "product_type": ModelEncodingType.tabular_categorical,
+        "price": ModelEncodingType.tabular_numeric_auto,
+        "price_category": ModelEncodingType.tabular_categorical,
+    }
+
+    split(
+        tgt_data=df[["id"] + list(tgt_encoding_types.keys())],
+        tgt_primary_key="id",
+        tgt_encoding_types=tgt_encoding_types,
+        workspace_dir=workspace_dir,
+    )
+    analyze(workspace_dir=workspace_dir)
+    encode(workspace_dir=workspace_dir)
+    train(max_epochs=10, enable_flexible_generation=True, workspace_dir=workspace_dir)
+
+    seed_data = pd.DataFrame(
+        {
+            "amount": [50.0, 40.0, 80.0, 50.0, 40.0, 80.0] * 2,
+            "product_type": ["A", "B", "A", "A", "B", "A"] * 2,
+            "price": [10.0, 25.0, 5.0, None, None, None] * 2,
+            "price_category": [None, None, None, "Cheap", "Expensive", "Cheap"] * 2,
+        }
+    )
+
+    generate(
+        seed_data=seed_data,
+        imputation={"columns": ["amount", "price", "price_category"]},
+        sampling_temperature=0.0,  # use greedy decoding for deterministic results
+        workspace_dir=workspace_dir,
+    )
+
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+
+    # check that seed_data is preserved (except for nulls in imputed columns)
+    for idx in range(len(syn)):
+        for col in seed_data.columns:
+            if not pd.isna(seed_data.loc[idx, col]):
+                assert syn.loc[idx, col] == seed_data.loc[idx, col], (
+                    f"row {idx}, col '{col}': seed value {seed_data.loc[idx, col]} "
+                    f"not preserved, got {syn.loc[idx, col]}"
+                )
+
+    # check that price <-> price_category correlation is maintained for all rows
+    for idx in range(len(syn)):
+        price = syn.loc[idx, "price"]
+        price_cat = syn.loc[idx, "price_category"]
+
+        # ensure no NaN values after imputation
+        assert not pd.isna(price), f"row {idx}: price should not be NaN after imputation"
+        assert not pd.isna(price_cat), f"row {idx}: price_category should not be NaN after imputation"
+
+        # check correlation: price < 15 <-> Cheap, price >= 15 <-> Expensive
+        if price < 15:
+            assert price_cat == "Cheap", f"row {idx}: price={price} < 15 should yield 'Cheap', got '{price_cat}'"
+        else:
+            assert price_cat == "Expensive", (
+                f"row {idx}: price={price} >= 15 should yield 'Expensive', got '{price_cat}'"
+            )
+
+
 def test_value_protection_disabled(input_data, tmp_path_factory):
     def encode_train_generate(workspace_dir):
         ws = Workspace(workspace_dir)
