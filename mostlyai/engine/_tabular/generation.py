@@ -34,8 +34,10 @@ from mostlyai.engine._common import (
     DEFAULT_HAS_SDEC,
     DEFAULT_HAS_SLEN,
     POSITIONAL_COLUMN,
+    PREFIX_SUB_COLUMN,
     RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
+    SEED_NULL_SENTINEL,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     FixedSizeSampleBuffer,
@@ -417,6 +419,121 @@ def _fix_imputation_probs(
     return fixed_probs
 
 
+def _mark_null_seed_for_imputation(
+    seed_batch: pd.DataFrame,
+    seed_batch_encoded: pd.DataFrame,
+    imputation: ImputationConfig | None,
+    tgt_stats: dict,
+) -> pd.DataFrame:
+    """
+    Mark NULL positions in imputation columns with a sentinel value for sampling.
+
+    This function enables selective seed behavior: non-NULL values in imputation columns
+    are preserved as seed values, while NULL positions are marked with SEED_NULL_SENTINEL
+    to signal that they should be sampled from the model during generation.
+
+    The function handles various encoding types:
+    - Categorical-like encodings (categorical, numeric_discrete, numeric_binned)
+    - Columns with separate null indicators (numeric_digit, datetime, lat_long)
+
+    Args:
+        seed_batch: Original (decoded) seed data containing the actual values including NULLs.
+        seed_batch_encoded: Encoded seed data where NULLs have been mapped to integer codes.
+        imputation: Imputation configuration specifying which columns should have NULLs suppressed.
+        tgt_stats: Target column statistics including encoding types and null handling info.
+
+    Returns:
+        Modified copy of seed_batch_encoded where NULL positions in imputation columns
+        are marked with SEED_NULL_SENTINEL (-1).
+    """
+    if imputation is None or seed_batch.empty:
+        return seed_batch_encoded
+
+    seed_batch_encoded = seed_batch_encoded.copy()
+    imputation_columns = imputation.columns if imputation is not None else []
+
+    for col in imputation_columns:
+        if col not in seed_batch.columns or col not in tgt_stats["columns"]:
+            continue
+
+        # Identify rows with NULL in the original seed data
+        null_mask = seed_batch[col].isna()
+        if not null_mask.any():
+            # No NULLs in this column, skip
+            continue
+
+        col_stats = tgt_stats["columns"][col]
+        encoding_type = col_stats["encoding_type"]
+
+        # Determine which subcols need to be marked
+        # null_name will be either None, "na" or "nan"
+        null_subcol = next(iter([k[4:] for k in col_stats.keys() if k in ["has_na", "has_nan"]]), None)
+
+        if null_subcol is not None and col_stats[f"has_{null_subcol}"]:
+            # Column has separate null sub column (e.g., numeric digit, datetime, lat_long)
+            # NULL is encoded as 1 in the null subcol
+            null_code = 1
+            argn_name = get_argn_name(
+                argn_processor=col_stats[ARGN_PROCESSOR],
+                argn_table=col_stats[ARGN_TABLE],
+                argn_column=col_stats[ARGN_COLUMN],
+            )
+            encoded_col_name = f"{argn_name}{null_subcol}"
+            if encoded_col_name in seed_batch_encoded.columns:
+                # Mark positions where null_subcol == 1 (indicating NULL)
+                is_null_encoded = seed_batch_encoded[encoded_col_name] == null_code
+                positions_to_mark = null_mask & is_null_encoded
+                seed_batch_encoded.loc[positions_to_mark, encoded_col_name] = SEED_NULL_SENTINEL
+                _LOG.info(
+                    f"Marked {positions_to_mark.sum()} NULL positions in imputation column [{col}] subcol [{null_subcol}]"
+                )
+
+        elif encoding_type in [
+            ModelEncodingType.tabular_categorical,
+            ModelEncodingType.tabular_numeric_discrete,
+            ModelEncodingType.tabular_numeric_binned,
+        ]:
+            # Column is categorical-like with single sub column
+            sub_column = {
+                ModelEncodingType.tabular_categorical: CATEGORICAL_SUB_COL_SUFFIX,
+                ModelEncodingType.tabular_numeric_discrete: NUMERIC_DISCRETE_SUB_COL_SUFFIX,
+                ModelEncodingType.tabular_numeric_binned: NUMERIC_BINNED_SUB_COL_SUFFIX,
+            }[encoding_type]
+
+            # Get NULL token codes
+            null_tokens = {
+                ModelEncodingType.tabular_categorical: [CATEGORICAL_NULL_TOKEN],
+                ModelEncodingType.tabular_numeric_discrete: [NUMERIC_DISCRETE_NULL_TOKEN],
+                ModelEncodingType.tabular_numeric_binned: [NUMERIC_BINNED_NULL_TOKEN],
+            }[encoding_type]
+
+            # Find the code(s) for NULL tokens
+            null_codes = [col_stats["codes"][token] for token in null_tokens if token in col_stats.get("codes", {})]
+
+            # Get the ARGN encoded column name
+            argn_name = get_argn_name(
+                argn_processor=col_stats[ARGN_PROCESSOR],
+                argn_table=col_stats[ARGN_TABLE],
+                argn_column=col_stats[ARGN_COLUMN],
+            )
+            encoded_col_name = f"{argn_name}{PREFIX_SUB_COLUMN}{sub_column}"
+            if encoded_col_name in seed_batch_encoded.columns:
+                if null_codes:
+                    # Mark positions where the encoded value is a NULL code
+                    positions_to_mark = null_mask.copy()
+                    positions_to_mark[:] = False  # Reset all to False
+                    for null_code in null_codes:
+                        is_null_encoded = seed_batch_encoded[encoded_col_name] == null_code
+                        positions_to_mark |= null_mask & is_null_encoded
+                    seed_batch_encoded.loc[positions_to_mark, encoded_col_name] = SEED_NULL_SENTINEL
+                else:
+                    # NULL token not in training data, but seed has NULLs
+                    # Mark whatever value the NULLs got encoded to
+                    seed_batch_encoded.loc[null_mask, encoded_col_name] = SEED_NULL_SENTINEL
+
+    return seed_batch_encoded
+
+
 def _fix_rebalancing_probs(
     stats: dict,
     rebalancing: RebalancingConfig | None = None,
@@ -580,7 +697,24 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
+    imputation: ImputationConfig | None = None,
 ) -> pd.DataFrame:
+    """
+    Decode buffered generated samples and apply seed value preservation.
+
+    Args:
+        buffer: Buffer containing generated encoded samples and corresponding seed data.
+        tgt_stats: Target column statistics for decoding.
+        tgt_sub_columns: List of target sub-columns to decode.
+        tgt_primary_key: Primary key column name.
+        tgt_context_key: Context key column name for sequential data.
+        decode_prev_steps: Previous decoding steps for sequential data.
+        imputation: Imputation configuration. When provided, NULL values in seed data
+            for imputation columns will not be preserved (allowing sampled values to remain).
+
+    Returns:
+        Decoded DataFrame with seed values selectively preserved based on imputation config.
+    """
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
     seq_len_max = seq_len_stats["max"]
@@ -635,7 +769,18 @@ def decode_buffered_samples(
             df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
         else:
             # for flat data, just overwrite all seed columns
-            df_syn[seed_columns] = df_seed[seed_columns].copy()
+            # BUT: for imputation columns, don't overwrite NULL values (they were sampled)
+            if imputation and imputation.columns:
+                for col in seed_columns:
+                    if col in imputation.columns:
+                        # Only overwrite non-NULL values
+                        non_null_mask = df_seed[col].notna()
+                        df_syn.loc[non_null_mask, col] = df_seed.loc[non_null_mask, col]
+                    else:
+                        # Not an imputation column, overwrite all values
+                        df_syn[col] = df_seed[col].copy()
+            else:
+                df_syn[seed_columns] = df_seed[seed_columns].copy()
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
@@ -668,6 +813,28 @@ def generate(
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ) -> None:
+    """
+    Generate synthetic tabular data from a trained model.
+
+    Args:
+        ctx_data: Context data for conditional generation (sequential models).
+        seed_data: Seed data to fix specific column values in the generated output. Non-NULL values
+            will be preserved. For imputation columns, NULL values will be sampled from the model
+            instead of being preserved, allowing selective imputation while maintaining control
+            over non-NULL values.
+        sample_size: Number of samples to generate.
+        batch_size: Batch size for generation.
+        rare_category_replacement_method: Method for handling rare categories.
+        sampling_temperature: Temperature for sampling. Higher values increase randomness.
+        sampling_top_p: Nucleus sampling probability threshold.
+        rebalancing: Configuration for rebalancing categorical distributions.
+        imputation: Configuration for imputing missing values. When combined with seed data,
+            NULL values in imputation columns will be sampled rather than preserved as NULL.
+        fairness: Configuration for fairness constraints.
+        device: Device for generation ('cuda' or 'cpu').
+        workspace_dir: Path to the workspace directory.
+        update_progress: Callback function for progress updates.
+    """
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
     with ProgressCallbackWrapper(update_progress) as progress:
@@ -964,6 +1131,13 @@ def generate(
             seed_batch_encoded, _, seed_context_key_encoded = encode_df(
                 df=seed_batch, stats=tgt_stats, tgt_context_key=tgt_context_key
             )
+            # mark NULL positions in imputation columns with sentinel value
+            seed_batch_encoded = _mark_null_seed_for_imputation(
+                seed_batch=seed_batch,
+                seed_batch_encoded=seed_batch_encoded,
+                imputation=imputation,
+                tgt_stats=tgt_stats,
+            )
             seed_batch_grouped = seed_batch.groupby(tgt_context_key, sort=False)
             seed_batch_encoded_grouped = seed_batch_encoded.groupby(seed_context_key_encoded, sort=False)
             # it is assumed that all seeded sequences have the same length
@@ -1160,6 +1334,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
+                            imputation=imputation,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1224,6 +1399,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
+                    imputation=imputation,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1239,6 +1415,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
+                imputation=imputation,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()

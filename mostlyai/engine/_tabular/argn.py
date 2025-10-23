@@ -37,6 +37,7 @@ from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
     RIDX_SUB_COLUMN_PREFIX,
+    SEED_NULL_SENTINEL,
     SLEN_SUB_COLUMN_PREFIX,
     get_columns_from_cardinalities,
     get_sub_columns_from_cardinalities,
@@ -1052,11 +1053,15 @@ class FlatModel(nn.Module):
             for sub_col in sub_column_order:
                 lookup = self.tgt_sub_columns_lookup[sub_col]
 
-                # if sub column is fixed, skip sampling and use that value
-                if sub_col in fixed_values:
-                    out = fixed_values[sub_col]
+                # Check if we can skip sampling entirely (all positions fixed, no sentinels)
+                fixed_vals = fixed_values.get(sub_col)
+                skip_sampling = fixed_vals is not None and (fixed_vals != SEED_NULL_SENTINEL).all()
 
-                else:  # sample from distribution
+                if skip_sampling:
+                    # All positions are fixed with actual values, no sampling needed
+                    out = fixed_vals
+                else:
+                    # Sample from distribution (either no fixed values, or some positions need sampling)
                     # collect previous sub column embeddings for current column
                     prev_sub_col_embeds = [
                         tgt_embeds[sub_col]
@@ -1091,6 +1096,11 @@ class FlatModel(nn.Module):
                         ),
                         dim=-1,
                     )
+
+                    # Apply fixed values where specified (excluding sentinel positions)
+                    if fixed_vals is not None:
+                        non_sentinel_mask = fixed_vals != SEED_NULL_SENTINEL
+                        out = torch.where(non_sentinel_mask, fixed_vals, out)
 
                 # update output
                 outputs[sub_col] = out
@@ -1393,11 +1403,15 @@ class SequentialModel(nn.Module):
             for sub_col in sub_column_order:
                 lookup = self.tgt_sub_columns_lookup[sub_col]
 
-                # if sub column is fixed, skip sampling and use that value
-                if sub_col in fixed_values:
-                    out = fixed_values[sub_col]
+                # Check if we can skip sampling entirely (all positions fixed, no sentinels)
+                fixed_vals = fixed_values.get(sub_col)
+                skip_sampling = fixed_vals is not None and (fixed_vals != SEED_NULL_SENTINEL).all()
 
-                else:  # sample from distribution
+                if skip_sampling:
+                    # All positions are fixed with actual values, no sampling needed
+                    out = fixed_vals
+                else:
+                    # Sample from distribution (either no fixed values, or some positions need sampling)
                     # collect previous sub column embeddings for current column
                     prev_sub_col_embeds = {
                         sub_col: tgt_embeds[sub_col]
@@ -1427,6 +1441,11 @@ class SequentialModel(nn.Module):
                         top_p=top_p,
                         fixed_probs=fixed_probs.get(sub_col),
                     )
+
+                    # Apply fixed values where specified (excluding sentinel positions)
+                    if fixed_vals is not None:
+                        non_sentinel_mask = fixed_vals != SEED_NULL_SENTINEL
+                        out = torch.where(non_sentinel_mask, fixed_vals, out)
 
                 # update timestep output
                 if is_0th_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):

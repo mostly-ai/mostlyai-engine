@@ -52,7 +52,9 @@ def generate(
 
     Args:
         ctx_data: Context data to be used for generation.
-        seed_data: Seed data to condition generation on fixed target columns.
+        seed_data: Seed data to condition generation on fixed target columns. Non-NULL values will be
+            preserved in the output. For imputation columns (specified via the `imputation` parameter),
+            NULL values in seed data will be sampled from the model instead of being preserved.
         sample_size: Number of samples to generate. Defaults to number of original samples.
         batch_size: Batch size for generation. If None, determined automatically.
         sampling_temperature: Sampling temperature. Higher values increase randomness.
@@ -60,7 +62,8 @@ def generate(
         device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
         rare_category_replacement_method: Method for handling rare categories. Only applicable for tabular models.
         rebalancing: Configuration for rebalancing column distributions. Only applicable for tabular models.
-        imputation: List of columns to impute missing values. Only applicable for tabular models.
+        imputation: List of columns to impute missing values. Only applicable for tabular models. When
+            combined with seed data, NULL values in these columns will be sampled rather than preserved.
         fairness: Configuration for fairness constraints. Only applicable for tabular models.
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
