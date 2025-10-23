@@ -33,6 +33,7 @@ from mostlyai.engine._common import (
     DEFAULT_HAS_RIDX,
     DEFAULT_HAS_SDEC,
     DEFAULT_HAS_SLEN,
+    EMPTY_COLUMN,
     POSITIONAL_COLUMN,
     RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
@@ -378,9 +379,16 @@ def _post_process_decoding(
     if DUMMY_CONTEXT_KEY in syn.columns:
         syn = syn.drop(columns=DUMMY_CONTEXT_KEY)
 
+    # drop dummy column used for persisting empty dataframes
+    if EMPTY_COLUMN in syn.columns:
+        syn = syn.drop(columns=EMPTY_COLUMN)
+
     # generate primary keys, if they are not present
     if tgt_primary_key and tgt_primary_key not in syn:
         syn[tgt_primary_key] = _generate_primary_keys(len(syn), type="uuid")
+
+    # reset index to ensure sequential indices for consistent test assertions
+    syn = syn.reset_index(drop=True)
 
     return syn
 
@@ -1170,6 +1178,13 @@ def generate(
                     seed_step_encoded = (
                         seed_batch_encoded_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
                     )
+                    # filter seed_step to match step_ctx_keys (in case sequences ended in previous step)
+                    if len(seed_step) > 0:
+                        seed_step = seed_step[seed_step[tgt_context_key].isin(step_ctx_keys)].reset_index(drop=True)
+                    if len(seed_step_encoded) > 0:
+                        seed_step_encoded = seed_step_encoded[
+                            seed_step_encoded[seed_context_key_encoded].isin(step_ctx_keys)
+                        ].reset_index(drop=True)
 
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
@@ -1232,7 +1247,7 @@ def generate(
                                 torch.as_tensor(seed_step_encoded[col].to_numpy(), device=model.device).type(torch.int),
                                 dim=-1,
                             )
-                            for col in seed_batch_encoded.columns
+                            for col in seed_step_encoded.columns
                             if col in tgt_sub_columns
                         }
 
@@ -1300,6 +1315,9 @@ def generate(
                         ]
                         history = history[include_mask, ...]
                         history_state = tuple(h[:, include_mask, ...] for h in history_state)
+                    # filter seed_step to match step_ctx_keys (always, not just when filtering above)
+                    if len(seed_step) > 0:
+                        seed_step = seed_step[seed_step[tgt_context_key].isin(step_ctx_keys)].reset_index(drop=True)
                     # accumulate outputs in memory
                     buffer.add((out_pt, step_ctx_keys, seed_step))
                     # increment progress by 1 for each step

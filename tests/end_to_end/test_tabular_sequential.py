@@ -657,7 +657,9 @@ def test_seed_generation(tmp_path):
     # check that the first steps of each sequence in synthetic data match the seed
     for name, seed_data in seed_data_dict.items():
         pd.testing.assert_series_equal(
-            syn_dict[name].groupby(key_col).head(n_seed_steps)[val_col], seed_data[val_col], check_dtype=False
+            syn_dict[name].groupby(key_col).head(n_seed_steps)[val_col].reset_index(drop=True),
+            seed_data[val_col].reset_index(drop=True),
+            check_dtype=False,
         )
 
     # check that the sequence lengths are inversely correlated with the number of MINUS steps
