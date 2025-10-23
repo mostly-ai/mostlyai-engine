@@ -375,8 +375,9 @@ def _post_process_decoding(
     syn: pd.DataFrame,
     tgt_primary_key: str | None = None,
 ) -> pd.DataFrame:
-    # drop dummy context key if present
-    if DUMMY_CONTEXT_KEY in syn.columns:
+    # sort by dummy context key to restore original order (if exists)
+    if DUMMY_CONTEXT_KEY in syn:
+        syn = syn.sort_values(DUMMY_CONTEXT_KEY).reset_index(drop=True)
         syn = syn.drop(columns=DUMMY_CONTEXT_KEY)
 
     # drop dummy column used for persisting empty dataframes
@@ -720,10 +721,6 @@ def decode_buffered_samples(
         data, seed_data = zip(*buffer.buffer)
         df_syn = pd.concat(data, axis=0).reset_index(drop=True)
 
-    # sort by context key to align with seed data (handles both real and dummy keys)
-    if tgt_context_key in df_syn.columns:
-        df_syn = df_syn.sort_values(tgt_context_key).reset_index(drop=True)
-
     # decode generated data
     _LOG.info(f"decode generated data {df_syn.shape}")
     df_syn = _decode_df(
@@ -735,10 +732,6 @@ def decode_buffered_samples(
 
     # preserve all seed values
     df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True) if seed_data else pd.DataFrame()
-
-    # sort seed data by context key to match df_syn ordering
-    if not df_seed.empty and tgt_context_key in df_seed.columns:
-        df_seed = df_seed.sort_values(tgt_context_key).reset_index(drop=True)
 
     if not df_seed.empty:
         seed_columns = [col for col in df_seed.columns]
