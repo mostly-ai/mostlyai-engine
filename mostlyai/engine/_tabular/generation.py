@@ -311,9 +311,8 @@ def _post_process_decoding(
     syn: pd.DataFrame,
     tgt_primary_key: str | None = None,
 ) -> pd.DataFrame:
-    # sort by dummy context key to restore original order (if exists)
-    if DUMMY_CONTEXT_KEY in syn:
-        syn = syn.sort_values(DUMMY_CONTEXT_KEY).reset_index(drop=True)
+    # drop dummy context key if present
+    if DUMMY_CONTEXT_KEY in syn.columns:
         syn = syn.drop(columns=DUMMY_CONTEXT_KEY)
 
     # generate primary keys, if they are not present
@@ -650,6 +649,10 @@ def decode_buffered_samples(
         data, seed_data = zip(*buffer.buffer)
         df_syn = pd.concat(data, axis=0).reset_index(drop=True)
 
+    # sort by context key to align with seed data (handles both real and dummy keys)
+    if tgt_context_key in df_syn.columns:
+        df_syn = df_syn.sort_values(tgt_context_key).reset_index(drop=True)
+
     # decode generated data
     _LOG.info(f"decode generated data {df_syn.shape}")
     df_syn = _decode_df(
@@ -661,6 +664,11 @@ def decode_buffered_samples(
 
     # preserve all seed values
     df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True) if seed_data else pd.DataFrame()
+
+    # sort seed data by context key to match df_syn ordering
+    if not df_seed.empty and tgt_context_key in df_seed.columns:
+        df_seed = df_seed.sort_values(tgt_context_key).reset_index(drop=True)
+
     if not df_seed.empty:
         seed_columns = [col for col in df_seed.columns]
         if is_sequential:
@@ -681,33 +689,26 @@ def decode_buffered_samples(
             df_syn.drop(columns=["__SEQ_IDX"], inplace=True)
             df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
         else:
-            # for flat data, overwrite seed columns using merge to handle reordered rows
-            # for non-impute columns: override all values
-            # for impute columns: override only non-NULL seed values (let model impute NULL values)
+            # for flat data, merge seed columns into synthetic data on context key
             impute_columns = impute_columns or []
 
-            # use merge on context key to properly align seed values with synthetic data
-            df_overwrite = pd.merge(
-                df_syn[[tgt_context_key]].copy(),
+            # merge to align seed with synthetic based on context key
+            df_overwrite = df_syn[[tgt_context_key]].merge(
                 df_seed,
                 on=tgt_context_key,
                 how="left",
-                suffixes=("", "_seed"),
             )
 
             # overwrite columns based on imputation logic
-            for col in seed_columns:
-                if col == tgt_context_key:
-                    continue  # skip the key column itself
-                seed_col_name = col if col in df_overwrite.columns else f"{col}_seed"
-                if seed_col_name in df_overwrite.columns:
-                    if col not in impute_columns:
-                        # non-impute columns: override all values
-                        df_syn[col] = df_overwrite[seed_col_name]
-                    else:
-                        # impute columns: override only non-NULL seed values
-                        mask = df_overwrite[seed_col_name].notna()
-                        df_syn.loc[mask, col] = df_overwrite.loc[mask, seed_col_name]
+            columns_to_overwrite = [col for col in df_overwrite.columns if col != tgt_context_key]
+            for col in columns_to_overwrite:
+                if col not in impute_columns:
+                    # non-impute columns: override all values
+                    df_syn[col] = df_overwrite[col]
+                else:
+                    # impute columns: override only non-NULL seed values
+                    mask = df_overwrite[col].notna()
+                    df_syn.loc[mask, col] = df_overwrite.loc[mask, col]
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
