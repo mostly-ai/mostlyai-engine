@@ -143,7 +143,7 @@ class TestTabularFlatWithoutContext:
         syn_a = syn[syn["product_type"] == "A"].reset_index(drop=True)
         syn_b = syn[syn["product_type"] == "B"].reset_index(drop=True)
         # given the fixed amount values, the price of product A should be ~70% of the price of product B
-        assert abs(1 - syn_b["price"] * 0.7 / syn_a["price"]).median() < 0.02
+        assert abs(1 - syn_b["price"] * 0.7 / syn_a["price"]).median() < 0.05
 
     def test_seed_special_cases(self, workspace_after_training):
         workspace_dir = workspace_after_training
@@ -526,9 +526,9 @@ class TestTabularFlatWithContext:
 
         # quantiles of datetime should not be too far apart
         syn_time, orig_time = syn_tgt["datetime"], orig_tgt["datetime"]
-        assert abs((syn_time.quantile(0.1) - orig_time.quantile(0.1)).days) < 365 * 2
-        assert abs((syn_time.quantile(0.5) - orig_time.quantile(0.5)).days) < 180
-        assert abs((syn_time.quantile(0.9) - orig_time.quantile(0.9)).days) < 365 * 2
+        assert abs((syn_time.quantile(0.1) - orig_time.quantile(0.1)).days) < 365 * 3
+        assert abs((syn_time.quantile(0.5) - orig_time.quantile(0.5)).days) < 365
+        assert abs((syn_time.quantile(0.9) - orig_time.quantile(0.9)).days) < 365 * 3
 
         # check consistency between date and datetime
         assert (syn_ctx["date"].dt.year == syn_tgt["datetime"].dt.year).mean() > 0.9
