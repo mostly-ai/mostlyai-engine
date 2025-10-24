@@ -671,7 +671,7 @@ def test_get_log_histogram_bin_bounds():
 
 def test_compute_log_histogram():
     # Test with values spanning multiple orders of magnitude
-    values = np.array([0.5, 1.5, 3.0, 10.0, 100.0, -0.5, -2.0, -50.0])
+    values = np.array([0.5, 1.5, 3.0, 10.0, 100.0, -0.5, -0.8, -2.0, -50.0])
     hist = compute_log_histogram(values, bins=64)
 
     # Histogram should have 128 bins (64 * 2)
@@ -682,6 +682,10 @@ def test_compute_log_histogram():
 
     # All bins should be non-negative
     assert all(count >= 0 for count in hist)
+
+    # Check if the histogram is correct
+    #                         -4 -2 -1  1  2  4
+    assert hist[64 - 3 : 64 + 3] == [0, 1, 2, 1, 1, 1]
 
 
 def test_compute_log_histogram_with_nan_inf():

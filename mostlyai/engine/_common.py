@@ -672,6 +672,11 @@ def compute_log_histogram(values: np.ndarray, bins: int = 64) -> list[int]:
     edge_list = [_get_log_histogram_bin_bounds(idx, bins) for idx in range(bins * 2)]
     bin_edges = np.array([lower for lower, _ in edge_list] + [edge_list[-1][1]])
 
+    # clip values to be within the bin edges to ensure all values are counted
+    min_val = bin_edges[0]
+    max_val = bin_edges[-1]
+    values = np.clip(values, min_val, max_val)
+
     # use numpy's histogram for efficient binning (O(n log bins) vs O(n * bins))
     hist, _ = np.histogram(values, bins=bin_edges)
 
