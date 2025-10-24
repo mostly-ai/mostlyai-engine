@@ -24,7 +24,9 @@ from mostlyai.engine._common import (
     ARGN_COLUMN,
     ARGN_PROCESSOR,
     ARGN_TABLE,
+    _get_log_histogram_bin_bounds,
     apply_encoding_type_dtypes,
+    compute_log_histogram,
     dp_non_rare,
     dp_quantiles,
     find_distinct_bins,
@@ -640,3 +642,57 @@ def test_dp_non_rare(value_counts, expected_selected_range, expected_non_rare_ra
     selected, non_rare_ratio = dp_non_rare(value_counts, epsilon, threshold=10)
     assert expected_selected_range[0] <= len(selected) <= expected_selected_range[1]
     assert expected_non_rare_ratio_range[0] <= non_rare_ratio <= expected_non_rare_ratio_range[1]
+
+
+def test_get_log_histogram_bin_bounds():
+    # Test a few key bins to verify edge calculation
+    bins = 64
+
+    # Bin around -1 to 0
+    lower, upper = _get_log_histogram_bin_bounds(bins - 1, bins)
+    assert lower == -1.0
+    assert upper == -0.0
+
+    # Bin around 0 to 1
+    lower, upper = _get_log_histogram_bin_bounds(bins, bins)
+    assert lower == 0.0
+    assert upper == 1.0
+
+    # First positive bin (1 to 2)
+    lower, upper = _get_log_histogram_bin_bounds(bins + 1, bins)
+    assert lower == 1.0
+    assert upper == 2.0
+
+    # Second positive bin (2 to 4)
+    lower, upper = _get_log_histogram_bin_bounds(bins + 2, bins)
+    assert lower == 2.0
+    assert upper == 4.0
+
+
+def test_compute_log_histogram():
+    # Test with values spanning multiple orders of magnitude
+    values = np.array([0.5, 1.5, 3.0, 10.0, 100.0, -0.5, -2.0, -50.0])
+    hist = compute_log_histogram(values, bins=64)
+
+    # Histogram should have 128 bins (64 * 2)
+    assert len(hist) == 128
+
+    # Sum of histogram should equal number of values
+    assert sum(hist) == len(values)
+
+    # All bins should be non-negative
+    assert all(count >= 0 for count in hist)
+
+
+def test_compute_log_histogram_with_nan_inf():
+    # Test that NaN and inf values are filtered out
+    values = np.array([1.0, 2.0, np.nan, np.inf, -np.inf, 3.0])
+    hist = compute_log_histogram(values, bins=64)
+
+    # Only 3 valid values should be counted
+    assert sum(hist) == 3
+
+    # Empty array after filtering
+    values_all_invalid = np.array([np.nan, np.inf, -np.inf])
+    hist_empty = compute_log_histogram(values_all_invalid, bins=64)
+    assert sum(hist_empty) == 0
