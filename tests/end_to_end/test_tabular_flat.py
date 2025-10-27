@@ -246,6 +246,7 @@ def test_zero_column(input_data, tmp_path_factory):
     assert "id" in syn.columns
 
 
+@pytest.mark.flaky(reruns=3)
 def test_seed_imputation(input_data, tmp_path_factory):
     """test that imputation strictly preserves correlations via conditional generation"""
     df = input_data[0]

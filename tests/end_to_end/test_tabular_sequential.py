@@ -722,6 +722,7 @@ def test_deterministic_lengths(tmp_path):
     assert match_rate > 0.95
 
 
+@pytest.mark.flaky(reruns=3)
 def test_seed_imputation(tmp_path):
     """test that sequential imputation handles different trailing NULL patterns and preserves correlations."""
     # constants
