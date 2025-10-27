@@ -739,7 +739,7 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
     seed_len_probs = [0.2, 0.5, 0.3]
     null_probability = 0.5
     max_epochs = 10
-    max_violation_rate = 0.35
+    max_violation_rate = 0.15
     col_b_tolerance = 0.1
     numeric_tolerance = 1e-9
     imputed_cols = ["col_a", "col_b", "col_cat"]
@@ -770,7 +770,7 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
     seed_parts = []
     for k in range(n_seed_sequences):
         seed_len = np.random.choice(seed_len_choices, p=seed_len_probs)
-        seed_col_a = np.random.randint(col_a_min, col_a_max, size=seed_len).astype(float)
+        seed_col_a = np.random.randint(col_a_min, col_a_max, size=seed_len)
 
         seed_parts.append(
             pd.DataFrame(
@@ -794,6 +794,7 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
         ctx_data=pd.DataFrame({key: range(n_seed_sequences)}),
         seed_data=seed_data,
         imputation=ImputationConfig(columns=imputed_cols),
+        rare_category_replacement_method=RareCategoryReplacementMethod.sample,
     )
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
@@ -826,7 +827,7 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
                     if isinstance(seed_val, str):
                         assert seed_val == syn_val
                     else:
-                        assert abs(float(seed_val) - float(syn_val)) <= numeric_tolerance
+                        assert abs(seed_val - syn_val) <= numeric_tolerance
 
     # verify correlations preserved in imputed values
     violations, total = [], 0
@@ -846,6 +847,7 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
 
             # col_cat correlation check
             if pd.isna(seed_seq.loc[idx, "col_cat"]) and pd.notna(syn_seq.loc[idx, "col_cat"]):
+                total += 1
                 if pd.notna(syn_seq.loc[idx, "col_a"]):
                     expected = "A" if syn_seq.loc[idx, "col_a"] <= category_threshold else "B"
                     actual = syn_seq.loc[idx, "col_cat"]
