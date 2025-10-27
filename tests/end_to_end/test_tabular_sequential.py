@@ -724,173 +724,134 @@ def test_deterministic_lengths(tmp_path):
 
 def test_sequential_imputation_with_null_patterns(tmp_path):
     """test that sequential imputation handles different trailing NULL patterns and preserves correlations."""
+    # constants
     workspace_dir = tmp_path / "ws"
     key = "sequence_id"
+    n_train_sequences = 2000
+    min_seq_len = 2
+    max_seq_len = 4
+    col_a_min = 1
+    col_a_max = 11
+    col_b_multiplier = 10
+    category_threshold = 5  # col_a <= 5 -> "A", else "B"
+    n_seed_sequences = 5
+    seed_len_choices = [1, 2, 3]
+    seed_len_probs = [0.2, 0.5, 0.3]
+    null_probability = 0.5
+    max_epochs = 10
+    max_violation_rate = 0.35
+    col_b_tolerance = 0.1
+    numeric_tolerance = 1e-9
+    imputed_cols = ["col_a", "col_b", "col_cat"]
 
-    # define correlations in training data:
-    # - col_b = col_a * 10 (numeric correlation)
-    # - col_cat = "A" if col_a in [1-5], "B" if col_a in [6-10] (categorical correlation)
-    # - col_extra = "X" or NULL (extra categorical noise, not marked for imputation)
-    keys = np.arange(2000)
-    # very short sequences for easier learning
-    seq_lens = np.random.randint(2, 4, size=2000)
-
+    # create training data with correlations: col_b = col_a * 10, col_cat = "A" if col_a <= 5 else "B"
+    keys = np.arange(n_train_sequences)
+    seq_lens = np.random.randint(min_seq_len, max_seq_len, size=n_train_sequences)
     sequence_ids = np.concatenate([np.repeat(k, ln) for k, ln in zip(keys, seq_lens)])
-    # simplified: col_a is in range [1, 10] for easier learning
-    col_a = np.concatenate([np.random.randint(1, 11, size=ln) for ln in seq_lens])
-    col_b = col_a * 10
-    # col_cat correlates with col_a: 1-5 -> "A", 6-10 -> "B"
-    col_cat = np.where(col_a <= 5, "A", "B")
-    # col_extra is either "X" or NULL (50% chance each)
-    col_extra = np.random.choice(["X", None], size=len(col_a), p=[0.5, 0.5])
+    col_a = np.concatenate([np.random.randint(col_a_min, col_a_max, size=ln) for ln in seq_lens])
 
     tgt = pd.DataFrame(
         {
             key: sequence_ids,
             "col_a": col_a,
-            "col_b": col_b,
-            "col_cat": col_cat,
-            "col_extra": col_extra,
+            "col_b": col_a * col_b_multiplier,
+            "col_cat": np.where(col_a <= category_threshold, "A", "B"),
+            "col_extra": np.random.choice(["X", None], size=len(col_a), p=[null_probability, null_probability]),
         }
     )
     ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
 
-    split(
-        tgt_data=tgt,
-        tgt_context_key=key,
-        ctx_data=ctx,
-        ctx_primary_key=key,
-        workspace_dir=workspace_dir,
-    )
+    split(tgt_data=tgt, tgt_context_key=key, ctx_data=ctx, ctx_primary_key=key, workspace_dir=workspace_dir)
     analyze(workspace_dir=workspace_dir, value_protection=False)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir, max_epochs=10, enable_flexible_generation=True)
+    train(workspace_dir=workspace_dir, max_epochs=max_epochs, enable_flexible_generation=True)
 
-    # create seed data with random null patterns
-    n_seed = 5
+    # create seed data with random nulls
     seed_parts = []
-
-    for k in range(n_seed):
-        seed_len = np.random.choice([1, 2, 3], p=[0.2, 0.5, 0.3])
-        # simplified: col_a in range [1, 10] to match training data
-        seed_col_a = np.random.randint(1, 11, size=seed_len).astype(float)
-
-        # randomly create holes in imputed columns (50% chance of null per cell)
-        seed_col_a_masked = np.where(np.random.rand(seed_len) > 0.5, seed_col_a, None)
-        seed_col_b = np.where(np.random.rand(seed_len) > 0.5, seed_col_a * 10, None)
-        # col_cat correlates with col_a: 1-5 -> "A", 6-10 -> "B"
-        seed_col_cat_values = np.where(seed_col_a <= 5, "A", "B")
-        seed_col_cat = np.where(np.random.rand(seed_len) > 0.5, seed_col_cat_values, None)
-
-        # col_extra is either "X" or NULL (50% chance each)
-        seed_col_extra = np.random.choice(["X", None], size=seed_len, p=[0.5, 0.5])
+    for k in range(n_seed_sequences):
+        seed_len = np.random.choice(seed_len_choices, p=seed_len_probs)
+        seed_col_a = np.random.randint(col_a_min, col_a_max, size=seed_len).astype(float)
 
         seed_parts.append(
             pd.DataFrame(
                 {
                     key: [k] * seed_len,
-                    "col_a": seed_col_a_masked,
-                    "col_b": seed_col_b,
-                    "col_cat": seed_col_cat,
-                    "col_extra": seed_col_extra,
+                    "col_a": np.where(np.random.rand(seed_len) > null_probability, seed_col_a, None),
+                    "col_b": np.where(np.random.rand(seed_len) > null_probability, seed_col_a * col_b_multiplier, None),
+                    "col_cat": np.where(
+                        np.random.rand(seed_len) > null_probability,
+                        np.where(seed_col_a <= category_threshold, "A", "B"),
+                        None,
+                    ),
+                    "col_extra": np.random.choice(["X", None], size=seed_len, p=[null_probability, null_probability]),
                 }
             )
         )
 
     seed_data = pd.concat(seed_parts, ignore_index=True)
-    seed_ctx = pd.DataFrame({key: range(n_seed)})
-
     generate(
         workspace_dir=workspace_dir,
-        ctx_data=seed_ctx,
+        ctx_data=pd.DataFrame({key: range(n_seed_sequences)}),
         seed_data=seed_data,
-        imputation=ImputationConfig(columns=["col_a", "col_b", "col_cat"]),
+        imputation=ImputationConfig(columns=imputed_cols),
     )
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
+    assert len(syn) > 0 and set(range(n_seed_sequences)).issubset(set(syn[key].unique()))
 
-    # basic checks
-    assert len(syn) > 0
-    assert set(range(n_seed)).issubset(set(syn[key].unique()))
-
-    # check seeded values are preserved (both imputed and non-imputed columns)
-    # only check rows where col_a was seeded (so we can reliably match rows)
-    for k in range(n_seed):
+    # verify seeded values are preserved
+    for k in range(n_seed_sequences):
         seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
         syn_seq = syn[syn[key] == k].reset_index(drop=True)
 
         for idx in range(len(seed_seq)):
-            seed_col_a = seed_seq.loc[idx, "col_a"]
-            if pd.isna(seed_col_a):
+            if pd.isna(seed_seq.loc[idx, "col_a"]):
                 continue
 
-            # find matching row by col_a value, prefer closer positions if multiple matches
-            matches = syn_seq[syn_seq["col_a"] == seed_col_a]
-            assert len(matches) > 0, f"No match found for seeded col_a={seed_col_a} at {key}={k}, idx={idx}"
-            
-            # if multiple matches, pick the one closest to current position
+            # find matching row by col_a, prefer closer positions
+            matches = syn_seq[syn_seq["col_a"] == seed_seq.loc[idx, "col_a"]]
+            assert len(matches) > 0
             syn_idx = matches.index[np.argmin(np.abs(matches.index - idx))] if len(matches) > 1 else matches.index[0]
 
-            # check non-imputed column col_extra is preserved exactly (including NULLs)
-            seed_val = seed_seq.loc[idx, "col_extra"]
-            syn_val = syn_seq.loc[syn_idx, "col_extra"]
-            if pd.isna(seed_val) and pd.isna(syn_val):
-                pass  # both NULL is correct
-            elif pd.isna(seed_val):
-                assert False, f"col_extra: expected NULL but got {syn_val} at {key}={k}, idx={idx}"
-            elif pd.isna(syn_val):
-                assert False, f"col_extra: expected {seed_val} but got NULL at {key}={k}, idx={idx}"
-            else:
-                assert seed_val == syn_val, f"col_extra: expected {seed_val} but got {syn_val} at {key}={k}, idx={idx}"
+            # verify col_extra preserved (including NULLs)
+            seed_val, syn_val = seed_seq.loc[idx, "col_extra"], syn_seq.loc[syn_idx, "col_extra"]
+            assert (pd.isna(seed_val) and pd.isna(syn_val)) or (seed_val == syn_val)
 
-            # check seeded non-null values in imputed columns are preserved
-            for col in ["col_a", "col_b", "col_cat"]:
+            # verify imputed columns preserved when seeded
+            for col in imputed_cols:
                 seed_val = seed_seq.loc[idx, col]
-                if pd.isna(seed_val):
-                    continue
-                
-                syn_val = syn_seq.loc[syn_idx, col]
-                assert pd.notna(syn_val), f"{col}: expected {seed_val} but got NULL at {key}={k}, idx={idx}"
-                
-                if isinstance(seed_val, str):
-                    assert seed_val == syn_val, f"{col}: expected {seed_val} but got {syn_val} at {key}={k}, idx={idx}"
-                else:
-                    assert abs(float(seed_val) - float(syn_val)) <= 1e-9, (
-                        f"{col}: expected {seed_val} but got {syn_val} at {key}={k}, idx={idx}"
-                    )
+                if pd.notna(seed_val):
+                    syn_val = syn_seq.loc[syn_idx, col]
+                    assert pd.notna(syn_val)
+                    if isinstance(seed_val, str):
+                        assert seed_val == syn_val
+                    else:
+                        assert abs(float(seed_val) - float(syn_val)) <= numeric_tolerance
 
-    # check that the correlations are mostly preserved for imputed values
-    correlation_violations = []
-    total_imputed = 0
-
-    for k in range(n_seed):
+    # verify correlations preserved in imputed values
+    violations, total = [], 0
+    for k in range(n_seed_sequences):
         seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
         syn_seq = syn[syn[key] == k].reset_index(drop=True)
 
         for idx in range(len(seed_seq)):
-            # check col_b correlation (should be col_a * 10)
+            # col_b correlation check
             if pd.isna(seed_seq.loc[idx, "col_b"]) and pd.notna(syn_seq.loc[idx, "col_b"]):
-                total_imputed += 1
+                total += 1
                 if pd.notna(syn_seq.loc[idx, "col_a"]):
-                    expected = syn_seq.loc[idx, "col_a"] * 10
+                    expected = syn_seq.loc[idx, "col_a"] * col_b_multiplier
                     actual = syn_seq.loc[idx, "col_b"]
-                    if abs(expected - actual) > 0.1:
-                        correlation_violations.append(
-                            f"Seq {k}, row {idx}, col_b: actual={actual}, expected={expected}"
-                        )
+                    if abs(expected - actual) > col_b_tolerance:
+                        violations.append(f"Seq {k}, row {idx}, col_b: {actual} != {expected}")
 
-            # check col_cat correlation (should be "A" if col_a in [1-5], "B" if col_a in [6-10])
+            # col_cat correlation check
             if pd.isna(seed_seq.loc[idx, "col_cat"]) and pd.notna(syn_seq.loc[idx, "col_cat"]):
                 if pd.notna(syn_seq.loc[idx, "col_a"]):
-                    expected_cat = "A" if syn_seq.loc[idx, "col_a"] <= 5 else "B"
-                    actual_cat = syn_seq.loc[idx, "col_cat"]
-                    if expected_cat != actual_cat:
-                        correlation_violations.append(
-                            f"Seq {k}, row {idx}, col_cat: actual={actual_cat}, expected={expected_cat} (col_a={syn_seq.loc[idx, 'col_a']})"
-                        )
+                    expected = "A" if syn_seq.loc[idx, "col_a"] <= category_threshold else "B"
+                    actual = syn_seq.loc[idx, "col_cat"]
+                    if expected != actual:
+                        violations.append(f"Seq {k}, row {idx}, col_cat: {actual} != {expected}")
 
-    violation_rate = len(correlation_violations) / max(total_imputed, 1)
-    assert violation_rate < 0.35, (
-        f"Too many correlation violations ({len(correlation_violations)}/{total_imputed}={violation_rate:.1%}):\n"
-        + "\n".join(correlation_violations[:15])
+    assert len(violations) / max(total, 1) < max_violation_rate, (
+        f"Violations ({len(violations)}/{total}):\n" + "\n".join(violations[:15])
     )
