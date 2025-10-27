@@ -722,7 +722,7 @@ def test_deterministic_lengths(tmp_path):
     assert match_rate > 0.95
 
 
-def test_sequential_imputation_with_null_patterns(tmp_path):
+def test_seed_imputation(tmp_path):
     """test that sequential imputation handles different trailing NULL patterns and preserves correlations."""
     # constants
     workspace_dir = tmp_path / "ws"

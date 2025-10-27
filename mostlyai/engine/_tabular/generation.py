@@ -16,6 +16,7 @@ import logging
 import random
 import time
 import uuid
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 from typing import Literal
@@ -232,13 +233,44 @@ def _regroup_partial_sequences_by_length(
     return ctx_data, len(new_batches)
 
 
-def _regroup_flat_by_null_pattern(
+def _flat_null_pattern(group: pd.DataFrame, relevant_columns: list[str]) -> tuple:
+    """returns tuple of bools: True if column is fully NULL"""
+    return tuple(group[col].isna().all() for col in relevant_columns)
+
+
+def _trailing_null_pattern(group: pd.DataFrame, relevant_columns: list[str]) -> tuple:
+    """returns tuple of bools: True if column has trailing NULLs"""
+    pattern = []
+    for col in relevant_columns:
+        col_values = group[col].reset_index(drop=True)
+        non_null_mask = col_values.notna()
+        if non_null_mask.any():
+            last_non_null_idx = non_null_mask[::-1].idxmax()
+            has_trailing_nulls = last_non_null_idx < len(col_values) - 1
+        else:
+            has_trailing_nulls = True
+        pattern.append(has_trailing_nulls)
+    return tuple(pattern)
+
+
+def _regroup_by_pattern(
     ctx_data: pd.DataFrame,
     seed_data: pd.DataFrame,
     ctx_primary_key: str,
     imputation_columns: list[str],
+    pattern_fn: Callable[[pd.DataFrame, list[str]], tuple],
+    *,
+    groupby_key: str | None = None,
+    use_vectorized_regroup: bool = True,
 ) -> tuple[pd.DataFrame, int]:
-    """regroup batches so that rows with the same NULL pattern are together"""
+    """regroup batches so that rows/sequences with the same NULL pattern are together
+
+    Args:
+        pattern_fn: function that computes NULL pattern for a grouped dataframe
+        groupby_key: key to group seed_data by (defaults to ctx_primary_key)
+        use_vectorized_regroup: if True, use fast categorical factorization;
+                                if False, use nested loop approach
+    """
     # only consider columns that are BOTH in imputation_columns AND in seed_data
     relevant_columns = [col for col in imputation_columns if col in seed_data.columns]
 
@@ -246,10 +278,11 @@ def _regroup_flat_by_null_pattern(
     if not relevant_columns or seed_data[relevant_columns].isna().all().all():
         return ctx_data, ctx_data["__BATCH"].nunique()
 
-    # compute NULL pattern for each context key, considering ONLY imputation columns
-    seed_data_grouped = seed_data.groupby(ctx_primary_key, sort=False)
+    # compute NULL pattern for each group
+    groupby_key = groupby_key or ctx_primary_key
+    seed_data_grouped = seed_data.groupby(groupby_key, sort=False)
     null_patterns = seed_data_grouped.apply(
-        lambda group: tuple(group[col].isna().all() for col in relevant_columns),
+        lambda group: pattern_fn(group, relevant_columns),
         include_groups=False,
     ).rename("__NULL_PATTERN")
 
@@ -258,23 +291,46 @@ def _regroup_flat_by_null_pattern(
         return ctx_data, ctx_data["__BATCH"].nunique()
 
     # add __NULL_PATTERN to ctx_data
-    # keys not in seed_data get empty tuple pattern "()" - these will be grouped together
     ctx_data = ctx_data.assign(__NULL_PATTERN=ctx_data[ctx_primary_key].map(null_patterns).fillna("()"))
 
-    # regroup batches - vectorized approach using composite key
-    # create composite key from old batch and NULL pattern to maintain grouping within batches
-    ctx_data = ctx_data.assign(
-        __COMPOSITE_KEY=ctx_data["__BATCH"].astype(str) + "_" + ctx_data["__NULL_PATTERN"].astype(str)
-    )
-
-    # use categorical with original order to preserve batch sequence
-    composite_cat = pd.Categorical(ctx_data["__COMPOSITE_KEY"], categories=ctx_data["__COMPOSITE_KEY"].unique())
-    ctx_data = ctx_data.assign(__BATCH=pd.factorize(composite_cat)[0] + 1)
-
-    num_batches = ctx_data["__BATCH"].max()
-    ctx_data = ctx_data.drop(columns=["__NULL_PATTERN", "__COMPOSITE_KEY"]).reset_index(drop=True)
+    # regroup batches
+    if use_vectorized_regroup:
+        # vectorized approach for flat data
+        ctx_data = ctx_data.assign(
+            __COMPOSITE_KEY=ctx_data["__BATCH"].astype(str) + "_" + ctx_data["__NULL_PATTERN"].astype(str)
+        )
+        composite_cat = pd.Categorical(ctx_data["__COMPOSITE_KEY"], categories=ctx_data["__COMPOSITE_KEY"].unique())
+        ctx_data = ctx_data.assign(__BATCH=pd.factorize(composite_cat)[0] + 1)
+        num_batches = ctx_data["__BATCH"].max()
+        ctx_data = ctx_data.drop(columns=["__NULL_PATTERN", "__COMPOSITE_KEY"]).reset_index(drop=True)
+    else:
+        # nested loop approach for sequential data
+        new_batches = []
+        for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
+            for _, new_batch_df in old_batch_df.groupby("__NULL_PATTERN", sort=False):
+                new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
+                new_batches.append(new_batch_df)
+        ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__NULL_PATTERN"]).reset_index(drop=True)
+        num_batches = len(new_batches)
 
     return ctx_data, num_batches
+
+
+def _regroup_flat_by_null_pattern(
+    ctx_data: pd.DataFrame,
+    seed_data: pd.DataFrame,
+    ctx_primary_key: str,
+    imputation_columns: list[str],
+) -> tuple[pd.DataFrame, int]:
+    """regroup batches so that rows with the same NULL pattern are together"""
+    return _regroup_by_pattern(
+        ctx_data,
+        seed_data,
+        ctx_primary_key,
+        imputation_columns,
+        pattern_fn=_flat_null_pattern,
+        use_vectorized_regroup=True,
+    )
 
 
 def _regroup_sequential_by_null_pattern(
@@ -285,59 +341,15 @@ def _regroup_sequential_by_null_pattern(
     imputation_columns: list[str],
 ) -> tuple[pd.DataFrame, int]:
     """regroup batches so that sequences with the same trailing NULL pattern are together"""
-    # only consider columns that are BOTH in imputation_columns AND in seed_data
-    relevant_columns = [col for col in imputation_columns if col in seed_data.columns]
-
-    # early exit: no relevant columns
-    if not relevant_columns or seed_data[relevant_columns].isna().all().all():
-        return ctx_data, ctx_data["__BATCH"].nunique()
-
-    # compute trailing NULL pattern for each sequence
-    # a column has "trailing NULLs" if the last N rows are NULL for that column
-    def get_trailing_null_pattern(group: pd.DataFrame) -> tuple:
-        """returns tuple of bools: True if column has trailing NULLs that should be imputed"""
-        pattern = []
-        for col in relevant_columns:
-            col_values = group[col].reset_index(drop=True)
-            # find the last non-null index
-            non_null_mask = col_values.notna()
-            if non_null_mask.any():
-                # get the position of the last non-null value
-                last_non_null_idx = non_null_mask[::-1].idxmax()
-                # check if there are any rows after the last non-null value
-                has_trailing_nulls = last_non_null_idx < len(col_values) - 1
-            else:
-                # all values are NULL
-                has_trailing_nulls = True
-            pattern.append(has_trailing_nulls)
-        return tuple(pattern)
-
-    seed_data_grouped = seed_data.groupby(tgt_context_key, sort=False)
-    null_patterns = seed_data_grouped.apply(
-        get_trailing_null_pattern,
-        include_groups=False,
-    ).rename("__NULL_PATTERN")
-
-    # early exit: all NULL patterns are the same
-    if null_patterns.nunique() == 1:
-        return ctx_data, ctx_data["__BATCH"].nunique()
-
-    # add __NULL_PATTERN to ctx_data
-    # keys not in seed_data get empty tuple pattern "()" - these will be grouped together
-    ctx_data = ctx_data.assign(__NULL_PATTERN=ctx_data[ctx_primary_key].map(null_patterns).fillna("()"))
-
-    # regroup batches - similar to _regroup_partial_sequences_by_length
-    # we need to maintain the batch order and partial sequence length grouping
-    new_batches = []
-    for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
-        for _, new_batch_df in old_batch_df.groupby("__NULL_PATTERN", sort=False):
-            new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
-            new_batches.append(new_batch_df)
-
-    # rebuild ctx_data; drop temporary __NULL_PATTERN column
-    ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__NULL_PATTERN"]).reset_index(drop=True)
-
-    return ctx_data, len(new_batches)
+    return _regroup_by_pattern(
+        ctx_data,
+        seed_data,
+        ctx_primary_key,
+        imputation_columns,
+        pattern_fn=_trailing_null_pattern,
+        groupby_key=tgt_context_key,
+        use_vectorized_regroup=False,
+    )
 
 
 def _reshape_pt_to_pandas(
@@ -369,6 +381,18 @@ def _reshape_pt_to_pandas(
     # keys.shape=(sum(1<=x<=batch_size),)
     keys = pd.concat(keys, axis=0).rename(key_name).reset_index(drop=True)
     return pd.concat([keys, df], axis=1)
+
+
+def _drop_fully_null_imputed_columns(seed_batch: pd.DataFrame, imputation_columns: list[str]) -> pd.DataFrame:
+    """drop columns from seed_batch that are in imputation_columns and are fully NULL
+
+    this allows the model to freely generate these columns rather than conditioning on NULL values.
+    """
+    if not imputation_columns or seed_batch.empty:
+        return seed_batch
+
+    fully_null_cols = [col for col in imputation_columns if col in seed_batch.columns and seed_batch[col].isna().all()]
+    return seed_batch.drop(columns=fully_null_cols) if fully_null_cols else seed_batch
 
 
 def _post_process_decoding(
@@ -1125,10 +1149,7 @@ def generate(
             seed_batch = seed_data[seed_data[tgt_context_key].isin(ctx_batch[ctx_primary_key])]
             # drop fully-NULL imputation columns from seed_batch to allow conditional generation
             if imputation:
-                fully_null_cols = [
-                    c for c in imputation.columns if c in seed_batch.columns and seed_batch[c].isna().all()
-                ]
-                seed_batch = seed_batch.drop(columns=fully_null_cols)
+                seed_batch = _drop_fully_null_imputed_columns(seed_batch, imputation.columns)
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -1209,9 +1230,7 @@ def generate(
 
                     # drop NULL imputation columns from seed_step to allow conditional generation
                     if imputation and len(seed_step) > 0:
-                        for col in imputation.columns:
-                            if col in seed_step.columns and seed_step[col].isna().all():
-                                seed_step = seed_step.drop(columns=[col])
+                        seed_step = _drop_fully_null_imputed_columns(seed_step, imputation.columns)
 
                     # encode seed_step (after dropping NULL imputation columns)
                     if len(seed_step) > 0:
