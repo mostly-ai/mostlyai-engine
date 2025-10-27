@@ -884,15 +884,35 @@ def generate(
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
+        trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
+        _LOG.info(f"{trn_column_order=}")
+
         if not enable_flexible_generation:
             # check if resolved column order is the same as the one from training
-            trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
-            _LOG.info(f"{trn_column_order=}")
             if gen_column_order != trn_column_order:
                 raise ValueError(
                     "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
                     "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
                 )
+
+        # enforce flexible generation for sequential imputation
+        if is_sequential and imputation and not enable_flexible_generation:
+            raise ValueError(
+                "Sequential imputation requires the model to be trained with "
+                "`enable_flexible_generation=True`. Please retrain the model with this setting enabled."
+            )
+
+        # reorder tgt_sub_columns to match generation column order if using flexible generation
+        if enable_flexible_generation and gen_column_order != trn_column_order:
+            # create mapping from column name to its sub-columns
+            tgt_column_sub_columns = get_sub_columns_nested_from_cardinalities(tgt_cardinalities, groupby="columns")
+            # reorder sub_columns based on gen_column_order
+            tgt_sub_columns_reordered = []
+            for col in gen_column_order:
+                if col in tgt_column_sub_columns:
+                    tgt_sub_columns_reordered.extend(tgt_column_sub_columns[col])
+            tgt_sub_columns = tgt_sub_columns_reordered
+            _LOG.info("reordered tgt_sub_columns based on gen_column_order")
 
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)

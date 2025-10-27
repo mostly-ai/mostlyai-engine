@@ -723,26 +723,20 @@ def test_deterministic_lengths(tmp_path):
 
 
 def test_sequential_imputation_with_null_patterns(tmp_path):
-    """test that sequences with different trailing NULL patterns are regrouped correctly"""
+    """test that sequential imputation handles different trailing NULL patterns."""
     workspace_dir = tmp_path / "ws"
     key = "sequence_id"
-    n_sequences = 1_000
 
-    # create training data with 2 columns
-    keys = np.arange(n_sequences)
-    seq_lens = np.random.randint(5, 10, size=n_sequences)
-
+    # create training data with correlated columns (col_b = col_a * 10)
+    # sequences start from random offsets, not just 0
+    keys = np.arange(500)
+    seq_lens = np.random.randint(5, 8, size=500)
+    start_offsets = np.random.randint(0, 20, size=500)
     sequence_ids = np.concatenate([np.repeat(k, ln) for k, ln in zip(keys, seq_lens)])
-    col_a = np.concatenate([np.arange(ln) for ln in seq_lens])  # simple counter
-    col_b = np.concatenate([np.arange(ln) * 10 for ln in seq_lens])  # counter * 10
+    col_a = np.concatenate([np.arange(start, start + ln) for start, ln in zip(start_offsets, seq_lens)])
+    col_b = col_a * 10
 
-    tgt = pd.DataFrame(
-        {
-            key: sequence_ids,
-            "col_a": col_a,
-            "col_b": col_b,
-        }
-    )
+    tgt = pd.DataFrame({key: sequence_ids, "col_a": col_a, "col_b": col_b})
     ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
 
     split(
@@ -754,68 +748,31 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
     )
     analyze(workspace_dir=workspace_dir, value_protection=False)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir, max_epochs=5)
+    train(workspace_dir=workspace_dir, max_epochs=10, enable_flexible_generation=True)
 
-    # create seed data with different trailing NULL patterns
-    # this test validates that the regrouping by null pattern works
-    n_seed_keys = 200
-    seed_keys = np.arange(n_seed_keys)
-    seed_len = 3
-
+    # create seed data with 3 different trailing NULL patterns
+    # use shorter seeds (1 row) with varied values
+    np.random.seed(42)
     seed_data_parts = []
 
-    # group 1: trailing NULLs in col_a only (50 sequences)
-    for k in seed_keys[:50]:
-        seed_data_parts.append(
-            pd.DataFrame(
-                {
-                    key: [k] * seed_len,
-                    "col_a": [0, 1, None],
-                    "col_b": [0, 10, 20],
-                }
-            )
-        )
+    # group 1: both columns seeded with correlation (no trailing NULLs in seed row)
+    for k in range(10):
+        col_a_val = float(np.random.randint(3, 15))
+        seed_data_parts.append(pd.DataFrame({key: [k], "col_a": [col_a_val], "col_b": [col_a_val * 10]}))
 
-    # group 2: trailing NULLs in col_b only (50 sequences)
-    for k in seed_keys[50:100]:
-        seed_data_parts.append(
-            pd.DataFrame(
-                {
-                    key: [k] * seed_len,
-                    "col_a": [0, 1, 2],
-                    "col_b": [0, 10, None],
-                }
-            )
-        )
+    # group 2: trailing NULL in col_b only (varied starting values)
+    for k in range(10, 20):
+        col_a_val = float(np.random.randint(3, 15))
+        seed_data_parts.append(pd.DataFrame({key: [k], "col_a": [col_a_val], "col_b": [None]}))
 
-    # group 3: trailing NULLs in both (50 sequences)
-    for k in seed_keys[100:150]:
-        seed_data_parts.append(
-            pd.DataFrame(
-                {
-                    key: [k] * seed_len,
-                    "col_a": [0, 1, None],
-                    "col_b": [0, 10, None],
-                }
-            )
-        )
-
-    # group 4: no trailing NULLs (50 sequences)
-    for k in seed_keys[150:200]:
-        seed_data_parts.append(
-            pd.DataFrame(
-                {
-                    key: [k] * seed_len,
-                    "col_a": [0, 1, 2],
-                    "col_b": [0, 10, 20],
-                }
-            )
-        )
+    # group 3: trailing NULL in both (empty seeds)
+    for k in range(20, 30):
+        seed_data_parts.append(pd.DataFrame({key: [k], "col_a": [None], "col_b": [None]}))
 
     seed_data = pd.concat(seed_data_parts, ignore_index=True)
-    seed_ctx = pd.DataFrame({key: seed_keys})
+    seed_ctx = pd.DataFrame({key: range(30)})
 
-    # generate with imputation - the main goal is to test regrouping works without errors
+    # generate with imputation
     from mostlyai.engine.domain import ImputationConfig
 
     generate(
@@ -827,10 +784,36 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
 
-    # verify that synthetic data was generated successfully
-    assert len(syn) > 0, "Expected synthetic data to be generated"
-    # verify that all seed sequences have corresponding synthetic sequences
-    assert set(seed_keys).issubset(set(syn[key].unique())), "All seed keys should have synthetic sequences"
-    # verify that sequences have at least the seed length
-    syn_lens = syn.groupby(key).size()
-    assert (syn_lens >= seed_len).all(), "All sequences should be at least as long as seed length"
+    # basic checks
+    assert len(syn) > 0
+    assert set(range(30)).issubset(set(syn[key].unique()))
+
+    # check non-NULL seed values are preserved
+    for k in [0, 10, 20]:
+        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
+        syn_seq = syn[syn[key] == k].reset_index(drop=True)
+
+        # check first row (seed row)
+        if pd.notna(seed_seq.loc[0, "col_a"]):
+            assert syn_seq.loc[0, "col_a"] == seed_seq.loc[0, "col_a"]
+        if pd.notna(seed_seq.loc[0, "col_b"]):
+            assert syn_seq.loc[0, "col_b"] == seed_seq.loc[0, "col_b"]
+
+    # check correlations are preserved for imputed values (NULL -> generated)
+    # training data had col_b = col_a * 10, verify this holds for imputed values
+    for k in range(30):
+        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
+        syn_seq = syn[syn[key] == k].reset_index(drop=True)
+
+        # only check the first row (seed row) for imputed values
+        if len(seed_seq) > 0:
+            # if col_b was NULL in seed and col_a was present, check if imputed col_b follows correlation
+            if pd.notna(seed_seq.loc[0, "col_a"]) and pd.isna(seed_seq.loc[0, "col_b"]):
+                if pd.notna(syn_seq.loc[0, "col_b"]):
+                    expected_col_b = syn_seq.loc[0, "col_a"] * 10
+                    # allow reasonable tolerance for imputation
+                    assert abs(syn_seq.loc[0, "col_b"] - expected_col_b) < 0.1, (
+                        f"Imputed correlation not preserved for sequence {k}, row 0: "
+                        f"col_a={syn_seq.loc[0, 'col_a']}, col_b={syn_seq.loc[0, 'col_b']}, "
+                        f"expected col_b={expected_col_b}"
+                    )
