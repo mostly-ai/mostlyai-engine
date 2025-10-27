@@ -737,6 +737,7 @@ def decode_buffered_samples(
         seed_columns = [col for col in df_seed.columns]
         if is_sequential:
             # overwrite first steps of each sequence in synthetic data with values from seed data
+            impute_columns = impute_columns or []
             df_syn["__SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
             df_seed["__SEQ_IDX"] = df_seed.groupby(tgt_context_key).cumcount()
             # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
@@ -749,7 +750,17 @@ def decode_buffered_samples(
             )
             # project df_overwrite onto df_syn
             seed_rows = df_overwrite["__INDICATOR"] == "both"
-            df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
+            # overwrite columns based on imputation logic
+            for col in seed_columns:
+                if col in [tgt_context_key, "__SEQ_IDX"]:
+                    continue  # skip the key columns
+                if col not in impute_columns:
+                    # non-impute columns: override all values
+                    df_syn.loc[seed_rows, col] = df_overwrite.loc[seed_rows, col]
+                else:
+                    # impute columns: override only non-NULL seed values
+                    mask = seed_rows & df_overwrite[col].notna()
+                    df_syn.loc[mask, col] = df_overwrite.loc[mask, col]
             df_syn.drop(columns=["__SEQ_IDX"], inplace=True)
             df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
         else:
@@ -1195,9 +1206,20 @@ def generate(
 
                     # get seed data for current step
                     seed_step = seed_batch_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
-                    seed_step_encoded = (
-                        seed_batch_encoded_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
-                    )
+
+                    # drop NULL imputation columns from seed_step to allow conditional generation
+                    if imputation and len(seed_step) > 0:
+                        for col in imputation.columns:
+                            if col in seed_step.columns and seed_step[col].isna().all():
+                                seed_step = seed_step.drop(columns=[col])
+
+                    # encode seed_step (after dropping NULL imputation columns)
+                    if len(seed_step) > 0:
+                        seed_step_encoded, _, _ = encode_df(
+                            df=seed_step, stats=tgt_stats, tgt_context_key=tgt_context_key
+                        )
+                    else:
+                        seed_step_encoded = pd.DataFrame()
                     # filter seed_step to match step_ctx_keys (in case sequences ended in previous step)
                     if len(seed_step) > 0:
                         seed_step = seed_step[seed_step[tgt_context_key].isin(step_ctx_keys)].reset_index(drop=True)

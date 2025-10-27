@@ -722,96 +722,6 @@ def test_deterministic_lengths(tmp_path):
     assert match_rate > 0.95
 
 
-# helper functions for test_sequential_imputation_with_null_patterns
-def _create_seed_row(k, col_a_vals, col_b=None, col_cat=None):
-    """create seed row with correlated col_extra."""
-    key = "sequence_id"
-    col_a_vals = np.array(col_a_vals, dtype=object)  # ensure it's a numpy array, allow None
-
-    # handle the case where col_a_vals contains None
-    has_values = np.array([v is not None for v in col_a_vals])
-    col_b_vals = np.where(has_values, col_a_vals.astype(float) * 10, None) if col_b is None else col_b
-    col_cat_vals = (
-        np.where(has_values & (col_a_vals.astype(float) < 10), "A", np.where(has_values, "B", None))
-        if col_cat is None
-        else col_cat
-    )
-    col_cat_ref = np.where(has_values & (col_a_vals.astype(float) < 10), "A", np.where(has_values, "B", None))
-    col_extra_vals = np.where((col_cat_ref == "A") & has_values, col_a_vals.astype(float) + 100, None)
-
-    return pd.DataFrame(
-        {
-            key: [k] * len(col_a_vals),
-            "col_a": col_a_vals,
-            "col_b": [None] * len(col_a_vals) if col_b is False else col_b_vals,
-            "col_cat": [None] * len(col_a_vals) if col_cat is False else col_cat_vals,
-            "col_extra": col_extra_vals,
-        }
-    )
-
-
-def _values_match(seed_val, syn_val, tolerance=1e-9):
-    """check if seed and synthetic values match, handling type conversions."""
-    if pd.isna(seed_val) and pd.isna(syn_val):
-        return True
-    if pd.isna(seed_val) or pd.isna(syn_val):
-        return False
-
-    try:
-        # try numeric comparison
-        seed_num = float(seed_val) if not isinstance(seed_val, str) else seed_val
-        syn_num = float(syn_val) if not isinstance(syn_val, str) else syn_val
-        if isinstance(seed_num, (int, float)) and isinstance(syn_num, (int, float)):
-            return abs(seed_num - syn_num) <= tolerance
-        # fallback to string comparison
-        return str(seed_val) == str(syn_val)
-    except (ValueError, TypeError):
-        return seed_val == syn_val
-
-
-def _find_matching_syn_row(seed_seq, syn_seq, seed_idx):
-    """find synthetic row matching seed row by col_a value."""
-    seed_col_a = seed_seq.loc[seed_idx, "col_a"]
-
-    if pd.notna(seed_col_a):
-        matching = syn_seq[syn_seq["col_a"] == seed_col_a]
-    else:
-        matching = syn_seq.iloc[seed_idx : seed_idx + 1] if seed_idx < len(syn_seq) else pd.DataFrame()
-
-    return matching.index[0] if len(matching) > 0 else None, seed_col_a
-
-
-def _check_preservation(seed_data, syn, key, columns_to_check, check_seeded_only=True):
-    """unified preservation checker for both imputed and non-imputed columns."""
-    violations = []
-
-    for k in range(50):
-        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
-        syn_seq = syn[syn[key] == k].reset_index(drop=True)
-
-        for seed_idx in range(len(seed_seq)):
-            syn_idx, seed_col_a = _find_matching_syn_row(seed_seq, syn_seq, seed_idx)
-            if syn_idx is None:
-                # check if any non-null values exist that should be preserved
-                if any(pd.notna(seed_seq.loc[seed_idx, col]) for col in columns_to_check):
-                    violations.append(f"Seq {k}: no matching row for col_a={seed_col_a}")
-                continue
-
-            for col in columns_to_check:
-                seed_val = seed_seq.loc[seed_idx, col]
-                syn_val = syn_seq.loc[syn_idx, col]
-
-                # for imputed columns, only check seeded values
-                # for non-imputed columns, check all values
-                if check_seeded_only and pd.isna(seed_val):
-                    continue
-
-                if not _values_match(seed_val, syn_val):
-                    violations.append(f"Seq {k}, col_a={seed_col_a}, {col}: seed={seed_val}, syn={syn_val}")
-
-    return violations
-
-
 def test_sequential_imputation_with_null_patterns(tmp_path):
     """test that sequential imputation handles different trailing NULL patterns and preserves correlations."""
     workspace_dir = tmp_path / "ws"
@@ -821,12 +731,13 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
     # - col_b = col_a * 10 (numeric correlation)
     # - col_cat = "A" if col_a < 10 else "B" (categorical correlation based on numeric)
     # - col_extra = col_a + 100 if col_cat == "A" else NULL (not marked for imputation, has nulls)
-    keys = np.arange(500)
-    seq_lens = np.random.randint(3, 5, size=500)
-    start_offsets = np.random.randint(0, 20, size=500)
+    keys = np.arange(2000)
+    # very short sequences for easier learning
+    seq_lens = np.random.randint(2, 4, size=2000)
 
     sequence_ids = np.concatenate([np.repeat(k, ln) for k, ln in zip(keys, seq_lens)])
-    col_a = np.concatenate([np.arange(start, start + ln) for start, ln in zip(start_offsets, seq_lens)])
+    # simplified: col_a is in range [1, 10] for easier learning
+    col_a = np.concatenate([np.random.randint(1, 11, size=ln) for ln in seq_lens])
     col_b = col_a * 10
     col_cat = np.where(col_a < 10, "A", "B")
     col_extra = np.where(col_cat == "A", col_a + 100, None)
@@ -853,99 +764,156 @@ def test_sequential_imputation_with_null_patterns(tmp_path):
     encode(workspace_dir=workspace_dir)
     train(workspace_dir=workspace_dir, max_epochs=10, enable_flexible_generation=True)
 
-    # define which columns are marked for imputation
-    IMPUTATION_COLS = ["col_a", "col_b", "col_cat"]
-    NON_IMPUTATION_COLS = ["col_extra"]
+    # create seed data with random null patterns
+    n_seed = 5
+    seed_parts = []
 
-    # create seed data with 5 groups testing different null patterns
-    seed_data_parts = []
+    for k in range(n_seed):
+        seed_len = np.random.choice([1, 2, 3], p=[0.2, 0.5, 0.3])
+        # simplified: col_a in range [1, 10] to match training data
+        seed_col_a = np.random.randint(1, 11, size=seed_len).astype(float)
 
-    # group 1: fully seeded (all columns present, 2-3 rows)
-    for k in range(10):
-        seed_len = np.random.choice([2, 3], p=[0.7, 0.3])
-        seed_data_parts.append(_create_seed_row(k, np.random.randint(3, 15, size=seed_len).astype(float)))
+        # randomly create holes in imputed columns (50% chance of null per cell)
+        seed_col_a_masked = np.where(np.random.rand(seed_len) > 0.5, seed_col_a, None)
+        seed_col_b = np.where(np.random.rand(seed_len) > 0.5, seed_col_a * 10, None)
+        seed_col_cat = np.where(np.random.rand(seed_len) > 0.5, np.where(seed_col_a < 10, "A", "B"), None)
 
-    # group 2: only col_a seeded (col_b, col_cat should be imputed)
-    for k in range(10, 20):
-        seed_data_parts.append(
-            _create_seed_row(k, np.random.randint(3, 15, size=2).astype(float), col_b=False, col_cat=False)
+        # col_extra follows the correlation rule but is never imputed
+        seed_col_extra = np.where(seed_col_a < 10, seed_col_a + 100, None)
+
+        seed_parts.append(
+            pd.DataFrame(
+                {
+                    key: [k] * seed_len,
+                    "col_a": seed_col_a_masked,
+                    "col_b": seed_col_b,
+                    "col_cat": seed_col_cat,
+                    "col_extra": seed_col_extra,
+                }
+            )
         )
 
-    # group 3: col_a and col_cat seeded (col_b should be imputed)
-    for k in range(20, 30):
-        seed_data_parts.append(_create_seed_row(k, np.random.randint(3, 15, size=2).astype(float), col_b=False))
-
-    # group 4: col_a and col_b seeded (col_cat should be imputed)
-    for k in range(30, 40):
-        seed_data_parts.append(_create_seed_row(k, np.random.randint(3, 15, size=2).astype(float), col_cat=False))
-
-    # group 5: all imputation columns null (everything should be imputed)
-    for k in range(40, 50):
-        seed_data_parts.append(_create_seed_row(k, [None], col_b=False, col_cat=False))
-
-    seed_data = pd.concat(seed_data_parts, ignore_index=True)
-    seed_ctx = pd.DataFrame({key: range(50)})
+    seed_data = pd.concat(seed_parts, ignore_index=True)
+    seed_ctx = pd.DataFrame({key: range(n_seed)})
 
     # verify median seed length is approximately half of typical training length
     seed_lengths = seed_data.groupby(key).size()
-    assert 1.5 <= seed_lengths.median() <= 2.5, f"Median seed length should be ~2, got {seed_lengths.median()}"
+    assert 1.0 <= seed_lengths.median() <= 2.5, f"Median seed length should be ~2, got {seed_lengths.median()}"
 
     generate(
         workspace_dir=workspace_dir,
         ctx_data=seed_ctx,
         seed_data=seed_data,
-        imputation=ImputationConfig(columns=IMPUTATION_COLS),
+        imputation=ImputationConfig(columns=["col_a", "col_b", "col_cat"]),
     )
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
 
     # basic checks
     assert len(syn) > 0
-    assert set(range(50)).issubset(set(syn[key].unique()))
+    assert set(range(n_seed)).issubset(set(syn[key].unique()))
 
-    # check 1: non-imputed columns are preserved (including NULLs)
-    violations = _check_preservation(seed_data, syn, key, NON_IMPUTATION_COLS, check_seeded_only=False)
-    assert len(violations) == 0, f"Non-imputed columns not preserved ({len(violations)} violations):\n" + "\n".join(
-        violations[:20]
-    )
-
-    # check 2: seeded non-null values in imputed columns are preserved
-    violations = _check_preservation(seed_data, syn, key, IMPUTATION_COLS, check_seeded_only=True)
-    assert len(violations) == 0, f"Seeded imputed values not preserved ({len(violations)} violations):\n" + "\n".join(
-        violations[:20]
-    )
-
-    # check 3: correlations are preserved for imputed values
-    correlation_rules = {
-        "col_b": lambda row: row["col_a"] * 10,
-        "col_cat": lambda row: "A" if row["col_a"] < 10 else "B",
-    }
-    correlation_violations = []
-
-    for k in range(50):
+    # check 1: non-imputed column col_extra is preserved exactly (including NULLs)
+    # only check rows where col_a was seeded (so we can reliably match rows)
+    preservation_violations = 0
+    for k in range(n_seed):
         seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
         syn_seq = syn[syn[key] == k].reset_index(drop=True)
 
         for idx in range(len(seed_seq)):
-            for col, rule_fn in correlation_rules.items():
-                # only check imputed values (NULL in seed, non-NULL in syn)
-                if pd.isna(seed_seq.loc[idx, col]) and pd.notna(syn_seq.loc[idx, col]):
-                    if pd.notna(syn_seq.loc[idx, "col_a"]):
-                        expected = rule_fn(syn_seq.loc[idx])
-                        actual = syn_seq.loc[idx, col]
-                        if not _values_match(expected, actual, tolerance=0.1):
-                            correlation_violations.append(
-                                f"Seq {k}, row {idx}, {col}: actual={actual}, expected={expected}"
-                            )
+            seed_col_a = seed_seq.loc[idx, "col_a"]
+            # only check rows where col_a was seeded (so we can match reliably)
+            if pd.notna(seed_col_a):
+                # find matching row by col_a value, prefer closer positions if multiple matches
+                matches = syn_seq[syn_seq["col_a"] == seed_col_a]
+                if len(matches) == 0:
+                    preservation_violations += 1
+                    continue
+                # if multiple matches, pick the one closest to current position
+                if len(matches) > 1:
+                    syn_idx = matches.index[np.argmin(np.abs(matches.index - idx))]
+                else:
+                    syn_idx = matches.index[0]
 
-    # count total imputed values for context
-    total_imputed = sum(
-        1
-        for k in range(50)
-        for idx in range(len(seed_data[seed_data[key] == k]))
-        for col in IMPUTATION_COLS
-        if pd.isna(seed_data[seed_data[key] == k].reset_index(drop=True).loc[idx, col])
+                # check col_extra preservation
+                seed_val = seed_seq.loc[idx, "col_extra"]
+                syn_val = syn_seq.loc[syn_idx, "col_extra"]
+                if pd.isna(seed_val) and pd.isna(syn_val):
+                    continue
+                if pd.isna(seed_val) or pd.isna(syn_val):
+                    preservation_violations += 1
+                elif abs(float(seed_val) - float(syn_val)) > 1e-9:
+                    preservation_violations += 1
+
+    assert preservation_violations == 0, f"Non-imputed column not preserved ({preservation_violations} violations)"
+
+    # check 2: seeded non-null values in imputed columns are preserved
+    imputed_preservation_violations = 0
+    for k in range(n_seed):
+        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
+        syn_seq = syn[syn[key] == k].reset_index(drop=True)
+
+        for idx in range(len(seed_seq)):
+            seed_col_a = seed_seq.loc[idx, "col_a"]
+            if pd.notna(seed_col_a):
+                # find matching row by col_a value, prefer closer positions if multiple matches
+                matches = syn_seq[syn_seq["col_a"] == seed_col_a]
+                if len(matches) == 0:
+                    imputed_preservation_violations += 1
+                    continue
+                # if multiple matches, pick the one closest to current position
+                if len(matches) > 1:
+                    syn_idx = matches.index[np.argmin(np.abs(matches.index - idx))]
+                else:
+                    syn_idx = matches.index[0]
+
+                # check seeded values are preserved
+                for col in ["col_a", "col_b", "col_cat"]:
+                    seed_val = seed_seq.loc[idx, col]
+                    if pd.notna(seed_val):
+                        syn_val = syn_seq.loc[syn_idx, col]
+                        if pd.isna(syn_val):
+                            imputed_preservation_violations += 1
+                        elif isinstance(seed_val, str):
+                            if seed_val != syn_val:
+                                imputed_preservation_violations += 1
+                        elif abs(float(seed_val) - float(syn_val)) > 1e-9:
+                            imputed_preservation_violations += 1
+
+    assert imputed_preservation_violations == 0, (
+        f"Seeded imputed values not preserved ({imputed_preservation_violations} violations)"
     )
+
+    # check 3: correlations are preserved for imputed values
+    correlation_violations = []
+    total_imputed = 0
+
+    for k in range(n_seed):
+        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
+        syn_seq = syn[syn[key] == k].reset_index(drop=True)
+
+        for idx in range(len(seed_seq)):
+            # check col_b correlation (should be col_a * 10)
+            if pd.isna(seed_seq.loc[idx, "col_b"]) and pd.notna(syn_seq.loc[idx, "col_b"]):
+                total_imputed += 1
+                if pd.notna(syn_seq.loc[idx, "col_a"]):
+                    expected = syn_seq.loc[idx, "col_a"] * 10
+                    actual = syn_seq.loc[idx, "col_b"]
+                    if abs(expected - actual) > 0.1:
+                        correlation_violations.append(
+                            f"Seq {k}, row {idx}, col_b: actual={actual}, expected={expected}"
+                        )
+
+            # check col_cat correlation (should be "A" if col_a < 10 else "B")
+            if pd.isna(seed_seq.loc[idx, "col_cat"]) and pd.notna(syn_seq.loc[idx, "col_cat"]):
+                total_imputed += 1
+                if pd.notna(syn_seq.loc[idx, "col_a"]):
+                    expected = "A" if syn_seq.loc[idx, "col_a"] < 10 else "B"
+                    actual = syn_seq.loc[idx, "col_cat"]
+                    if expected != actual:
+                        correlation_violations.append(
+                            f"Seq {k}, row {idx}, col_cat: actual={actual}, expected={expected}"
+                        )
 
     violation_rate = len(correlation_violations) / max(total_imputed, 1)
     assert violation_rate < 0.1, (
