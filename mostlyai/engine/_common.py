@@ -55,7 +55,6 @@ RIDX_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}ridx_"  # rever
 SLEN_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}slen_"  # sequence length
 SDEC_SUB_COLUMN_PREFIX = f"{POSITIONAL_COLUMN}{PREFIX_SUB_COLUMN}sdec_"  # sequence index decile
 TABLE_COLUMN_INFIX = "::"  # this should be consistent as in mostly-data and mostlyai-qa
-EMPTY_COLUMN = "__empty__"  # dummy column for preserving shape when saving dataframes with 0 columns
 
 # the latest version of the model uses SIDX/SLEN/RIDX positional column
 DEFAULT_HAS_SLEN = True
@@ -588,13 +587,8 @@ def get_positional_cardinalities(
 def persist_data_part(df: pd.DataFrame, output_path: Path, infix: str):
     t0 = time.time()
     part_fn = f"part.{infix}.parquet"
-    # save without index for clean reading; add dummy column for shape preservation when rows > 0 but columns = 0
-    if len(df.columns) == 0 and len(df) > 0:
-        df_to_save = df.copy()
-        df_to_save[EMPTY_COLUMN] = range(len(df))
-    else:
-        df_to_save = df
-    df_to_save.to_parquet(output_path / part_fn, index=False)
+    # save without index for clean reading
+    df.to_parquet(output_path / part_fn, index=False)
     _LOG.info(f"persisted {df.shape} to `{part_fn}` in {time.time() - t0:.2f}s")
 
 

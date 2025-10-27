@@ -34,7 +34,6 @@ from mostlyai.engine._common import (
     DEFAULT_HAS_RIDX,
     DEFAULT_HAS_SDEC,
     DEFAULT_HAS_SLEN,
-    EMPTY_COLUMN,
     POSITIONAL_COLUMN,
     RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
@@ -403,10 +402,6 @@ def _post_process_decoding(
     if DUMMY_CONTEXT_KEY in syn:
         syn = syn.sort_values(DUMMY_CONTEXT_KEY).reset_index(drop=True)
         syn = syn.drop(columns=DUMMY_CONTEXT_KEY)
-
-    # drop dummy column used for persisting empty dataframes
-    if EMPTY_COLUMN in syn.columns:
-        syn = syn.drop(columns=EMPTY_COLUMN)
 
     # generate primary keys, if they are not present
     if tgt_primary_key and tgt_primary_key not in syn:
