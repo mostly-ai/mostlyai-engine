@@ -820,9 +820,13 @@ def test_seed_imputation(tmp_path):
                 seed_val = seed_seq.loc[idx, col]
                 if pd.notna(seed_val):
                     syn_val = syn_seq.loc[idx, col]
-                    assert pd.notna(syn_val), f"Seq {k}, row {idx}, col '{col}': seed value {seed_val} not preserved (got NaN)"
+                    assert pd.notna(syn_val), (
+                        f"Seq {k}, row {idx}, col '{col}': seed value {seed_val} not preserved (got NaN)"
+                    )
                     if isinstance(seed_val, str):
-                        assert seed_val == syn_val, f"Seq {k}, row {idx}, col '{col}': expected {seed_val}, got {syn_val}"
+                        assert seed_val == syn_val, (
+                            f"Seq {k}, row {idx}, col '{col}': expected {seed_val}, got {syn_val}"
+                        )
                     else:
                         # col_a and col_b are integers, use exact equality
                         assert seed_val == syn_val, (
