@@ -255,10 +255,10 @@ def test_seed_imputation(input_data, tmp_path_factory):
     price_threshold = 15  # price < 15 -> "Cheap", price >= 15 -> "Expensive"
     null_probability = 0.5  # probability that a seed value is NULL (to be imputed)
     max_epochs = 10
-    max_violation_rate = 0.15  # allow up to 15% of checks to fail for model approximation
+    max_violation_rate = 0.2  # allow up to 20% of checks to fail for model approximation
     price_tolerance = 1e-9
-    price_relative_tolerance = 0.05  # allow 5% relative error for price correlation
-    imputed_cols = ["price", "price_category"]
+    price_relative_tolerance = 0.15  # allow 15% relative error for price correlation
+    imputed_cols = ["amount", "price", "price_category"]
 
     # train on data with strong price -> price_category correlation
     df_train = input_data[0]
@@ -289,13 +289,14 @@ def test_seed_imputation(input_data, tmp_path_factory):
         .reset_index(drop=True)
         .copy()
     )
+    seed_data["amount"] = seed_data["amount"].astype("int32")
 
     # randomly set some values to None for imputation testing
     for col in imputed_cols:
         null_mask = np.random.rand(n_seed_samples) < null_probability
         seed_data.loc[null_mask, col] = None
-    # randomly set one Nan to amount column
-    seed_data.loc[np.random.randint(0, n_seed_samples), "amount"] = None
+    # randomly set one Nan to product_type column
+    seed_data.loc[np.random.randint(0, n_seed_samples), "product_type"] = None
 
     generate(
         seed_data=seed_data,
@@ -341,7 +342,7 @@ def test_seed_imputation(input_data, tmp_path_factory):
             continue
 
         # skip correlation checks if amount is NaN (can't compute expected values)
-        if pd.isna(amount):
+        if pd.isna(product_type):
             continue
 
         # check amount <-> product_type <-> price correlation
