@@ -587,8 +587,8 @@ def get_positional_cardinalities(
 def persist_data_part(df: pd.DataFrame, output_path: Path, infix: str):
     t0 = time.time()
     part_fn = f"part.{infix}.parquet"
-    # save without index for clean reading
-    df.to_parquet(output_path / part_fn, index=False)
+    # save with index to handle edge cases (no columns but N > 0 rows)
+    df.to_parquet(output_path / part_fn, index=True)
     _LOG.info(f"persisted {df.shape} to `{part_fn}` in {time.time() - t0:.2f}s")
 
 
