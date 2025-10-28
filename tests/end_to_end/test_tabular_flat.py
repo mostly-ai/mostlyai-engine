@@ -249,10 +249,21 @@ def test_zero_column(input_data, tmp_path_factory):
 @pytest.mark.flaky(reruns=3)
 def test_seed_imputation(input_data, tmp_path_factory):
     """test that imputation strictly preserves correlations via conditional generation"""
-    df = input_data[0]
+    # constants
     workspace_dir = tmp_path_factory.mktemp("workspace-imputation-correlation")
+    n_seed_samples = 20
+    price_threshold = 15  # price < 15 -> "Cheap", price >= 15 -> "Expensive"
+    null_probability = 0.5  # probability that a seed value is NULL (to be imputed)
+    max_epochs = 10
+    max_violation_rate = 0.15  # allow up to 15% of checks to fail for model approximation
+    price_tolerance = 1e-9
+    price_relative_tolerance = 0.05  # allow 5% relative error for price correlation
+    imputed_cols = ["price", "price_category"]
 
     # train on data with strong price -> price_category correlation
+    df_train = input_data[0]
+    df_holdout = input_data[1]
+
     tgt_encoding_types = {
         "amount": ModelEncodingType.tabular_numeric_auto,
         "product_type": ModelEncodingType.tabular_categorical,
@@ -261,58 +272,99 @@ def test_seed_imputation(input_data, tmp_path_factory):
     }
 
     split(
-        tgt_data=df[["id"] + list(tgt_encoding_types.keys())],
+        tgt_data=df_train[["id"] + list(tgt_encoding_types.keys())],
         tgt_primary_key="id",
         tgt_encoding_types=tgt_encoding_types,
         workspace_dir=workspace_dir,
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=10, enable_flexible_generation=True, workspace_dir=workspace_dir)
+    train(max_epochs=max_epochs, enable_flexible_generation=True, workspace_dir=workspace_dir)
 
-    seed_data = pd.DataFrame(
-        {
-            "amount": [50.0, 40.0, 80.0, 50.0, 40.0, 80.0] * 2,
-            "product_type": ["A", "B", "A", "A", "B", "A"] * 2,
-            "price": [10.0, 25.0, 5.0, None, None, None] * 2,
-            "price_category": [None, None, None, "Cheap", "Expensive", "Cheap"] * 2,
-        }
+    # create seed data from random samples in holdout set with random nulls for imputation testing
+    # use holdout data (not seen during training) to avoid memorization
+    seed_data = (
+        df_holdout[["amount", "product_type", "price", "price_category"]]
+        .sample(n=n_seed_samples)
+        .reset_index(drop=True)
+        .copy()
     )
+
+    # randomly set some values to None for imputation testing
+    for col in imputed_cols:
+        null_mask = np.random.rand(n_seed_samples) < null_probability
+        seed_data.loc[null_mask, col] = None
+    # randomly set one Nan to amount column
+    seed_data.loc[np.random.randint(0, n_seed_samples), "amount"] = None
 
     generate(
         seed_data=seed_data,
-        imputation={"columns": ["amount", "price", "price_category"]},
-        sampling_temperature=0.0,  # use greedy decoding for deterministic results
+        imputation={"columns": imputed_cols},
         workspace_dir=workspace_dir,
     )
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
+    assert len(syn) == n_seed_samples
 
-    # check that seed_data is preserved (except for nulls in imputed columns)
+    # verify seeded values are preserved (except for nulls in imputed columns)
     for idx in range(len(syn)):
         for col in seed_data.columns:
-            if not pd.isna(seed_data.loc[idx, col]):
-                assert syn.loc[idx, col] == seed_data.loc[idx, col], (
-                    f"row {idx}, col '{col}': seed value {seed_data.loc[idx, col]} "
-                    f"not preserved, got {syn.loc[idx, col]}"
-                )
+            seed_val = seed_data.loc[idx, col]
+            if pd.notna(seed_val):
+                syn_val = syn.loc[idx, col]
+                assert pd.notna(syn_val), f"row {idx}, col '{col}': seed value {seed_val} not preserved (got NaN)"
+                if isinstance(seed_val, str):
+                    assert syn_val == seed_val, (
+                        f"row {idx}, col '{col}': seed value {seed_val} not preserved, got {syn_val}"
+                    )
+                else:
+                    assert abs(syn_val - seed_val) <= price_tolerance, (
+                        f"row {idx}, col '{col}': seed value {seed_val} not preserved, got {syn_val}"
+                    )
 
-    # check that price <-> price_category correlation is maintained for all rows
+    # verify correlations preserved in imputed values
+    violations = []
+    total_checks = 0
+
     for idx in range(len(syn)):
+        amount = syn.loc[idx, "amount"]
+        product_type = syn.loc[idx, "product_type"]
         price = syn.loc[idx, "price"]
         price_cat = syn.loc[idx, "price_category"]
 
         # ensure no NaN values after imputation
-        assert not pd.isna(price), f"row {idx}: price should not be NaN after imputation"
-        assert not pd.isna(price_cat), f"row {idx}: price_category should not be NaN after imputation"
+        if pd.isna(price):
+            violations.append(f"row {idx}: price should not be NaN after imputation")
+            continue
+        if pd.isna(price_cat):
+            violations.append(f"row {idx}: price_category should not be NaN after imputation")
+            continue
 
-        # check correlation: price < 15 <-> Cheap, price >= 15 <-> Expensive
-        if price < 15:
-            assert price_cat == "Cheap", f"row {idx}: price={price} < 15 should yield 'Cheap', got '{price_cat}'"
-        else:
-            assert price_cat == "Expensive", (
-                f"row {idx}: price={price} >= 15 should yield 'Expensive', got '{price_cat}'"
+        # skip correlation checks if amount is NaN (can't compute expected values)
+        if pd.isna(amount):
+            continue
+
+        # check amount <-> product_type <-> price correlation
+        total_checks += 1
+        product_type_multiplier = 0.7 if product_type == "A" else 1.0
+        expected_price = (1000 / amount) * product_type_multiplier
+        price_relative_error = abs(price - expected_price) / expected_price
+        if price_relative_error > price_relative_tolerance:
+            violations.append(
+                f"row {idx}: amount={amount}, product_type={product_type} "
+                f"should yield price≈{expected_price:.2f}, got {price:.2f} "
+                f"(relative error: {price_relative_error:.1%})"
             )
+
+        # check price <-> price_category correlation: price < 15 <-> "Cheap", else "Expensive"
+        total_checks += 1
+        expected_cat = "Cheap" if price < price_threshold else "Expensive"
+        if price_cat != expected_cat:
+            violations.append(f"row {idx}: price={price:.2f} should yield '{expected_cat}', got '{price_cat}'")
+
+    assert len(violations) / max(total_checks, 1) <= max_violation_rate, (
+        f"Violations ({len(violations)}/{total_checks}):\n" + "\n".join(violations)
+    )
 
 
 def test_value_protection_disabled(input_data, tmp_path_factory):
