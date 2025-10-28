@@ -742,7 +742,6 @@ def test_seed_imputation(tmp_path):
     max_epochs = 10
     max_violation_rate = 0.15
     col_b_tolerance = 0.1
-    numeric_tolerance = 1e-9
     imputed_cols = ["col_a", "col_b", "col_cat"]
 
     # create training data with correlations: col_b = col_a * 10, col_cat = "A" if col_a <= 5 else "B"
@@ -795,7 +794,6 @@ def test_seed_imputation(tmp_path):
         ctx_data=pd.DataFrame({key: range(n_seed_sequences)}),
         seed_data=seed_data,
         imputation=ImputationConfig(columns=imputed_cols),
-        rare_category_replacement_method=RareCategoryReplacementMethod.sample,
     )
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
@@ -807,28 +805,29 @@ def test_seed_imputation(tmp_path):
         syn_seq = syn[syn[key] == k].reset_index(drop=True)
 
         for idx in range(len(seed_seq)):
-            if pd.isna(seed_seq.loc[idx, "col_a"]):
-                continue
-
-            # find matching row by col_a, prefer closer positions
-            matches = syn_seq[syn_seq["col_a"] == seed_seq.loc[idx, "col_a"]]
-            assert len(matches) > 0
-            syn_idx = matches.index[np.argmin(np.abs(matches.index - idx))] if len(matches) > 1 else matches.index[0]
+            # for sequential data, row order within sequences is preserved
+            # so we can match directly by index position
+            if idx >= len(syn_seq):
+                # synthetic sequence is shorter than seed (shouldn't happen)
+                pytest.fail(f"Seq {k}: synthetic sequence too short (len={len(syn_seq)}, expected >={len(seed_seq)})")
 
             # verify col_extra preserved (including NULLs)
-            seed_val, syn_val = seed_seq.loc[idx, "col_extra"], syn_seq.loc[syn_idx, "col_extra"]
+            seed_val, syn_val = seed_seq.loc[idx, "col_extra"], syn_seq.loc[idx, "col_extra"]
             assert (pd.isna(seed_val) and pd.isna(syn_val)) or (seed_val == syn_val)
 
             # verify imputed columns preserved when seeded
             for col in imputed_cols:
                 seed_val = seed_seq.loc[idx, col]
                 if pd.notna(seed_val):
-                    syn_val = syn_seq.loc[syn_idx, col]
-                    assert pd.notna(syn_val)
+                    syn_val = syn_seq.loc[idx, col]
+                    assert pd.notna(syn_val), f"Seq {k}, row {idx}, col '{col}': seed value {seed_val} not preserved (got NaN)"
                     if isinstance(seed_val, str):
-                        assert seed_val == syn_val
+                        assert seed_val == syn_val, f"Seq {k}, row {idx}, col '{col}': expected {seed_val}, got {syn_val}"
                     else:
-                        assert abs(seed_val - syn_val) <= numeric_tolerance
+                        # col_a and col_b are integers, use exact equality
+                        assert seed_val == syn_val, (
+                            f"Seq {k}, row {idx}, col '{col}': expected {seed_val}, got {syn_val}"
+                        )
 
     # verify correlations preserved in imputed values
     violations, total = [], 0

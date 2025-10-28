@@ -256,7 +256,6 @@ def test_seed_imputation(input_data, tmp_path_factory):
     null_probability = 0.5  # probability that a seed value is NULL (to be imputed)
     max_epochs = 10
     max_violation_rate = 0.2  # allow up to 20% of checks to fail for model approximation
-    price_tolerance = 1e-9
     price_relative_tolerance = 0.15  # allow 15% relative error for price correlation
     imputed_cols = ["amount", "price", "price_category"]
 
@@ -319,7 +318,8 @@ def test_seed_imputation(input_data, tmp_path_factory):
                         f"row {idx}, col '{col}': seed value {seed_val} not preserved, got {syn_val}"
                     )
                 else:
-                    assert abs(syn_val - seed_val) <= price_tolerance, (
+                    # amount is integer, use exact equality
+                    assert seed_val == syn_val, (
                         f"row {idx}, col '{col}': seed value {seed_val} not preserved, got {syn_val}"
                     )
 
