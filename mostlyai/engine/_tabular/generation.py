@@ -913,13 +913,6 @@ def generate(
                     "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
                 )
 
-        # enforce flexible generation for sequential imputation
-        if is_sequential and imputation and not enable_flexible_generation:
-            raise ValueError(
-                "Sequential imputation requires the model to be trained with "
-                "`enable_flexible_generation=True`. Please retrain the model with this setting enabled."
-            )
-
         # reorder tgt_sub_columns to match generation column order if using flexible generation
         if enable_flexible_generation and gen_column_order != trn_column_order:
             # create mapping from column name to its sub-columns
