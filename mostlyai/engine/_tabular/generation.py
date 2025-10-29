@@ -315,39 +315,27 @@ def _regroup_by_pattern(
     return ctx_data, num_batches
 
 
-def _regroup_flat_by_null_pattern(
-    ctx_data: pd.DataFrame,
-    seed_data: pd.DataFrame,
-    ctx_primary_key: str,
-    imputation_columns: list[str],
-) -> tuple[pd.DataFrame, int]:
-    """regroup batches so that rows with the same NULL pattern are together"""
-    return _regroup_by_pattern(
-        ctx_data,
-        seed_data,
-        ctx_primary_key,
-        imputation_columns,
-        pattern_fn=_flat_null_pattern,
-        use_vectorized_regroup=True,
-    )
-
-
-def _regroup_sequential_by_null_pattern(
+def _regroup_by_null_pattern(
     ctx_data: pd.DataFrame,
     seed_data: pd.DataFrame,
     ctx_primary_key: str,
     tgt_context_key: str,
     imputation_columns: list[str],
+    is_sequential: bool,
 ) -> tuple[pd.DataFrame, int]:
-    """regroup batches so that sequences with the same trailing NULL pattern are together"""
+    """regroup batches by NULL pattern (flat) or trailing NULL pattern (sequential)"""
+    pattern_fn = _trailing_null_pattern if is_sequential else _flat_null_pattern
+    groupby_key = tgt_context_key if is_sequential else None
+    use_vectorized_regroup = not is_sequential
+
     return _regroup_by_pattern(
         ctx_data,
         seed_data,
         ctx_primary_key,
         imputation_columns,
-        pattern_fn=_trailing_null_pattern,
-        groupby_key=tgt_context_key,
-        use_vectorized_regroup=False,
+        pattern_fn=pattern_fn,
+        groupby_key=groupby_key,
+        use_vectorized_regroup=use_vectorized_regroup,
     )
 
 
@@ -1118,16 +1106,11 @@ def generate(
             ctx_data, no_of_batches = _regroup_partial_sequences_by_length(
                 ctx_data, seed_data, ctx_primary_key, tgt_context_key
             )
-            # regroup by trailing NULL pattern for sequential imputation
-            if imputation and seed_data is not None and len(seed_data) > 0:
-                ctx_data, no_of_batches = _regroup_sequential_by_null_pattern(
-                    ctx_data, seed_data, ctx_primary_key, tgt_context_key, imputation.columns
-                )
 
-        # regroup by NULL pattern if imputation is enabled (flat data only)
-        if imputation and seed_data is not None and len(seed_data) > 0 and not is_sequential:
-            ctx_data, no_of_batches = _regroup_flat_by_null_pattern(
-                ctx_data, seed_data, ctx_primary_key, imputation.columns
+        # regroup by NULL pattern if imputation is enabled
+        if imputation and seed_data is not None and len(seed_data) > 0:
+            ctx_data, no_of_batches = _regroup_by_null_pattern(
+                ctx_data, seed_data, ctx_primary_key, tgt_context_key, imputation.columns, is_sequential
             )
 
         # keep at most 500k samples in memory before decoding and writing to disk
