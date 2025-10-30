@@ -290,7 +290,7 @@ def _regroup_by_pattern(
         return ctx_data, ctx_data["__BATCH"].nunique()
 
     # add __NULL_PATTERN to ctx_data
-    ctx_data = ctx_data.assign(__NULL_PATTERN=ctx_data[ctx_primary_key].map(null_patterns).fillna("()"))
+    ctx_data = ctx_data.assign(__NULL_PATTERN=ctx_data[ctx_primary_key].map(null_patterns))
 
     # regroup batches
     if use_vectorized_regroup:

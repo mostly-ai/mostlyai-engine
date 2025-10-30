@@ -756,7 +756,7 @@ def test_seed_imputation(tmp_path):
             "col_a": col_a,
             "col_b": col_a * col_b_multiplier,
             "col_cat": np.where(col_a <= category_threshold, "A", "B"),
-            "col_extra": np.random.choice(["X", None], size=len(col_a), p=[null_probability, null_probability]),
+            "col_extra": np.random.choice(["X", None], size=len(col_a), p=[null_probability, 1 - null_probability]),
         }
     )
     ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
