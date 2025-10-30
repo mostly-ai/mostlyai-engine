@@ -783,7 +783,9 @@ def test_seed_imputation(tmp_path):
                         np.where(seed_col_a <= category_threshold, "A", "B"),
                         None,
                     ),
-                    "col_extra": np.random.choice(["X", None], size=seed_len, p=[null_probability, null_probability]),
+                    "col_extra": np.random.choice(
+                        ["X", None], size=seed_len, p=[null_probability, 1 - null_probability]
+                    ),
                 }
             )
         )
