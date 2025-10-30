@@ -1198,13 +1198,6 @@ def generate(
                         )
                     else:
                         seed_step_encoded = pd.DataFrame()
-                    # filter seed_step to match step_ctx_keys (in case sequences ended in previous step)
-                    if len(seed_step) > 0:
-                        seed_step = seed_step[seed_step[tgt_context_key].isin(step_ctx_keys)].reset_index(drop=True)
-                    if len(seed_step_encoded) > 0:
-                        seed_step_encoded = seed_step_encoded[
-                            seed_step_encoded[seed_context_key_encoded].isin(step_ctx_keys)
-                        ].reset_index(drop=True)
 
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
