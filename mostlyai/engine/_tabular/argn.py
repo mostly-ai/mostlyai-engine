@@ -983,6 +983,7 @@ class FlatModel(nn.Module):
         top_p: float | None = None,
         return_probs: list[str] | None = None,
         fairness_transforms: dict[str, Any] | None = None,
+        column_order: list[str] | None = None,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -990,6 +991,7 @@ class FlatModel(nn.Module):
         outputs = {}
         probs = {}
         fairness_transforms = fairness_transforms or {}
+        effective_column_order = column_order or self.column_order
 
         if mode == "trn":
             # forward pass through context compressor
@@ -1007,7 +1009,7 @@ class FlatModel(nn.Module):
             col_mask = _make_permutation_mask(
                 col_embedding_dims=self.column_embedders.dims,
                 columns=self.tgt_columns,
-                column_order=self.column_order,
+                column_order=effective_column_order,
                 is_sequential=False,
                 device=self.device,
             )
@@ -1046,7 +1048,7 @@ class FlatModel(nn.Module):
             col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # take sub columns in the specified generation order
-            column_order = self.column_order or self.tgt_columns
+            column_order = effective_column_order or self.tgt_columns
             sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
 
             for sub_col in sub_column_order:
@@ -1267,11 +1269,14 @@ class SequentialModel(nn.Module):
         history=None,
         history_state=None,
         context=None,
+        column_order: list[str] | None = None,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         if context is None:
             context = self.context_compressor(x)
+
+        effective_column_order = column_order or self.column_order
 
         has_ridx = any(sub_col.startswith(RIDX_SUB_COLUMN_PREFIX) for sub_col in self.tgt_cardinalities)
 
@@ -1318,7 +1323,7 @@ class SequentialModel(nn.Module):
             col_mask = _make_permutation_mask(
                 col_embedding_dims=self.column_embedders.dims,
                 columns=self.tgt_columns,
-                column_order=self.column_order,
+                column_order=effective_column_order,
                 is_sequential=True,
                 device=self.device,
             )
@@ -1387,7 +1392,7 @@ class SequentialModel(nn.Module):
             col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # take sub columns in the specified generation order
-            column_order = self.column_order or self.tgt_columns
+            column_order = effective_column_order or self.tgt_columns
             sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
 
             for sub_col in sub_column_order:

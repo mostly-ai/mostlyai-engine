@@ -27,7 +27,7 @@ from mostlyai.engine._encoding_types.tabular.categorical import (
 from mostlyai.engine._tabular.generation import RareCategoryReplacementMethod, generate
 from mostlyai.engine._tabular.training import train
 from mostlyai.engine._workspace import Workspace
-from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelEncodingType, ModelStateStrategy
+from mostlyai.engine.domain import DifferentialPrivacyConfig, ImputationConfig, ModelEncodingType, ModelStateStrategy
 
 from .conftest import MockData
 
@@ -657,7 +657,9 @@ def test_seed_generation(tmp_path):
     # check that the first steps of each sequence in synthetic data match the seed
     for name, seed_data in seed_data_dict.items():
         pd.testing.assert_series_equal(
-            syn_dict[name].groupby(key_col).head(n_seed_steps)[val_col], seed_data[val_col], check_dtype=False
+            syn_dict[name].groupby(key_col).head(n_seed_steps)[val_col].reset_index(drop=True),
+            seed_data[val_col].reset_index(drop=True),
+            check_dtype=False,
         )
 
     # check that the sequence lengths are inversely correlated with the number of MINUS steps
@@ -718,3 +720,146 @@ def test_deterministic_lengths(tmp_path):
     syn_first = syn.groupby(key).first()
     match_rate = (syn_first["slen"] == syn_first["countdown"] + 1).value_counts(normalize=True)[True]
     assert match_rate > 0.95
+
+
+@pytest.mark.flaky(reruns=3)
+def test_seed_imputation(tmp_path):
+    """test that sequential imputation handles different trailing NULL patterns and preserves correlations."""
+    # constants
+    workspace_dir = tmp_path / "ws"
+    key = "sequence_id"
+    n_train_sequences = 2000
+    min_seq_len = 2
+    max_seq_len = 4
+    col_a_min = 1
+    col_a_max = 11
+    col_b_multiplier = 10
+    category_threshold = 5  # col_a <= 5 -> "A", else "B"
+    n_seed_sequences = 5
+    seed_len_choices = [1, 2, 3]
+    seed_len_probs = [0.2, 0.5, 0.3]
+    null_probability = 0.5
+    max_epochs = 10
+    max_violation_rate = 0.1
+    col_b_tolerance = 0.05
+    imputed_cols = ["col_a", "col_b", "col_cat"]
+
+    # create training data with correlations: col_b = col_a * 10, col_cat = "A" if col_a <= 5 else "B"
+    keys = np.arange(n_train_sequences)
+    seq_lens = np.random.randint(min_seq_len, max_seq_len, size=n_train_sequences)
+    sequence_ids = np.concatenate([np.repeat(k, ln) for k, ln in zip(keys, seq_lens)])
+    col_a = np.concatenate([np.random.randint(col_a_min, col_a_max, size=ln) for ln in seq_lens])
+
+    tgt = pd.DataFrame(
+        {
+            key: sequence_ids,
+            "col_a": col_a,
+            "col_b": col_a * col_b_multiplier,
+            "col_cat": np.where(col_a <= category_threshold, "A", "B"),
+            "col_extra": np.random.choice(["X", None], size=len(col_a), p=[null_probability, 1 - null_probability]),
+        }
+    )
+    ctx = tgt[[key]].drop_duplicates().reset_index(drop=True)
+
+    split(tgt_data=tgt, tgt_context_key=key, ctx_data=ctx, ctx_primary_key=key, workspace_dir=workspace_dir)
+    analyze(workspace_dir=workspace_dir, value_protection=False)
+    encode(workspace_dir=workspace_dir)
+    train(workspace_dir=workspace_dir, max_epochs=max_epochs, enable_flexible_generation=True)
+
+    # create seed data with random nulls
+    seed_parts = []
+    for k in range(n_seed_sequences):
+        seed_len = np.random.choice(seed_len_choices, p=seed_len_probs)
+        seed_col_a = np.random.randint(col_a_min, col_a_max, size=seed_len)
+
+        seed_parts.append(
+            pd.DataFrame(
+                {
+                    key: [k] * seed_len,
+                    "col_a": np.where(np.random.rand(seed_len) > null_probability, seed_col_a, None),
+                    "col_b": np.where(np.random.rand(seed_len) > null_probability, seed_col_a * col_b_multiplier, None),
+                    "col_cat": np.where(
+                        np.random.rand(seed_len) > null_probability,
+                        np.where(seed_col_a <= category_threshold, "A", "B"),
+                        None,
+                    ),
+                    "col_extra": np.random.choice(
+                        ["X", None], size=seed_len, p=[null_probability, 1 - null_probability]
+                    ),
+                }
+            )
+        )
+
+    seed_data = pd.concat(seed_parts, ignore_index=True)
+    generate(
+        workspace_dir=workspace_dir,
+        ctx_data=pd.DataFrame({key: range(n_seed_sequences)}),
+        seed_data=seed_data,
+        imputation=ImputationConfig(columns=imputed_cols),
+    )
+
+    syn = pd.read_parquet(workspace_dir / "SyntheticData")
+    assert len(syn) > 0 and set(range(n_seed_sequences)).issubset(set(syn[key].unique()))
+
+    # verify seeded values are preserved
+    for k in range(n_seed_sequences):
+        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
+        syn_seq = syn[syn[key] == k].reset_index(drop=True)
+
+        for idx in range(len(seed_seq)):
+            # for sequential data, row order within sequences is preserved
+            # so we can match directly by index position
+            if idx >= len(syn_seq):
+                # synthetic sequence is shorter than seed (shouldn't happen)
+                pytest.fail(f"Seq {k}: synthetic sequence too short (len={len(syn_seq)}, expected >={len(seed_seq)})")
+
+            # verify col_extra preserved (including NULLs)
+            seed_val, syn_val = seed_seq.loc[idx, "col_extra"], syn_seq.loc[idx, "col_extra"]
+            assert (pd.isna(seed_val) and pd.isna(syn_val)) or (seed_val == syn_val)
+
+            # verify imputed columns preserved when seeded
+            for col in imputed_cols:
+                seed_val = seed_seq.loc[idx, col]
+                if pd.notna(seed_val):
+                    syn_val = syn_seq.loc[idx, col]
+                    assert pd.notna(syn_val), (
+                        f"Seq {k}, row {idx}, col '{col}': seed value {seed_val} not preserved (got NaN)"
+                    )
+                    if isinstance(seed_val, str):
+                        assert seed_val == syn_val, (
+                            f"Seq {k}, row {idx}, col '{col}': expected {seed_val}, got {syn_val}"
+                        )
+                    else:
+                        # col_a and col_b are integers, use exact equality
+                        assert seed_val == syn_val, (
+                            f"Seq {k}, row {idx}, col '{col}': expected {seed_val}, got {syn_val}"
+                        )
+
+    # verify correlations preserved in imputed values
+    violations, total = [], 0
+    for k in range(n_seed_sequences):
+        seed_seq = seed_data[seed_data[key] == k].reset_index(drop=True)
+        syn_seq = syn[syn[key] == k].reset_index(drop=True)
+
+        for idx in range(len(seed_seq)):
+            # col_b correlation check
+            if pd.isna(seed_seq.loc[idx, "col_b"]) and pd.notna(syn_seq.loc[idx, "col_b"]):
+                total += 1
+                if pd.notna(syn_seq.loc[idx, "col_a"]):
+                    expected = syn_seq.loc[idx, "col_a"] * col_b_multiplier
+                    actual = syn_seq.loc[idx, "col_b"]
+                    if abs(expected - actual) > col_b_tolerance:
+                        violations.append(f"Seq {k}, row {idx}, col_b: {actual} != {expected}")
+
+            # col_cat correlation check
+            if pd.isna(seed_seq.loc[idx, "col_cat"]) and pd.notna(syn_seq.loc[idx, "col_cat"]):
+                total += 1
+                if pd.notna(syn_seq.loc[idx, "col_a"]):
+                    expected = "A" if syn_seq.loc[idx, "col_a"] <= category_threshold else "B"
+                    actual = syn_seq.loc[idx, "col_cat"]
+                    if expected != actual:
+                        violations.append(f"Seq {k}, row {idx}, col_cat: {actual} != {expected}")
+
+    assert len(violations) / max(total, 1) < max_violation_rate, (
+        f"Violations ({len(violations)}/{total}):\n" + "\n".join(violations[:15])
+    )

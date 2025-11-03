@@ -16,6 +16,7 @@ import logging
 import random
 import time
 import uuid
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 from typing import Literal
@@ -231,6 +232,113 @@ def _regroup_partial_sequences_by_length(
     return ctx_data, len(new_batches)
 
 
+def _flat_null_pattern(group: pd.DataFrame, relevant_columns: list[str]) -> tuple:
+    """returns tuple of bools: True if column is fully NULL"""
+    return tuple(group[col].isna().all() for col in relevant_columns)
+
+
+def _trailing_null_pattern(group: pd.DataFrame, relevant_columns: list[str]) -> tuple:
+    """returns tuple of bools: True if column has trailing NULLs"""
+    pattern = []
+    for col in relevant_columns:
+        col_values = group[col].reset_index(drop=True)
+        non_null_mask = col_values.notna()
+        if non_null_mask.any():
+            last_non_null_idx = non_null_mask[::-1].idxmax()
+            has_trailing_nulls = last_non_null_idx < len(col_values) - 1
+        else:
+            has_trailing_nulls = True
+        pattern.append(has_trailing_nulls)
+    return tuple(pattern)
+
+
+def _regroup_by_pattern(
+    ctx_data: pd.DataFrame,
+    seed_data: pd.DataFrame,
+    ctx_primary_key: str,
+    imputation_columns: list[str],
+    pattern_fn: Callable[[pd.DataFrame, list[str]], tuple],
+    *,
+    groupby_key: str | None = None,
+    use_vectorized_regroup: bool = True,
+) -> tuple[pd.DataFrame, int]:
+    """regroup batches so that rows/sequences with the same NULL pattern are together
+
+    Args:
+        pattern_fn: function that computes NULL pattern for a grouped dataframe
+        groupby_key: key to group seed_data by (defaults to ctx_primary_key)
+        use_vectorized_regroup: if True, use fast categorical factorization;
+                                if False, use nested loop approach
+    """
+    # only consider columns that are BOTH in imputation_columns AND in seed_data
+    relevant_columns = [col for col in imputation_columns if col in seed_data.columns]
+
+    # early exit: no relevant columns
+    if not relevant_columns or seed_data[relevant_columns].isna().all().all():
+        return ctx_data, ctx_data["__BATCH"].nunique()
+
+    # compute NULL pattern for each group
+    groupby_key = groupby_key or ctx_primary_key
+    seed_data_grouped = seed_data.groupby(groupby_key, sort=False)
+    null_patterns = seed_data_grouped.apply(
+        lambda group: pattern_fn(group, relevant_columns),
+        include_groups=False,
+    ).rename("__NULL_PATTERN")
+
+    # early exit: all NULL patterns are the same
+    if null_patterns.nunique() == 1:
+        return ctx_data, ctx_data["__BATCH"].nunique()
+
+    # add __NULL_PATTERN to ctx_data
+    ctx_data = ctx_data.assign(__NULL_PATTERN=ctx_data[ctx_primary_key].map(null_patterns))
+
+    # regroup batches
+    if use_vectorized_regroup:
+        # vectorized approach for flat data
+        ctx_data = ctx_data.assign(
+            __COMPOSITE_KEY=ctx_data["__BATCH"].astype(str) + "_" + ctx_data["__NULL_PATTERN"].astype(str)
+        )
+        composite_cat = pd.Categorical(ctx_data["__COMPOSITE_KEY"], categories=ctx_data["__COMPOSITE_KEY"].unique())
+        ctx_data = ctx_data.assign(__BATCH=pd.factorize(composite_cat)[0] + 1)
+        num_batches = ctx_data["__BATCH"].max()
+        ctx_data = ctx_data.drop(columns=["__NULL_PATTERN", "__COMPOSITE_KEY"]).reset_index(drop=True)
+    else:
+        # nested loop approach for sequential data
+        new_batches = []
+        for _, old_batch_df in ctx_data.groupby("__BATCH", sort=False):
+            for _, new_batch_df in old_batch_df.groupby("__NULL_PATTERN", sort=False):
+                new_batch_df = new_batch_df.assign(__BATCH=len(new_batches) + 1)
+                new_batches.append(new_batch_df)
+        ctx_data = pd.concat(new_batches, axis=0).drop(columns=["__NULL_PATTERN"]).reset_index(drop=True)
+        num_batches = len(new_batches)
+
+    return ctx_data, num_batches
+
+
+def _regroup_by_null_pattern(
+    ctx_data: pd.DataFrame,
+    seed_data: pd.DataFrame,
+    ctx_primary_key: str,
+    tgt_context_key: str,
+    imputation_columns: list[str],
+    is_sequential: bool,
+) -> tuple[pd.DataFrame, int]:
+    """regroup batches by NULL pattern (flat) or trailing NULL pattern (sequential)"""
+    pattern_fn = _trailing_null_pattern if is_sequential else _flat_null_pattern
+    groupby_key = tgt_context_key if is_sequential else None
+    use_vectorized_regroup = not is_sequential
+
+    return _regroup_by_pattern(
+        ctx_data,
+        seed_data,
+        ctx_primary_key,
+        imputation_columns,
+        pattern_fn=pattern_fn,
+        groupby_key=groupby_key,
+        use_vectorized_regroup=use_vectorized_regroup,
+    )
+
+
 def _reshape_pt_to_pandas(
     data: list[torch.Tensor], sub_cols: list[str], keys: list[pd.Series], key_name: str
 ) -> pd.DataFrame:
@@ -262,17 +370,33 @@ def _reshape_pt_to_pandas(
     return pd.concat([keys, df], axis=1)
 
 
+def _drop_fully_null_imputed_columns(seed_batch: pd.DataFrame, imputation_columns: list[str]) -> pd.DataFrame:
+    """drop columns from seed_batch that are in imputation_columns and are fully NULL
+
+    this allows the model to freely generate these columns rather than conditioning on NULL values.
+    """
+    if not imputation_columns or seed_batch.empty:
+        return seed_batch
+
+    fully_null_cols = [col for col in imputation_columns if col in seed_batch.columns and seed_batch[col].isna().all()]
+    return seed_batch.drop(columns=fully_null_cols) if fully_null_cols else seed_batch
+
+
 def _post_process_decoding(
     syn: pd.DataFrame,
     tgt_primary_key: str | None = None,
 ) -> pd.DataFrame:
-    # remove dummy context key (if exists)
+    # sort by dummy context key to restore original order (if exists)
     if DUMMY_CONTEXT_KEY in syn:
+        syn = syn.sort_values(DUMMY_CONTEXT_KEY).reset_index(drop=True)
         syn = syn.drop(columns=DUMMY_CONTEXT_KEY)
 
     # generate primary keys, if they are not present
     if tgt_primary_key and tgt_primary_key not in syn:
         syn[tgt_primary_key] = _generate_primary_keys(len(syn), type="uuid")
+
+    # reset index to ensure sequential indices for consistent test assertions
+    syn = syn.reset_index(drop=True)
 
     return syn
 
@@ -580,6 +704,7 @@ def decode_buffered_samples(
     tgt_primary_key: str,
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
+    impute_columns: list[str] | None = None,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -614,10 +739,12 @@ def decode_buffered_samples(
 
     # preserve all seed values
     df_seed = pd.concat(seed_data, axis=0).reset_index(drop=True) if seed_data else pd.DataFrame()
+
     if not df_seed.empty:
         seed_columns = [col for col in df_seed.columns]
         if is_sequential:
             # overwrite first steps of each sequence in synthetic data with values from seed data
+            impute_columns = impute_columns or []
             df_syn["__SEQ_IDX"] = df_syn.groupby(tgt_context_key).cumcount()
             df_seed["__SEQ_IDX"] = df_seed.groupby(tgt_context_key).cumcount()
             # df_overwrite is a dataframe with the same shape as df_syn, but with the seed values for the first steps of each sequence
@@ -630,12 +757,47 @@ def decode_buffered_samples(
             )
             # project df_overwrite onto df_syn
             seed_rows = df_overwrite["__INDICATOR"] == "both"
-            df_syn.loc[seed_rows, seed_columns] = df_overwrite.loc[seed_rows, seed_columns]
+            # overwrite columns based on imputation logic
+            for col in seed_columns:
+                if col in [tgt_context_key, "__SEQ_IDX"]:
+                    continue  # skip the key columns
+                if col not in impute_columns:
+                    # non-impute columns: override all values
+                    df_syn.loc[seed_rows, col] = df_overwrite.loc[seed_rows, col]
+                else:
+                    # impute columns: override only non-NULL seed values
+                    mask = seed_rows & df_overwrite[col].notna()
+                    df_syn.loc[mask, col] = df_overwrite.loc[mask, col]
             df_syn.drop(columns=["__SEQ_IDX"], inplace=True)
             df_seed.drop(columns=["__SEQ_IDX"], inplace=True)
         else:
-            # for flat data, just overwrite all seed columns
-            df_syn[seed_columns] = df_seed[seed_columns].copy()
+            # for flat data, overwrite seed columns using merge to handle reordered rows
+            # for non-impute columns: override all values
+            # for impute columns: override only non-NULL seed values (let model impute NULL values)
+            impute_columns = impute_columns or []
+
+            # use merge on context key to properly align seed values with synthetic data
+            df_overwrite = pd.merge(
+                df_syn[[tgt_context_key]].copy(),
+                df_seed,
+                on=tgt_context_key,
+                how="left",
+                suffixes=("", "_seed"),
+            )
+
+            # overwrite columns based on imputation logic
+            for col in seed_columns:
+                if col == tgt_context_key:
+                    continue  # skip the key column itself
+                seed_col_name = col if col in df_overwrite.columns else f"{col}_seed"
+                if seed_col_name in df_overwrite.columns:
+                    if col not in impute_columns:
+                        # non-impute columns: override all values
+                        df_syn[col] = df_overwrite[seed_col_name]
+                    else:
+                        # impute columns: override only non-NULL seed values
+                        mask = df_overwrite[seed_col_name].notna()
+                        df_syn.loc[mask, col] = df_overwrite.loc[mask, seed_col_name]
 
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
@@ -740,10 +902,11 @@ def generate(
             fairness=fairness,
         )
         _LOG.info(f"{gen_column_order=}")
+        trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
+        _LOG.info(f"{trn_column_order=}")
+
         if not enable_flexible_generation:
             # check if resolved column order is the same as the one from training
-            trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
-            _LOG.info(f"{trn_column_order=}")
             if gen_column_order != trn_column_order:
                 raise ValueError(
                     "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
@@ -925,6 +1088,12 @@ def generate(
                 ctx_data, seed_data, ctx_primary_key, tgt_context_key
             )
 
+        # regroup by NULL pattern if imputation is enabled
+        if imputation and seed_data is not None and len(seed_data) > 0:
+            ctx_data, no_of_batches = _regroup_by_null_pattern(
+                ctx_data, seed_data, ctx_primary_key, tgt_context_key, imputation.columns, is_sequential
+            )
+
         # keep at most 500k samples in memory before decoding and writing to disk
         buffer = FixedSizeSampleBuffer(capacity=500_000)
 
@@ -937,6 +1106,9 @@ def generate(
             batch_size = len(ctx_batch)
 
             seed_batch = seed_data[seed_data[tgt_context_key].isin(ctx_batch[ctx_primary_key])]
+            # drop fully-NULL imputation columns from seed_batch to allow conditional generation
+            if imputation:
+                seed_batch = _drop_fully_null_imputed_columns(seed_batch, imputation.columns)
             seed_batch = apply_encoding_type_dtypes(seed_batch, seed_encoding_types)
 
             if ctx_primary_key not in ctx_batch.columns:
@@ -1014,9 +1186,18 @@ def generate(
 
                     # get seed data for current step
                     seed_step = seed_batch_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
-                    seed_step_encoded = (
-                        seed_batch_encoded_grouped.nth(seq_step) if seq_step < n_seed_steps else pd.DataFrame()
-                    )
+
+                    # drop NULL imputation columns from seed_step to allow conditional generation
+                    if imputation and len(seed_step) > 0:
+                        seed_step = _drop_fully_null_imputed_columns(seed_step, imputation.columns)
+
+                    # encode seed_step (after dropping NULL imputation columns)
+                    if len(seed_step) > 0:
+                        seed_step_encoded, _, _ = encode_df(
+                            df=seed_step, stats=tgt_stats, tgt_context_key=tgt_context_key
+                        )
+                    else:
+                        seed_step_encoded = pd.DataFrame()
 
                     # fix SIDX by incrementing ourselves instead of sampling
                     sidx = pd.Series([seq_step] * step_size)
@@ -1079,11 +1260,19 @@ def generate(
                                 torch.as_tensor(seed_step_encoded[col].to_numpy(), device=model.device).type(torch.int),
                                 dim=-1,
                             )
-                            for col in seed_batch_encoded.columns
+                            for col in seed_step_encoded.columns
                             if col in tgt_sub_columns
                         }
 
                     fixed_values = sidx_vals | slen_vals | ridx_vals | sdec_vals | seed_vals
+                    column_order = _resolve_gen_column_order(
+                        column_stats=tgt_stats["columns"],
+                        cardinalities=tgt_cardinalities,
+                        rebalancing=rebalancing,
+                        imputation=imputation,
+                        seed_data=seed_step,
+                        fairness=fairness,
+                    )
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1095,6 +1284,7 @@ def generate(
                         history=history,
                         history_state=history_state,
                         context=context,
+                        column_order=column_order,
                     )
 
                     # transform output dict to tensor for memory efficiency
@@ -1147,6 +1337,9 @@ def generate(
                         ]
                         history = history[include_mask, ...]
                         history_state = tuple(h[:, include_mask, ...] for h in history_state)
+                    # filter seed_step to match step_ctx_keys (always, not just when filtering above)
+                    if len(seed_step) > 0:
+                        seed_step = seed_step[seed_step[tgt_context_key].isin(step_ctx_keys)].reset_index(drop=True)
                     # accumulate outputs in memory
                     buffer.add((out_pt, step_ctx_keys, seed_step))
                     # increment progress by 1 for each step
@@ -1160,6 +1353,7 @@ def generate(
                             tgt_primary_key=tgt_primary_key,
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
+                            impute_columns=imputation.columns if imputation else None,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1190,6 +1384,14 @@ def generate(
                     if col in tgt_sub_columns
                 }
 
+                column_order = _resolve_gen_column_order(
+                    column_stats=tgt_stats["columns"],
+                    cardinalities=tgt_cardinalities,
+                    rebalancing=rebalancing,
+                    imputation=imputation,
+                    seed_data=seed_batch,
+                    fairness=fairness,
+                )
                 out_dct, _ = model(
                     x,
                     mode="gen",
@@ -1199,6 +1401,7 @@ def generate(
                     temperature=sampling_temperature,
                     top_p=sampling_top_p,
                     fairness_transforms=fairness_transforms,
+                    column_order=column_order,
                 )
 
                 syn = pd.concat(
@@ -1224,6 +1427,7 @@ def generate(
                     tgt_primary_key=tgt_primary_key,
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
+                    impute_columns=imputation.columns if imputation else None,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1239,6 +1443,7 @@ def generate(
                 tgt_primary_key=tgt_primary_key,
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
+                impute_columns=imputation.columns if imputation else None,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
