@@ -1270,7 +1270,7 @@ def generate(
                         cardinalities=tgt_cardinalities,
                         rebalancing=rebalancing,
                         imputation=imputation,
-                        seed_data=seed_batch,
+                        seed_data=seed_step,
                         fairness=fairness,
                     )
                     out_dct, history, history_state = model(
