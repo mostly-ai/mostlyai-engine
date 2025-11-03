@@ -1265,6 +1265,14 @@ def generate(
                         }
 
                     fixed_values = sidx_vals | slen_vals | ridx_vals | sdec_vals | seed_vals
+                    column_order = _resolve_gen_column_order(
+                        column_stats=tgt_stats["columns"],
+                        cardinalities=tgt_cardinalities,
+                        rebalancing=rebalancing,
+                        imputation=imputation,
+                        seed_data=seed_batch,
+                        fairness=fairness,
+                    )
                     out_dct, history, history_state = model(
                         x=None,  # not used in generation forward pass
                         mode="gen",
@@ -1276,6 +1284,7 @@ def generate(
                         history=history,
                         history_state=history_state,
                         context=context,
+                        column_order=column_order,
                     )
 
                     # transform output dict to tensor for memory efficiency
@@ -1375,6 +1384,14 @@ def generate(
                     if col in tgt_sub_columns
                 }
 
+                column_order = _resolve_gen_column_order(
+                    column_stats=tgt_stats["columns"],
+                    cardinalities=tgt_cardinalities,
+                    rebalancing=rebalancing,
+                    imputation=imputation,
+                    seed_data=seed_batch,
+                    fairness=fairness,
+                )
                 out_dct, _ = model(
                     x,
                     mode="gen",
@@ -1384,6 +1401,7 @@ def generate(
                     temperature=sampling_temperature,
                     top_p=sampling_top_p,
                     fairness_transforms=fairness_transforms,
+                    column_order=column_order,
                 )
 
                 syn = pd.concat(

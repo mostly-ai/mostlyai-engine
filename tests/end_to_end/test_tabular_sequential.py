@@ -740,8 +740,8 @@ def test_seed_imputation(tmp_path):
     seed_len_probs = [0.2, 0.5, 0.3]
     null_probability = 0.5
     max_epochs = 10
-    max_violation_rate = 0.15
-    col_b_tolerance = 0.1
+    max_violation_rate = 0.05
+    col_b_tolerance = 0.05
     imputed_cols = ["col_a", "col_b", "col_cat"]
 
     # create training data with correlations: col_b = col_a * 10, col_cat = "A" if col_a <= 5 else "B"

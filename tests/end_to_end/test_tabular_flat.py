@@ -255,8 +255,8 @@ def test_seed_imputation(input_data, tmp_path_factory):
     price_threshold = 15  # price < 15 -> "Cheap", price >= 15 -> "Expensive"
     null_probability = 0.5  # probability that a seed value is NULL (to be imputed)
     max_epochs = 10
-    max_violation_rate = 0.2  # allow up to 20% of checks to fail for model approximation
-    price_relative_tolerance = 0.15  # allow 15% relative error for price correlation
+    max_violation_rate = 0.05  # allow up to 5% of checks to fail for model approximation
+    price_relative_tolerance = 0.05  # allow 5% relative error for price correlation
     imputed_cols = ["amount", "price", "price_category"]
 
     # train on data with strong price -> price_category correlation
