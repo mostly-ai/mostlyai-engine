@@ -46,7 +46,7 @@ pip install -U torch==2.8.0+cpu torchvision==0.23.0+cpu mostlyai-engine --extra-
 
 ## Quick start
 
-### Tabular Model: flat data, without context
+### Flat Tabular Data - without context
 
 ```python
 from pathlib import Path
@@ -77,7 +77,7 @@ engine.generate(workspace_dir=ws)     # use model to generate synthetic samples 
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```
 
-### Tabular Model: sequential data, with context
+### Sequential Tabular Data - with context
 
 ```python
 from pathlib import Path
@@ -114,7 +114,7 @@ engine.generate(workspace_dir=ws)     # use model to generate synthetic samples 
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```
 
-### Language Model: flat data, without context
+### Flat Textual Data - without context
 
 ```python
 from pathlib import Path
@@ -152,4 +152,35 @@ engine.generate(                      # use model to generate synthetic samples 
     sample_size=10,
 )
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
+```
+
+### Flat Tabular Data via Sklearn Estimators
+
+```python
+import pandas as pd
+from sklearn.metrics import accuracy_score, r2_score
+from sklearn.model_selection import train_test_split
+from mostlyai.engine import TabularARGNClassifier, TabularARGNRegressor
+
+# load data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# Classification: predict income
+X_clf_train, X_clf_test, y_clf_train, y_clf_test = train_test_split(
+    df.drop(columns=["income"]), df["income"], test_size=0.2, random_state=42
+)
+clf = TabularARGNClassifier(max_training_time=1, random_state=42)
+clf.fit(X_clf_train, y_clf_train)
+y_clf_pred = clf.predict(X_clf_test, n_samples=10)
+print(f"Accuracy: {accuracy_score(y_clf_test, y_clf_pred):.3f}")
+
+# Regression: predict age
+X_reg_train, X_reg_test, y_reg_train, y_reg_test = train_test_split(
+    df.drop(columns=["age"]), df["age"], test_size=0.2, random_state=42
+)
+reg = TabularARGNRegressor(max_training_time=1, random_state=42)
+reg.fit(X_reg_train, y_reg_train)
+y_reg_pred = reg.predict(X_reg_test, n_samples=10)
+print(f"R² score: {r2_score(y_reg_test, y_reg_pred):.3f}")
 ```

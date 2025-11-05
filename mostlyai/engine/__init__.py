@@ -18,10 +18,21 @@ from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
 from mostlyai.engine.logging import init_logging
 from mostlyai.engine.random_state import set_random_state
+from mostlyai.engine.sklearn_estimators import TabularARGNClassifier, TabularARGNRegressor
 from mostlyai.engine.splitting import split
 from mostlyai.engine.training import train
 
-__all__ = ["split", "analyze", "encode", "train", "generate", "init_logging", "set_random_state"]
+__all__ = [
+    "split",
+    "analyze",
+    "encode",
+    "train",
+    "generate",
+    "init_logging",
+    "set_random_state",
+    "TabularARGNClassifier",
+    "TabularARGNRegressor",
+]
 __version__ = "1.7.0"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
