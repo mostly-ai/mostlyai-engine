@@ -37,7 +37,7 @@ from mostlyai.engine.training import train
 _LOG = logging.getLogger(__name__)
 
 
-class MostlyEstimator:
+class TabularARGNEstimator:
     """
     Base class for sklearn-compatible estimators using MOSTLY AI engine.
 
@@ -49,7 +49,6 @@ class MostlyEstimator:
         workspace_dir: Directory for storing model artifacts. If None, uses a temporary directory
             that is cleaned up automatically. Default is None.
         max_training_time: Maximum training time in minutes. Default is 10.
-        max_epochs: Maximum number of training epochs. Default is 100.
         random_state: Random seed for reproducibility. Default is None.
         verbose: Verbosity level. 0 = silent, 1 = progress messages. Default is 0.
     """
@@ -58,19 +57,15 @@ class MostlyEstimator:
         self,
         workspace_dir: str | Path | None = None,
         max_training_time: float = 10.0,
-        max_epochs: float = 100.0,
         random_state: int | None = None,
         verbose: int = 0,
     ):
         # Validate parameters
         if max_training_time is not None and max_training_time <= 0:
             raise ValueError(f"max_training_time must be positive, got {max_training_time}")
-        if max_epochs is not None and max_epochs <= 0:
-            raise ValueError(f"max_epochs must be positive, got {max_epochs}")
 
         self.workspace_dir = workspace_dir
         self.max_training_time = max_training_time
-        self.max_epochs = max_epochs
         self.random_state = random_state
         self.verbose = verbose
 
@@ -212,7 +207,6 @@ class MostlyEstimator:
         train(
             workspace_dir=workspace,
             max_training_time=self.max_training_time,
-            max_epochs=self.max_epochs,
             enable_flexible_generation=False,
         )
 
@@ -286,12 +280,11 @@ class MostlyEstimator:
         return {
             "workspace_dir": self.workspace_dir,
             "max_training_time": self.max_training_time,
-            "max_epochs": self.max_epochs,
             "random_state": self.random_state,
             "verbose": self.verbose,
         }
 
-    def set_params(self, **params) -> "MostlyEstimator":
+    def set_params(self, **params) -> "TabularARGNEstimator":
         """
         Set the parameters of this estimator.
 
@@ -312,7 +305,7 @@ class MostlyEstimator:
         return self
 
 
-class TabularARGNClassifier(MostlyEstimator):
+class TabularARGNClassifier(TabularARGNEstimator):
     """
     Classifier using MOSTLY AI engine for prediction.
 
@@ -453,7 +446,7 @@ class TabularARGNClassifier(MostlyEstimator):
         return probabilities
 
 
-class TabularARGNRegressor(MostlyEstimator):
+class TabularARGNRegressor(TabularARGNEstimator):
     """
     Regressor using MOSTLY AI engine for prediction.
 
