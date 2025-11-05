@@ -84,8 +84,6 @@ from pathlib import Path
 import pandas as pd
 from mostlyai import engine
 
-engine.init_logging()
-
 # set up workspace and default logging
 ws = Path("ws-tabular-sequential")
 engine.init_logging()
