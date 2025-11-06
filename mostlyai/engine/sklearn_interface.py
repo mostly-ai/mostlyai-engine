@@ -157,7 +157,7 @@ class TabularARGN(BaseEstimator):
 
         # Otherwise create a temp directory
         if self._temp_dir is None:
-            self._temp_dir = tempfile.TemporaryDirectory(prefix="mostlyai_engine_")
+            self._temp_dir = tempfile.TemporaryDirectory(prefix="mostlyai_")
             self._workspace_path = Path(self._temp_dir.name)
             # Update the parameter so it shows in get_params()
             self.workspace_dir = str(self._workspace_path)
@@ -272,7 +272,7 @@ class TabularARGN(BaseEstimator):
 
     def sample(
         self,
-        n_samples: int | None = 1,
+        n_samples: int | None = None,
         seed: pd.DataFrame | None = None,
         ctx_data: pd.DataFrame | None = None,
         **kwargs,
@@ -281,9 +281,12 @@ class TabularARGN(BaseEstimator):
         Generate synthetic samples from the fitted model.
 
         Args:
-            n_samples: Number of samples to generate for unconditional generation. If both n_samples and seed are None, generates same number as training data.
+            n_samples: Number of samples to generate. If None and ctx_data is provided, infers from ctx_data length.
+                      If None and no ctx_data, defaults to 1. For sequential models, this is the number of context records.
             seed: Seed data to condition generation on fixed columns. If provided, performs conditional generation.
             ctx_data: Context data for generation (if different from training context data). If None, uses the context data from training.
+                     If provided explicitly, n_samples is automatically inferred from its length unless explicitly specified.
+                     For sequential models, if None and training ctx_data exists, a random sample is taken.
             **kwargs: Additional arguments passed to generate() function.
 
         Returns:
@@ -294,6 +297,9 @@ class TabularARGN(BaseEstimator):
 
         workspace_dir = self._get_workspace_dir()
 
+        # Determine if ctx_data was explicitly provided (vs using training default)
+        ctx_data_explicit = ctx_data is not None
+
         # Use ctx_data from training if not provided
         if ctx_data is None:
             ctx_data = self.ctx_data
@@ -302,6 +308,20 @@ class TabularARGN(BaseEstimator):
         ctx_data_df = None
         if ctx_data is not None:
             ctx_data_df = _ensure_dataframe(ctx_data)
+
+            # Infer n_samples from ctx_data if it was explicitly provided and n_samples not specified
+            if ctx_data_explicit and n_samples is None:
+                n_samples = len(ctx_data_df)
+
+            # For sequential models: if ctx_data was not explicitly provided and n_samples is specified,
+            # take a random sample of the training ctx_data
+            if not ctx_data_explicit and n_samples is not None and self.tgt_context_key is not None:
+                if len(ctx_data_df) > n_samples:
+                    ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self.random_state)
+
+        # Default n_samples to 1 if still None
+        if n_samples is None:
+            n_samples = 1
 
         if self.verbose > 0:
             if seed is not None:
