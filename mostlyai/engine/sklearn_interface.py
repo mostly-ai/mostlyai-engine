@@ -31,7 +31,7 @@ import torch
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score, r2_score
 
-from mostlyai.engine._workspace import Workspace, resolve_model_type
+from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import ImputationConfig, ModelType
 from mostlyai.engine.encoding import encode
@@ -68,29 +68,6 @@ def _load_synthetic_data(workspace_dir: str | Path) -> pd.DataFrame:
         raise ValueError(f"No synthetic data found in {workspace_dir}/SyntheticData")
     dfs = [pd.read_parquet(f) for f in synthetic_files]
     return pd.concat(dfs, ignore_index=True)
-
-
-def _determine_model_type_from_name(model_name: str | None) -> ModelType:
-    """Determine if a model is TABULAR or LANGUAGE based on model name."""
-    if model_name is None:
-        # Default to tabular if no model specified
-        return ModelType.tabular
-
-    # Check if it's a tabular model (MOSTLY_AI/Small, MOSTLY_AI/Medium, MOSTLY_AI/Large)
-    if "MOSTLY_AI/" in model_name and any(size in model_name for size in ["Small", "Medium", "Large"]):
-        return ModelType.tabular
-
-    # Check if it's the LSTM language model
-    if "LSTMFromScratch" in model_name:
-        return ModelType.language
-
-    # If it looks like a HuggingFace model path (e.g., "gpt2", "bert-base", etc.)
-    # or doesn't match tabular patterns, assume it's a language model
-    if "/" in model_name or model_name.startswith("MOSTLY_AI/LSTM"):
-        return ModelType.language
-
-    # Default to tabular for unrecognized patterns
-    return ModelType.tabular
 
 
 class TabularARGN(BaseEstimator):
@@ -149,7 +126,6 @@ class TabularARGN(BaseEstimator):
         self._fitted = False
         self._temp_dir = None
         self._workspace_path = None
-        self._model_type = None
         self._feature_names = None
 
         # Initialize or disable logging based on verbose setting
@@ -217,12 +193,10 @@ class TabularARGN(BaseEstimator):
             _LOG.info(f"Fitting TabularARGN model on data with shape {X_df.shape}")
             _LOG.info(f"Using workspace directory: {workspace_dir}")
 
-        # Determine model type from model name
-        self._model_type = _determine_model_type_from_name(self.model)
-
         # Split data
         split(
             tgt_data=X_df,
+            model_type=ModelType.tabular,
             workspace_dir=workspace_dir,
             update_progress=self.update_progress if self.verbose > 0 else None,
         )
@@ -254,8 +228,6 @@ class TabularARGN(BaseEstimator):
             update_progress=self.update_progress if self.verbose > 0 else None,
         )
 
-        # Update model type from workspace after training
-        self._model_type = resolve_model_type(workspace_dir)
         self._fitted = True
 
         # Add sklearn-compatible fitted attributes (ending with underscore)
@@ -264,7 +236,7 @@ class TabularARGN(BaseEstimator):
         self.feature_names_in_ = np.array(self._feature_names)
 
         if self.verbose > 0:
-            _LOG.info(f"Model training complete. Model type: {self._model_type}")
+            _LOG.info("Model training complete")
 
         return self
 
@@ -317,8 +289,6 @@ class TabularARGN(BaseEstimator):
         under the fitted generative model. Higher values indicate samples that are
         more likely under the learned distribution.
 
-        Note: This method only supports TABULAR models, not LANGUAGE models.
-
         Args:
             X: Data samples to score. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
 
@@ -327,13 +297,10 @@ class TabularARGN(BaseEstimator):
             More positive values indicate higher likelihood under the model.
 
         Raises:
-            ValueError: If the model is not fitted, or if the model type is LANGUAGE.
+            ValueError: If the model is not fitted.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before computing log probabilities. Call fit() first.")
-
-        if self._model_type == ModelType.language:
-            raise ValueError("log_prob() does not support LANGUAGE models, only TABULAR models")
 
         from mostlyai.engine.log_prob import log_prob
 
@@ -394,7 +361,6 @@ class TabularARGNClassifier(TabularARGN):
             self._base_argn = X
             self._fitted = True
             self._workspace_path = X._workspace_path
-            self._model_type = X._model_type
             self._feature_names = X._feature_names
             # Copy sklearn-compatible fitted attributes
             if hasattr(X, "n_features_in_"):
@@ -598,7 +564,6 @@ class TabularARGNRegressor(TabularARGN):
             self._base_argn = X
             self._fitted = True
             self._workspace_path = X._workspace_path
-            self._model_type = X._model_type
             self._feature_names = X._feature_names
             # Copy sklearn-compatible fitted attributes
             if hasattr(X, "n_features_in_"):
@@ -739,7 +704,6 @@ class TabularARGNImputer(TabularARGN):
             self._base_argn = X
             self._fitted = True
             self._workspace_path = X._workspace_path
-            self._model_type = X._model_type
             self._feature_names = X._feature_names
             # Copy sklearn-compatible fitted attributes
             if hasattr(X, "n_features_in_"):
