@@ -21,7 +21,6 @@ for classification, regression, imputation, and density estimation tasks.
 
 import logging
 import tempfile
-import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -897,141 +896,16 @@ class TabularARGNDensity(TabularARGN):
         if self._model_type == ModelType.language:
             raise ValueError("TabularARGNDensity does not support LANGUAGE models")
 
+        from mostlyai.engine.log_prob import log_prob
+
         X_df = _ensure_dataframe(X, columns=self._feature_names)
-
-        # Import required modules for computing loss
-        from mostlyai.engine._tabular.argn import FlatModel, SequentialModel
-        from mostlyai.engine._tabular.common import load_model_weights
-        from mostlyai.engine._tabular.encoding import encode_df
-        from mostlyai.engine._tabular.training import _calculate_sample_losses
-
         workspace_dir = self._get_workspace_dir()
-        workspace = Workspace(workspace_dir)
 
-        # Load statistics
-        if not workspace.tgt_stats.path.exists():
-            raise ValueError(
-                "Model statistics not found. The model must be fitted and trained before scoring. Call fit() first."
-            )
-
-        tgt_stats = workspace.tgt_stats.read()
-
-        # Validate stats structure
-        if "columns" not in tgt_stats:
-            raise ValueError(
-                "Invalid statistics format. The model must be properly trained before scoring. Call fit() first."
-            )
-
-        # Determine if sequential or flat model
-        from mostlyai.engine._common import get_sequence_length_stats
-
-        # Ensure is_sequential key exists for get_sequence_length_stats
-        if "is_sequential" not in tgt_stats:
-            tgt_stats["is_sequential"] = False
-        is_sequential = tgt_stats["is_sequential"]
-        seq_len_stats = get_sequence_length_stats(tgt_stats)
-
-        # Load model configuration
-        if not workspace.model_configs.path.exists():
-            raise ValueError(
-                "Model configuration not found. The model must be fitted and trained before scoring. Call fit() first."
-            )
-
-        model_configs = workspace.model_configs.read()
-        model_units = model_configs.get("model_units")
-
-        if model_units is None:
-            raise ValueError(
-                "Model configuration is incomplete. The model must be properly trained before scoring. "
-                "Call fit() first."
-            )
-
-        # Get cardinalities from stats
-        from mostlyai.engine._common import get_cardinalities
-
-        # Ensure ctx_stats has proper structure even if it doesn't exist
-        if workspace.ctx_stats_path.exists():
-            ctx_stats = workspace.ctx_stats.read()
-        else:
-            ctx_stats = {"columns": {}, "is_sequential": False}
-
-        tgt_cardinalities = get_cardinalities(tgt_stats)
-        ctx_cardinalities = get_cardinalities(ctx_stats)
-
-        # Get column order from configs (for backwards compatibility)
-        from mostlyai.engine._common import get_columns_from_cardinalities
-
-        trn_column_order = model_configs.get("trn_column_order")
-        if trn_column_order is None and not model_configs.get("enable_flexible_generation", True):
-            # Fixed column order based on cardinalities
-            trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
-
-        # Set device
-        device = self.device if self.device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
-        device = torch.device(device)
-
-        # Create model
-        if is_sequential:
-            tgt_seq_len_median = model_configs.get("tgt_seq_len_median", seq_len_stats.get("median", 1))
-            tgt_seq_len_max = model_configs.get("tgt_seq_len_max", seq_len_stats.get("max", 1))
-            ctx_seq_len_median = model_configs.get("ctx_seq_len_median", {})
-
-            model = SequentialModel(
-                tgt_cardinalities=tgt_cardinalities,
-                tgt_seq_len_median=tgt_seq_len_median,
-                tgt_seq_len_max=tgt_seq_len_max,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_units,
-                column_order=trn_column_order,
-                device=device,
-            )
-        else:
-            ctx_seq_len_median = model_configs.get("ctx_seq_len_median", {})
-
-            model = FlatModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_units,
-                column_order=trn_column_order,
-                device=device,
-            )
-
-        # Load trained weights
-        if workspace.model_tabular_weights_path.exists():
-            load_model_weights(
-                model=model,
-                path=workspace.model_tabular_weights_path,
-                device=device,
-            )
-        else:
-            warnings.warn("Model weights not found; scores will be from untrained model")
-
-        model.to(device)
-        model.eval()
-
-        # Encode data
-        X_encoded, _, _ = encode_df(df=X_df, stats=tgt_stats)
-
-        # Convert to tensors and move to device
-        data_dict = {}
-        for col in X_encoded.columns:
-            values = X_encoded[col].values
-            if values.dtype == object:
-                # Try to convert to numeric
-                values = pd.to_numeric(values, errors="coerce").fillna(0).astype(np.int64)
-            tensor = torch.from_numpy(values).to(device).unsqueeze(-1)
-            data_dict[col] = tensor
-
-        # Calculate sample losses (negative log-likelihood)
-        with torch.no_grad():
-            losses = _calculate_sample_losses(model, data_dict)
-
-        # Convert to numpy and negate (to get log-likelihood instead of loss)
-        log_likelihood = -losses.cpu().numpy()
-
-        return log_likelihood
+        return log_prob(
+            tgt_data=X_df,
+            workspace_dir=workspace_dir,
+            device=self.device,
+        )
 
     def score(self, X, y=None) -> float:
         """

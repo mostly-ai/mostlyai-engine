@@ -13,6 +13,7 @@ hide:
             - encode
             - train
             - generate
+            - log_prob
 
 ## Schema Reference
 
