@@ -85,6 +85,7 @@ class TabularARGN(BaseEstimator):
         gradient_accumulation_steps: Number of steps to accumulate gradients. If None, determined automatically.
         enable_flexible_generation: Whether to enable flexible order generation. Defaults to True.
         max_sequence_window: Maximum sequence window for tabular sequential models.
+        value_protection: Whether to enable value protection for rare values. Defaults to True.
         differential_privacy: Configuration for differential privacy training. If None, DP is disabled.
         tgt_context_key: Context key column name in the target data for sequential models.
         tgt_primary_key: Primary key column name in the target data.
@@ -105,6 +106,7 @@ class TabularARGN(BaseEstimator):
         gradient_accumulation_steps: int | None = None,
         enable_flexible_generation: bool = True,
         max_sequence_window: int | None = None,
+        value_protection: bool = True,
         differential_privacy: DifferentialPrivacyConfig | dict | None = None,
         tgt_context_key: str | None = None,
         tgt_primary_key: str | None = None,
@@ -122,6 +124,7 @@ class TabularARGN(BaseEstimator):
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.enable_flexible_generation = enable_flexible_generation
         self.max_sequence_window = max_sequence_window
+        self.value_protection = value_protection
         self.differential_privacy = differential_privacy
         self.tgt_context_key = tgt_context_key
         self.tgt_primary_key = tgt_primary_key
@@ -235,6 +238,8 @@ class TabularARGN(BaseEstimator):
 
         # Analyze data
         analyze(
+            value_protection=self.value_protection,
+            differential_privacy=self.differential_privacy,
             workspace_dir=workspace_dir,
         )
 
