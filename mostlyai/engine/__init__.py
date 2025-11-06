@@ -22,7 +22,6 @@ from mostlyai.engine.random_state import set_random_state
 from mostlyai.engine.sklearn_interface import (
     TabularARGN,
     TabularARGNClassifier,
-    TabularARGNDensity,
     TabularARGNImputer,
     TabularARGNRegressor,
 )
@@ -42,7 +41,6 @@ __all__ = [
     "TabularARGNClassifier",
     "TabularARGNRegressor",
     "TabularARGNImputer",
-    "TabularARGNDensity",
 ]
 __version__ = "1.7.0"
 

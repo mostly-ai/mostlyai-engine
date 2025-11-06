@@ -309,6 +309,43 @@ class TabularARGN(BaseEstimator):
 
         return synthetic_data
 
+    def log_prob(self, X) -> np.ndarray:
+        """
+        Compute the log-likelihood of each sample under the model.
+
+        This method estimates the log-probability (log-likelihood) of data samples
+        under the fitted generative model. Higher values indicate samples that are
+        more likely under the learned distribution.
+
+        Note: This method only supports TABULAR models, not LANGUAGE models.
+
+        Args:
+            X: Data samples to score. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
+
+        Returns:
+            Log-likelihood of each sample as np.ndarray of shape (n_samples,).
+            More positive values indicate higher likelihood under the model.
+
+        Raises:
+            ValueError: If the model is not fitted, or if the model type is LANGUAGE.
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before computing log probabilities. Call fit() first.")
+
+        if self._model_type == ModelType.language:
+            raise ValueError("log_prob() does not support LANGUAGE models, only TABULAR models")
+
+        from mostlyai.engine.log_prob import log_prob
+
+        X_df = _ensure_dataframe(X, columns=self._feature_names)
+        workspace_dir = self._get_workspace_dir()
+
+        return log_prob(
+            tgt_data=X_df,
+            workspace_dir=workspace_dir,
+            device=self.device,
+        )
+
     def __del__(self):
         """Clean up temporary directory if created."""
         if self._temp_dir is not None:
@@ -799,124 +836,3 @@ class TabularARGNImputer(TabularARGN):
         """
         self.fit(X, y)
         return self.transform(X, **kwargs)
-
-
-class TabularARGNDensity(TabularARGN):
-    """
-    TabularARGN density estimator with sklearn interface.
-
-    This estimator trains a generative model and uses it to estimate the
-    log-likelihood of data samples. Only supports TABULAR models.
-
-    Args:
-        X: Training data or a fitted TabularARGN instance.
-        **kwargs: All other arguments are passed to TabularARGN base class.
-            See TabularARGN docstring for available parameters.
-    """
-
-    def __init__(
-        self,
-        X=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        # Store parameters as attributes for sklearn compatibility
-        self.X = X
-
-        # Internal attributes
-        self._base_argn = None
-        self._X_init = X
-
-        # If X is a fitted TabularARGN, use it as base
-        if isinstance(X, TabularARGN):
-            if not X._fitted:
-                raise ValueError("Provided TabularARGN instance must be fitted")
-            self._base_argn = X
-            self._fitted = True
-            self._workspace_path = X._workspace_path
-            self._model_type = X._model_type
-            self._feature_names = X._feature_names
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-
-            # Check model type
-            if self._model_type == ModelType.language:
-                raise ValueError("TabularARGNDensity does not support LANGUAGE models")
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the density estimator.
-
-        If X was provided during initialization and is array-like, trains the model.
-        If X was a fitted TabularARGN, this is a no-op.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Not used, present for API consistency.
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_argn is not None:
-            # Already fitted via base TabularARGN
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Call parent fit
-        result = super().fit(X, y=None)
-
-        # Check model type after fitting
-        if self._model_type == ModelType.language:
-            raise ValueError("TabularARGNDensity does not support LANGUAGE models")
-
-        return result
-
-    def score_samples(self, X) -> np.ndarray:
-        """
-        Compute the log-likelihood of each sample under the model.
-
-        Args:
-            X: Data samples to score.
-
-        Returns:
-            Log-likelihood of each sample as np.ndarray of shape (n_samples,). More positive values indicate higher likelihood under the model.
-        """
-        if not self._fitted:
-            raise ValueError("Density estimator must be fitted before scoring. Call fit() first.")
-
-        if self._model_type == ModelType.language:
-            raise ValueError("TabularARGNDensity does not support LANGUAGE models")
-
-        from mostlyai.engine.log_prob import log_prob
-
-        X_df = _ensure_dataframe(X, columns=self._feature_names)
-        workspace_dir = self._get_workspace_dir()
-
-        return log_prob(
-            tgt_data=X_df,
-            workspace_dir=workspace_dir,
-            device=self.device,
-        )
-
-    def score(self, X, y=None) -> float:
-        """
-        Compute the total log-likelihood of the data under the model.
-
-        Args:
-            X: Data samples to score.
-            y: Not used, present for API consistency.
-
-        Returns:
-            Total log-likelihood (sum of log-likelihoods of all samples) as float.
-        """
-        log_likelihoods = self.score_samples(X)
-        return float(np.sum(log_likelihoods))

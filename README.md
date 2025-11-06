@@ -268,7 +268,7 @@ Estimate the log-likelihood of data samples (tabular models only):
 
 ```python
 import pandas as pd
-from mostlyai.engine import TabularARGNDensity
+from mostlyai.engine import TabularARGN
 
 # load census data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
@@ -278,20 +278,16 @@ df = pd.read_csv(f"{url}/census.csv.gz")
 train_df = df.sample(frac=0.8, random_state=42)
 test_df = df.drop(train_df.index)
 
-# train density estimator
-dens = TabularARGNDensity(
+# train model
+model = TabularARGN(
     max_training_time=1,
     verbose=1
 )
-dens.fit(train_df)
+model.fit(train_df)
 
 # compute log-likelihood for each sample
-log_likelihood = dens.score_samples(test_df)
+log_likelihood = model.log_prob(test_df)
 print(f"Average log-likelihood: {log_likelihood.mean():.2f}")
-
-# compute total log-likelihood
-total_score = dens.score(test_df)
-print(f"Total log-likelihood: {total_score:.2f}")
 ```
 
 ### Unconditional Sampling
