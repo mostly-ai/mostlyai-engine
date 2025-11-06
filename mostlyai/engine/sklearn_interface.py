@@ -86,6 +86,10 @@ class TabularARGN(BaseEstimator):
         enable_flexible_generation: Whether to enable flexible order generation. Defaults to True.
         max_sequence_window: Maximum sequence window for tabular sequential models.
         differential_privacy: Configuration for differential privacy training. If None, DP is disabled.
+        tgt_context_key: Context key column name in the target data for sequential models.
+        tgt_primary_key: Primary key column name in the target data.
+        ctx_data: DataFrame containing the context data for two-table sequential models.
+        ctx_primary_key: Primary key column name in the context data.
         device: Device to run training on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
         workspace_dir: Directory path for workspace. If None, a temporary directory will be created.
         random_state: Random seed for reproducibility.
@@ -102,6 +106,10 @@ class TabularARGN(BaseEstimator):
         enable_flexible_generation: bool = True,
         max_sequence_window: int | None = None,
         differential_privacy: DifferentialPrivacyConfig | dict | None = None,
+        tgt_context_key: str | None = None,
+        tgt_primary_key: str | None = None,
+        ctx_data: pd.DataFrame | None = None,
+        ctx_primary_key: str | None = None,
         device: torch.device | str | None = None,
         workspace_dir: str | Path | None = None,
         random_state: int | None = None,
@@ -115,6 +123,10 @@ class TabularARGN(BaseEstimator):
         self.enable_flexible_generation = enable_flexible_generation
         self.max_sequence_window = max_sequence_window
         self.differential_privacy = differential_privacy
+        self.tgt_context_key = tgt_context_key
+        self.tgt_primary_key = tgt_primary_key
+        self.ctx_data = ctx_data
+        self.ctx_primary_key = ctx_primary_key
         self.device = device
         self.workspace_dir = workspace_dir
         self.random_state = random_state
@@ -201,6 +213,11 @@ class TabularARGN(BaseEstimator):
         # Get workspace directory
         workspace_dir = self._get_workspace_dir()
 
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if self.ctx_data is not None:
+            ctx_data_df = _ensure_dataframe(self.ctx_data)
+
         if self.verbose > 0:
             _LOG.info(f"Fitting TabularARGN model on data with shape {X_df.shape}")
             _LOG.info(f"Using workspace directory: {workspace_dir}")
@@ -208,6 +225,10 @@ class TabularARGN(BaseEstimator):
         # Split data
         split(
             tgt_data=X_df,
+            ctx_data=ctx_data_df,
+            tgt_primary_key=self.tgt_primary_key,
+            ctx_primary_key=self.ctx_primary_key,
+            tgt_context_key=self.tgt_context_key,
             model_type=ModelType.tabular,
             workspace_dir=workspace_dir,
         )
@@ -249,13 +270,20 @@ class TabularARGN(BaseEstimator):
 
         return self
 
-    def sample(self, n_samples: int | None = 1, seed: pd.DataFrame | None = None, **kwargs) -> pd.DataFrame:
+    def sample(
+        self,
+        n_samples: int | None = 1,
+        seed: pd.DataFrame | None = None,
+        ctx_data: pd.DataFrame | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
         """
         Generate synthetic samples from the fitted model.
 
         Args:
             n_samples: Number of samples to generate for unconditional generation. If both n_samples and seed are None, generates same number as training data.
             seed: Seed data to condition generation on fixed columns. If provided, performs conditional generation.
+            ctx_data: Context data for generation (if different from training context data). If None, uses the context data from training.
             **kwargs: Additional arguments passed to generate() function.
 
         Returns:
@@ -266,6 +294,15 @@ class TabularARGN(BaseEstimator):
 
         workspace_dir = self._get_workspace_dir()
 
+        # Use ctx_data from training if not provided
+        if ctx_data is None:
+            ctx_data = self.ctx_data
+
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if ctx_data is not None:
+            ctx_data_df = _ensure_dataframe(ctx_data)
+
         if self.verbose > 0:
             if seed is not None:
                 _LOG.info(f"Generating samples with seed data of shape {seed.shape}")
@@ -274,6 +311,7 @@ class TabularARGN(BaseEstimator):
 
         # Generate synthetic data
         generate(
+            ctx_data=ctx_data_df,
             seed_data=seed,
             sample_size=n_samples,
             device=self.device,
@@ -415,6 +453,7 @@ class TabularARGNClassifier(TabularARGN):
     def predict(
         self,
         X,
+        ctx_data: pd.DataFrame | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -422,6 +461,7 @@ class TabularARGNClassifier(TabularARGN):
 
         Args:
             X: Input samples.
+            ctx_data: Context data for generation. If None, uses the context data from training.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -451,7 +491,7 @@ class TabularARGNClassifier(TabularARGN):
         # Generate predictions across multiple draws
         all_predictions = []
         for _ in range(self.n_draws):
-            samples = self.sample(seed=X_df, **kwargs)
+            samples = self.sample(seed=X_df, ctx_data=ctx_data, **kwargs)
             all_predictions.append(samples[self._target_column].values)
 
         # Stack predictions and aggregate
@@ -463,6 +503,7 @@ class TabularARGNClassifier(TabularARGN):
     def predict_proba(
         self,
         X,
+        ctx_data: pd.DataFrame | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -470,6 +511,7 @@ class TabularARGNClassifier(TabularARGN):
 
         Args:
             X: Input samples.
+            ctx_data: Context data for generation. If None, uses the context data from training.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -490,7 +532,7 @@ class TabularARGNClassifier(TabularARGN):
         # Generate predictions across multiple draws
         all_predictions = []
         for _ in range(self.n_draws):
-            samples = self.sample(seed=X_df, **kwargs)
+            samples = self.sample(seed=X_df, ctx_data=ctx_data, **kwargs)
             if self._target_column in samples.columns:
                 all_predictions.append(samples[self._target_column].values)
             else:
@@ -613,6 +655,7 @@ class TabularARGNRegressor(TabularARGN):
     def predict(
         self,
         X,
+        ctx_data: pd.DataFrame | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -620,6 +663,7 @@ class TabularARGNRegressor(TabularARGN):
 
         Args:
             X: Input samples.
+            ctx_data: Context data for generation. If None, uses the context data from training.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -644,7 +688,7 @@ class TabularARGNRegressor(TabularARGN):
         # Generate predictions across multiple draws
         all_predictions = []
         for _ in range(self.n_draws):
-            samples = self.sample(seed=X_df, **kwargs)
+            samples = self.sample(seed=X_df, ctx_data=ctx_data, **kwargs)
             if self._target_column in samples.columns:
                 all_predictions.append(samples[self._target_column].values)
             else:
@@ -741,12 +785,13 @@ class TabularARGNImputer(TabularARGN):
         # Call parent fit
         return super().fit(X, y=None)
 
-    def transform(self, X, **kwargs) -> pd.DataFrame:
+    def transform(self, X, ctx_data: pd.DataFrame | None = None, **kwargs) -> pd.DataFrame:
         """
         Impute missing values in X.
 
         Args:
             X: Data with missing values to impute.
+            ctx_data: Context data for generation. If None, uses the context data from training.
             **kwargs: Additional arguments passed to generate() function.
 
         Returns:
@@ -757,12 +802,22 @@ class TabularARGNImputer(TabularARGN):
 
         X_df = _ensure_dataframe(X, columns=self._feature_names)
 
+        # Use ctx_data from training if not provided
+        if ctx_data is None:
+            ctx_data = self.ctx_data
+
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if ctx_data is not None:
+            ctx_data_df = _ensure_dataframe(ctx_data)
+
         # Use imputation config to specify which columns to impute
         imputation_config = ImputationConfig(columns=X_df.columns.tolist())
 
         # Generate imputed data
         workspace_dir = self._get_workspace_dir()
         generate(
+            ctx_data=ctx_data_df,
             seed_data=X_df,
             sample_size=len(X_df),
             imputation=imputation_config,
