@@ -30,3 +30,17 @@ def init_logging() -> None:
         handler.setLevel(logging.INFO)
         _LOG.addHandler(handler)
         _LOG.setLevel(logging.INFO)
+
+
+def disable_logging() -> None:
+    """
+    Disable the logging by removing all handlers and resetting to default state.
+    """
+    # Remove all handlers
+    for handler in _LOG.handlers[:]:
+        handler.close()
+        _LOG.removeHandler(handler)
+
+    # Reset to default state
+    _LOG.setLevel(logging.WARNING)  # Default Python logging level
+    _LOG.propagate = True  # Restore default propagation

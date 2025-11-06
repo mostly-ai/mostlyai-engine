@@ -42,7 +42,8 @@ dependencies = [
     "json-repair>=0.47.0",
     "torch>=2.8.0,<2.9.0",  # for vllm 0.10.2 compatibility
     "torchaudio>=2.8.0,<2.9.0",  # for vllm 0.10.2 compatibility
-    "torchvision>=0.23.0,<0.24.0"  # for vllm 0.10.2 compatibility
+    "torchvision>=0.23.0,<0.24.0",  # for vllm 0.10.2 compatibility
+    "scikit-learn>=1.4.0",
 ]
 
 [project.optional-dependencies]

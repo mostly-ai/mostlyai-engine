@@ -153,3 +153,224 @@ engine.generate(                      # use model to generate synthetic samples 
 )
 pd.read_parquet(ws / "SyntheticData") # load synthetic data
 ```
+
+## Scikit-Learn Interface
+
+The engine provides a scikit-learn compatible interface for common machine learning tasks. This allows you to use generative models for classification, regression, imputation, and density estimation with familiar sklearn APIs.
+
+### Classification
+
+Train a generative classifier and predict class labels:
+
+```python
+import pandas as pd
+from mostlyai.engine import TabularARGNClassifier
+from sklearn.model_selection import train_test_split
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# split into train/test
+train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+
+# prepare features and target
+X_train = train_df.drop(columns=['income'])
+y_train = train_df['income']
+X_test = test_df.drop(columns=['income'])
+y_test = test_df['income']
+
+# train classifier
+clf = TabularARGNClassifier(
+    target='income',
+    max_training_time=1,  # 1 minute for demo
+    verbose=1
+)
+clf.fit(pd.concat([X_train, y_train], axis=1))
+
+# make predictions
+y_pred = clf.predict(X_test, n_draws=10)
+accuracy = clf.score(X_test, y_test)
+print(f"Accuracy: {accuracy:.3f}")
+
+# get prediction probabilities
+y_proba = clf.predict_proba(X_test, n_draws=10)
+print(f"Prediction probabilities shape: {y_proba.shape}")
+```
+
+### Regression
+
+Train a generative regressor for continuous target prediction:
+
+```python
+import pandas as pd
+from mostlyai.engine import TabularARGNRegressor
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# prepare data (predicting age)
+train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+X_train = train_df.drop(columns=['age'])
+y_train = train_df['age']
+X_test = test_df.drop(columns=['age'])
+y_test = test_df['age']
+
+# train regressor
+reg = TabularARGNRegressor(
+    target='age',
+    max_training_time=1,
+    verbose=1
+)
+reg.fit(pd.concat([X_train, y_train], axis=1))
+
+# make predictions
+y_pred = reg.predict(X_test, n_draws=10)
+r2_score = reg.score(X_test, y_test)
+print(f"R² Score: {r2_score:.3f}")
+```
+
+### Imputation
+
+Impute missing values using a generative model:
+
+```python
+import pandas as pd
+import numpy as np
+from mostlyai.engine import TabularARGNImputer
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# introduce some missing values
+df_with_missing = df.copy()
+df_with_missing.loc[df_with_missing.sample(frac=0.1, random_state=42).index, 'age'] = np.nan
+df_with_missing.loc[df_with_missing.sample(frac=0.1, random_state=43).index, 'education'] = np.nan
+
+# train imputer on complete data
+imp = TabularARGNImputer(
+    max_training_time=1,
+    verbose=1
+)
+imp.fit(df)
+
+# impute missing values
+df_imputed = imp.transform(df_with_missing)
+print(f"Missing values before: {df_with_missing.isnull().sum().sum()}")
+print(f"Missing values after: {df_imputed.isnull().sum().sum()}")
+```
+
+### Density Estimation
+
+Estimate the log-likelihood of data samples (tabular models only):
+
+```python
+import pandas as pd
+from mostlyai.engine import TabularARGNDensity
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# split data
+train_df = df.sample(frac=0.8, random_state=42)
+test_df = df.drop(train_df.index)
+
+# train density estimator
+dens = TabularARGNDensity(
+    max_training_time=1,
+    verbose=1
+)
+dens.fit(train_df)
+
+# compute log-likelihood for each sample
+log_likelihood = dens.score_samples(test_df)
+print(f"Average log-likelihood: {log_likelihood.mean():.2f}")
+
+# compute total log-likelihood
+total_score = dens.score(test_df)
+print(f"Total log-likelihood: {total_score:.2f}")
+```
+
+### Unconditional Sampling
+
+Generate synthetic data without conditioning:
+
+```python
+import pandas as pd
+from mostlyai.engine import TabularARGN
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# train generative model
+model = TabularARGN(
+    max_training_time=1,
+    verbose=1
+)
+model.fit(df)
+
+# generate synthetic samples
+synthetic_df = model.sample(n_samples=1000)
+print(f"Generated {len(synthetic_df)} synthetic samples")
+print(synthetic_df.head())
+```
+
+### Conditional Sampling
+
+Generate synthetic data conditioned on specific features:
+
+```python
+import pandas as pd
+from mostlyai.engine import TabularARGN
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# train model
+model = TabularARGN(max_training_time=1, verbose=1)
+model.fit(df)
+
+# create seed data with partial information
+seed_df = pd.DataFrame({
+    'age': [25, 35, 45],
+    'education': ['Bachelors', 'Masters', 'Doctorate']
+})
+
+# generate complete samples conditioned on seed
+synthetic_df = model.sample(seed=seed_df)
+print("Conditioned synthetic samples:")
+print(synthetic_df)
+```
+
+### Advanced: Reusing Fitted Models
+
+You can reuse a fitted `TabularARGN` model for multiple downstream tasks:
+
+```python
+import pandas as pd
+from mostlyai.engine import TabularARGN, TabularARGNClassifier, TabularARGNRegressor
+
+# load census data
+url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
+df = pd.read_csv(f"{url}/census.csv.gz")
+
+# train base model once
+base_model = TabularARGN(max_training_time=2, verbose=1)
+base_model.fit(df)
+
+# reuse for classification
+clf = TabularARGNClassifier(X=base_model, target='income')
+# clf is already fitted, can directly predict
+
+# reuse for regression
+reg = TabularARGNRegressor(X=base_model, target='age')
+# reg is already fitted, can directly predict
+
+# reuse for unconditional sampling
+synthetic_samples = base_model.sample(n_samples=500)
+```
