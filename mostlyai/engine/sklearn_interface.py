@@ -124,6 +124,7 @@ class TabularARGN(BaseEstimator):
         self._temp_dir = None
         self._workspace_path = None
         self._feature_names = None
+        self._target_column = None
 
         # Initialize or disable logging based on verbose setting
         if self.verbose > 0:
