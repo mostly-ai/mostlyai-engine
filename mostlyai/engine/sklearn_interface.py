@@ -144,8 +144,10 @@ class TabularARGN(BaseEstimator):
 
         # Otherwise create a temp directory
         if self._temp_dir is None:
-            self._temp_dir = tempfile.TemporaryDirectory(prefix="mostlyai_sklearn_")
+            self._temp_dir = tempfile.TemporaryDirectory(prefix="mostlyai_engine_")
             self._workspace_path = Path(self._temp_dir.name)
+            # Update the parameter so it shows in get_params()
+            self.workspace_dir = str(self._workspace_path)
 
         return self._workspace_path
 
@@ -178,7 +180,19 @@ class TabularARGN(BaseEstimator):
         # Add target column if provided
         if y is not None:
             y_array = np.asarray(y)
+            # Infer target column name if not already set
             if hasattr(self, "_target_column"):
+                if self._target_column is None:
+                    # Infer from y
+                    if isinstance(y, pd.Series) and y.name is not None:
+                        # Use Series name
+                        self._target_column = y.name
+                    elif isinstance(y, pd.DataFrame) and len(y.columns) == 1:
+                        # Use single DataFrame column name
+                        self._target_column = y.columns[0]
+                    else:
+                        # Fall back to default name
+                        self._target_column = "target"
                 X_df[self._target_column] = y_array
             else:
                 X_df["target"] = y_array
@@ -394,18 +408,6 @@ class TabularARGNClassifier(TabularARGN):
         if X is None:
             raise ValueError("X must be provided either during initialization or fit()")
 
-        # Infer target column name if not specified and y is provided
-        if self._target_column is None and y is not None:
-            if isinstance(y, pd.Series) and y.name is not None:
-                # Use Series name
-                self._target_column = y.name
-            elif isinstance(y, pd.DataFrame) and len(y.columns) == 1:
-                # Use single DataFrame column name
-                self._target_column = y.columns[0]
-            else:
-                # Fall back to default name
-                self._target_column = "target"
-
         # Call parent fit which trains on full X (including target)
         return super().fit(X, y=y)
 
@@ -603,18 +605,6 @@ class TabularARGNRegressor(TabularARGN):
 
         if X is None:
             raise ValueError("X must be provided either during initialization or fit()")
-
-        # Infer target column name if not specified and y is provided
-        if self._target_column is None and y is not None:
-            if isinstance(y, pd.Series) and y.name is not None:
-                # Use Series name
-                self._target_column = y.name
-            elif isinstance(y, pd.DataFrame) and len(y.columns) == 1:
-                # Use single DataFrame column name
-                self._target_column = y.columns[0]
-            else:
-                # Fall back to default name
-                self._target_column = "target"
 
         # Call parent fit which trains on full X (including target)
         return super().fit(X, y=y)
