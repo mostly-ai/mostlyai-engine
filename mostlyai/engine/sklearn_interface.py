@@ -33,7 +33,7 @@ from sklearn.metrics import accuracy_score, r2_score
 
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
-from mostlyai.engine.domain import ImputationConfig, ModelType
+from mostlyai.engine.domain import DifferentialPrivacyConfig, ImputationConfig, ModelType
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
 from mostlyai.engine.logging import disable_logging, init_logging
@@ -60,13 +60,13 @@ def _ensure_dataframe(X: Any, columns: list[str] | None = None) -> pd.DataFrame:
         raise ValueError(f"Unsupported data type: {type(X)}")
 
 
-def _load_synthetic_data(workspace_dir: str | Path) -> pd.DataFrame:
+def _load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
     """Load generated parquet files from SyntheticData directory."""
     workspace = Workspace(workspace_dir)
-    synthetic_files = workspace.generated_data.fetch_all()
-    if not synthetic_files:
-        raise ValueError(f"No synthetic data found in {workspace_dir}/SyntheticData")
-    dfs = [pd.read_parquet(f) for f in synthetic_files]
+    generated_files = workspace.generated_data.fetch_all()
+    if not generated_files:
+        raise ValueError(f"No generated data found in {workspace_dir}/SyntheticData")
+    dfs = [pd.read_parquet(f) for f in generated_files]
     return pd.concat(dfs, ignore_index=True)
 
 
@@ -84,13 +84,12 @@ class TabularARGN(BaseEstimator):
         batch_size: Per-device batch size for training and validation. If None, determined automatically.
         gradient_accumulation_steps: Number of steps to accumulate gradients. If None, determined automatically.
         enable_flexible_generation: Whether to enable flexible order generation. Defaults to True.
-        max_sequence_window: Maximum sequence window for tabular sequential models. Only applicable for tabular models.
+        max_sequence_window: Maximum sequence window for tabular sequential models.
         differential_privacy: Configuration for differential privacy training. If None, DP is disabled.
         device: Device to run training on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
         workspace_dir: Directory path for workspace. If None, a temporary directory will be created.
         random_state: Random seed for reproducibility.
         verbose: Verbosity level. 0 = silent, 1 = progress messages.
-        update_progress: Callback function to report training progress.
     """
 
     def __init__(
@@ -102,12 +101,11 @@ class TabularARGN(BaseEstimator):
         gradient_accumulation_steps: int | None = None,
         enable_flexible_generation: bool = True,
         max_sequence_window: int | None = None,
-        differential_privacy: dict | None = None,
+        differential_privacy: DifferentialPrivacyConfig | dict | None = None,
         device: torch.device | str | None = None,
         workspace_dir: str | Path | None = None,
         random_state: int | None = None,
         verbose: int = 0,
-        update_progress: Callable | None = None,
     ):
         self.model = model
         self.max_training_time = max_training_time
@@ -121,7 +119,6 @@ class TabularARGN(BaseEstimator):
         self.workspace_dir = workspace_dir
         self.random_state = random_state
         self.verbose = verbose
-        self.update_progress = update_progress
 
         self._fitted = False
         self._temp_dir = None
@@ -198,19 +195,16 @@ class TabularARGN(BaseEstimator):
             tgt_data=X_df,
             model_type=ModelType.tabular,
             workspace_dir=workspace_dir,
-            update_progress=self.update_progress if self.verbose > 0 else None,
         )
 
         # Analyze data
         analyze(
             workspace_dir=workspace_dir,
-            update_progress=self.update_progress if self.verbose > 0 else None,
         )
 
         # Encode data
         encode(
             workspace_dir=workspace_dir,
-            update_progress=self.update_progress if self.verbose > 0 else None,
         )
 
         # Train model
@@ -225,7 +219,6 @@ class TabularARGN(BaseEstimator):
             differential_privacy=self.differential_privacy,
             device=self.device,
             workspace_dir=workspace_dir,
-            update_progress=self.update_progress if self.verbose > 0 else None,
         )
 
         self._fitted = True
@@ -234,6 +227,7 @@ class TabularARGN(BaseEstimator):
         # These signal to sklearn's HTML repr that the model is fitted
         self.n_features_in_ = X_df.shape[1]
         self.feature_names_in_ = np.array(self._feature_names)
+        self.workspace_path_ = str(workspace_dir)
 
         if self.verbose > 0:
             _LOG.info("Model training complete")
@@ -269,12 +263,11 @@ class TabularARGN(BaseEstimator):
             sample_size=n_samples,
             device=self.device,
             workspace_dir=workspace_dir,
-            update_progress=self.update_progress if self.verbose > 0 else None,
             **kwargs,
         )
 
         # Load and return synthetic data
-        synthetic_data = _load_synthetic_data(workspace_dir)
+        synthetic_data = _load_generated_data(workspace_dir)
 
         if self.verbose > 0:
             _LOG.info(f"Generated synthetic data with shape {synthetic_data.shape}")
@@ -332,6 +325,8 @@ class TabularARGNClassifier(TabularARGN):
     Args:
         X: Training data or a fitted TabularARGN instance.
         target: Name of the target column to predict.
+        n_draws: Number of draws to generate for each sample during prediction. Defaults to 10.
+        agg_fn: Aggregation function to combine predictions across draws. Defaults to mode (most common value).
         **kwargs: All other arguments are passed to TabularARGN base class.
             See TabularARGN docstring for available parameters.
     """
@@ -340,12 +335,16 @@ class TabularARGNClassifier(TabularARGN):
         self,
         X=None,
         target: str | None = None,
+        n_draws: int = 10,
+        agg_fn: Callable = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         # Store parameters as attributes for sklearn compatibility
         self.X = X
         self.target = target
+        self.n_draws = n_draws
+        self.agg_fn = agg_fn
 
         # Internal attributes
         self._base_argn = None
@@ -367,6 +366,8 @@ class TabularARGNClassifier(TabularARGN):
                 self.n_features_in_ = X.n_features_in_
             if hasattr(X, "feature_names_in_"):
                 self.feature_names_in_ = X.feature_names_in_
+            if hasattr(X, "workspace_path_"):
+                self.workspace_path_ = X.workspace_path_
 
     def fit(self, X=None, y=None):
         """
@@ -411,8 +412,6 @@ class TabularARGNClassifier(TabularARGN):
     def predict(
         self,
         X,
-        n_draws: int = 10,
-        agg_fn: Callable = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -420,8 +419,6 @@ class TabularARGNClassifier(TabularARGN):
 
         Args:
             X: Input samples.
-            n_draws: Number of draws to generate for each sample. Defaults to 10.
-            agg_fn: Aggregation function to combine predictions across draws. Defaults to mode (most common value).
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -433,9 +430,9 @@ class TabularARGNClassifier(TabularARGN):
         if self._target_column is None:
             raise ValueError("Target column must be specified for prediction.")
 
+        agg_fn = self.agg_fn
         if agg_fn is None:
             # Default to mode (most common value)
-            # Use a custom function that works with categorical data
             def mode_fn(x):
                 values, counts = np.unique(x, return_counts=True)
                 return values[np.argmax(counts)]
@@ -444,14 +441,15 @@ class TabularARGNClassifier(TabularARGN):
 
         X_df = _ensure_dataframe(X, columns=self._feature_names)
 
+        # Exclude target column from seed if present
+        if self._target_column in X_df.columns:
+            X_df = X_df.drop(columns=[self._target_column])
+
         # Generate predictions across multiple draws
         all_predictions = []
-        for _ in range(n_draws):
+        for _ in range(self.n_draws):
             samples = self.sample(seed=X_df, **kwargs)
-            if self._target_column in samples.columns:
-                all_predictions.append(samples[self._target_column].values)
-            else:
-                raise ValueError(f"Target column '{self._target_column}' not found in generated samples")
+            all_predictions.append(samples[self._target_column].values)
 
         # Stack predictions and aggregate
         predictions_array = np.column_stack(all_predictions)
@@ -462,7 +460,6 @@ class TabularARGNClassifier(TabularARGN):
     def predict_proba(
         self,
         X,
-        n_draws: int = 10,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -470,7 +467,6 @@ class TabularARGNClassifier(TabularARGN):
 
         Args:
             X: Input samples.
-            n_draws: Number of draws to generate for each sample. Defaults to 10.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -484,9 +480,13 @@ class TabularARGNClassifier(TabularARGN):
 
         X_df = _ensure_dataframe(X, columns=self._feature_names)
 
+        # Exclude target column from seed if present
+        if self._target_column in X_df.columns:
+            X_df = X_df.drop(columns=[self._target_column])
+
         # Generate predictions across multiple draws
         all_predictions = []
-        for _ in range(n_draws):
+        for _ in range(self.n_draws):
             samples = self.sample(seed=X_df, **kwargs)
             if self._target_column in samples.columns:
                 all_predictions.append(samples[self._target_column].values)
@@ -535,6 +535,8 @@ class TabularARGNRegressor(TabularARGN):
     Args:
         X: Training data or a fitted TabularARGN instance.
         target: Name of the target column to predict.
+        n_draws: Number of draws to generate for each sample during prediction. Defaults to 10.
+        agg_fn: Aggregation function to combine predictions across draws. Defaults to np.mean.
         **kwargs: All other arguments are passed to TabularARGN base class.
             See TabularARGN docstring for available parameters.
     """
@@ -543,12 +545,16 @@ class TabularARGNRegressor(TabularARGN):
         self,
         X=None,
         target: str | None = None,
+        n_draws: int = 10,
+        agg_fn: Callable = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         # Store parameters as attributes for sklearn compatibility
         self.X = X
         self.target = target
+        self.n_draws = n_draws
+        self.agg_fn = agg_fn
 
         # Internal attributes
         self._base_argn = None
@@ -570,6 +576,8 @@ class TabularARGNRegressor(TabularARGN):
                 self.n_features_in_ = X.n_features_in_
             if hasattr(X, "feature_names_in_"):
                 self.feature_names_in_ = X.feature_names_in_
+            if hasattr(X, "workspace_path_"):
+                self.workspace_path_ = X.workspace_path_
 
     def fit(self, X=None, y=None):
         """
@@ -614,8 +622,6 @@ class TabularARGNRegressor(TabularARGN):
     def predict(
         self,
         X,
-        n_draws: int = 10,
-        agg_fn: Callable = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -623,8 +629,6 @@ class TabularARGNRegressor(TabularARGN):
 
         Args:
             X: Input samples.
-            n_draws: Number of draws to generate for each sample. Defaults to 10.
-            agg_fn: Aggregation function to combine predictions across draws. Defaults to np.mean.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -636,14 +640,19 @@ class TabularARGNRegressor(TabularARGN):
         if self._target_column is None:
             raise ValueError("Target column must be specified for prediction.")
 
+        agg_fn = self.agg_fn
         if agg_fn is None:
             agg_fn = np.mean
 
         X_df = _ensure_dataframe(X, columns=self._feature_names)
 
+        # Exclude target column from seed if present
+        if self._target_column in X_df.columns:
+            X_df = X_df.drop(columns=[self._target_column])
+
         # Generate predictions across multiple draws
         all_predictions = []
-        for _ in range(n_draws):
+        for _ in range(self.n_draws):
             samples = self.sample(seed=X_df, **kwargs)
             if self._target_column in samples.columns:
                 all_predictions.append(samples[self._target_column].values)
@@ -710,6 +719,8 @@ class TabularARGNImputer(TabularARGN):
                 self.n_features_in_ = X.n_features_in_
             if hasattr(X, "feature_names_in_"):
                 self.feature_names_in_ = X.feature_names_in_
+            if hasattr(X, "workspace_path_"):
+                self.workspace_path_ = X.workspace_path_
 
     def fit(self, X=None, y=None):
         """
@@ -755,19 +766,8 @@ class TabularARGNImputer(TabularARGN):
 
         X_df = _ensure_dataframe(X, columns=self._feature_names)
 
-        # Identify columns with missing values
-        columns_with_missing = X_df.columns[X_df.isnull().any()].tolist()
-
-        if not columns_with_missing:
-            if self.verbose > 0:
-                _LOG.info("No missing values found in data")
-            return X_df
-
-        if self.verbose > 0:
-            _LOG.info(f"Imputing missing values in columns: {columns_with_missing}")
-
         # Use imputation config to specify which columns to impute
-        imputation_config = ImputationConfig(columns=columns_with_missing)
+        imputation_config = ImputationConfig(columns=X_df.columns.tolist())
 
         # Generate imputed data
         workspace_dir = self._get_workspace_dir()
@@ -777,12 +777,11 @@ class TabularARGNImputer(TabularARGN):
             imputation=imputation_config,
             device=self.device,
             workspace_dir=workspace_dir,
-            update_progress=self.update_progress if self.verbose > 0 else None,
             **kwargs,
         )
 
         # Load imputed data
-        X_imputed = _load_synthetic_data(workspace_dir)
+        X_imputed = _load_generated_data(workspace_dir)
 
         return X_imputed
 
