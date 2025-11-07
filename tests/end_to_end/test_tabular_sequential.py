@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine import analyze, encode, split
+from mostlyai.engine import analyze, encode, set_random_state, split
 from mostlyai.engine._common import read_json
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_NULL_TOKEN,
@@ -291,6 +291,7 @@ def test_sequential_max_sequence_window(tmp_path):
 
 
 def test_sequential_gen_ctx_and_size(tmp_path):
+    set_random_state(42)
     workspace_dir = tmp_path / "ws"
     key_column = "id"
     ctx = pd.DataFrame({key_column: list(range(500))})
