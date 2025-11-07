@@ -24,6 +24,7 @@ import pandas as pd
 import pytest
 
 from mostlyai.engine.sklearn_interface import (
+    LanguageModel,
     TabularARGN,
     TabularARGNClassifier,
     TabularARGNImputer,
@@ -325,3 +326,83 @@ def test_tabular_argn_imputer():
         assert isinstance(imputed_data, pd.DataFrame)
         assert imputed_data.shape == test_data.shape
         assert set(imputed_data.columns) == set(test_data.columns)
+
+
+def test_language_model_basic():
+    """Test LanguageModel with basic fit and sample."""
+    np.random.seed(42)
+
+    # Create simple text data
+    data = pd.DataFrame(
+        {
+            "category": np.random.choice(["A", "B", "C"], 20),
+            "text": [f"Sample text {i}" for i in range(20)],
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        model = LanguageModel(
+            tgt_encoding_types={
+                "category": "LANGUAGE_CATEGORICAL",
+                "text": "LANGUAGE_TEXT",
+            },
+            max_epochs=1,
+            workspace_dir=tmp_dir,
+            verbose=0,
+        )
+
+        # Fit model
+        model.fit(data)
+
+        # Check fitted attributes
+        assert model._fitted
+        assert model.n_features_in_ == 2
+        assert len(model.feature_names_in_) == 2
+
+        # Generate samples
+        synthetic_data = model.sample(n_samples=10)
+
+        # Check output
+        assert isinstance(synthetic_data, pd.DataFrame)
+        assert len(synthetic_data) == 10
+        assert "category" in synthetic_data.columns
+        assert "text" in synthetic_data.columns
+
+
+def test_language_model_not_fitted_error():
+    """Test that appropriate error is raised when using unfitted model."""
+    model = LanguageModel(
+        tgt_encoding_types={
+            "text": "LANGUAGE_TEXT",
+        }
+    )
+
+    with pytest.raises(ValueError, match="Model must be fitted"):
+        model.sample(n_samples=10)
+
+
+def test_language_model_workspace_persistence():
+    """Test that workspace directory is properly managed for LanguageModel."""
+    np.random.seed(42)
+
+    data = pd.DataFrame(
+        {
+            "text": [f"Sample {i}" for i in range(10)],
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        workspace_dir = Path(tmp_dir) / "test_language_workspace"
+
+        model = LanguageModel(
+            tgt_encoding_types={"text": "LANGUAGE_TEXT"},
+            max_epochs=1,
+            workspace_dir=workspace_dir,
+            verbose=0,
+        )
+
+        model.fit(data)
+
+        # Check workspace exists
+        assert workspace_dir.exists()
+        assert model.workspace_path_ == str(workspace_dir)

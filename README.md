@@ -168,114 +168,45 @@ syn_df = argn.sample(n_samples=100)
 log_probs = argn.log_prob(trn_df.head(100))
 ```
 
-## Advanced Usage for TABULAR and LANGUAGE data
+## Basic Usage of LanguageModel
 
-For more fine-grained control over the training and generation process, you can use the lower-level engine functions. This approach is useful when you need to customize the workflow, inspect intermediate results, or work with language models.
+The `LanguageModel` class provides a scikit-learn-compatible interface for working with text data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.
 
-### Tabular Model: flat data
+### Text Data
 
-```python
-from pathlib import Path
-import pandas as pd
-from mostlyai import engine
-
-# set up workspace and default logging
-ws = Path("ws-tabular-flat")
-engine.init_logging()
-
-# load original data
-url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
-trn_df = pd.read_csv(f"{url}/census.csv.gz")
-
-# execute the engine steps
-engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/tgt-data`
-  workspace_dir=ws,
-  tgt_data=trn_df,
-  model_type="TABULAR",
-)
-engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelData/tgt-stats/stats.json`
-engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
-    workspace_dir=ws,
-    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
-)
-engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
-pd.read_parquet(ws / "SyntheticData") # load synthetic data
-```
-
-### Tabular Model: sequential data with context
+Load your data and train the model:
 
 ```python
-from pathlib import Path
 import pandas as pd
-from mostlyai import engine
-
-# set up workspace and default logging
-ws = Path("ws-tabular-sequential")
-engine.init_logging()
-
-# load original data
-url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
-trn_ctx_df = pd.read_csv(f"{url}/players.csv.gz")  # context data
-trn_tgt_df = pd.read_csv(f"{url}/batting.csv.gz")  # target data
-
-# execute the engine steps
-engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/(tgt|ctx)-data`
-  workspace_dir=ws,
-  tgt_data=trn_tgt_df,
-  ctx_data=trn_ctx_df,
-  tgt_context_key="players_id",
-  ctx_primary_key="id",
-  model_type="TABULAR",
-)
-engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelStore/(tgt|ctx)-data/stats.json`
-engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
-    workspace_dir=ws,
-    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
-)
-engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
-pd.read_parquet(ws / "SyntheticData") # load synthetic data
-```
-
-### Language Model
-
-For text data, you can leverage pre-trained language models or train lightweight LSTM models from scratch:
-
-```python
-from pathlib import Path
-import pandas as pd
-from mostlyai import engine
-
-# init workspace and logging
-ws = Path("ws-language-flat")
-engine.init_logging()
+from mostlyai.engine import LanguageModel
 
 # load original data
 trn_df = pd.read_parquet("https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/headlines/headlines.parquet")
 trn_df = trn_df.sample(n=10_000, random_state=42)
 
-# execute the engine steps
-engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/tgt-data`
-    workspace_dir=ws,
-    tgt_data=trn_df,
+# fit the model
+lm = LanguageModel(
     tgt_encoding_types={
         'category': 'LANGUAGE_CATEGORICAL',
         'date': 'LANGUAGE_DATETIME',
         'headline': 'LANGUAGE_TEXT',
-    }
+    },
+    max_training_time=2,
+    random_state=42,
 )
-engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelStore/tgt-stats/stats.json`
-engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
-    workspace_dir=ws,
-    max_training_time=2,                   # limit TRAIN to 2 minute for demo purposes
-    model="MOSTLY_AI/LSTMFromScratch-3m",  # use a light-weight LSTM model, trained from scratch (GPU recommended)
-    # model="microsoft/phi-1.5",           # alternatively use a pre-trained HF-hosted LLM model (GPU required)
-)
-engine.generate(                      # use model to generate synthetic samples to `{ws}/SyntheticData`
-    workspace_dir=ws,
-    sample_size=10,
-)
-pd.read_parquet(ws / "SyntheticData") # load synthetic data
+lm.fit(trn_df)
 ```
+
+#### Synthetic Text Generation
+
+Generate new synthetic samples:
+
+```python
+# unconditional sampling
+syn_data = lm.sample(n_samples=100)
+
+# conditional sampling with seed values
+syn_data = lm.sample(seed_data=pd.DataFrame({"category": ["business", "tech"]}))
+```
+
+**Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting `model="microsoft/phi-1.5"` (GPU required).
