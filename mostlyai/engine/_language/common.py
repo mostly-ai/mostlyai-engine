@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import importlib
 import logging
+import platform
 from pathlib import Path
 
 import torch
@@ -30,6 +33,7 @@ from transformers import (
 from transformers.quantizers import AutoQuantizationConfig
 
 from mostlyai.engine._language.lstm import LSTMFromScratchConfig
+from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
 
 _LOG = logging.getLogger(__name__)
 
@@ -129,3 +133,49 @@ def load_base_model_and_config(
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()
     return model, config
+
+
+def load_model(
+    workspace_dir: str | Path,
+    device: torch.device,
+    max_new_tokens: int,
+) -> tuple[LanguageEngine, dict]:  # noqa: F821
+    """
+    Load a trained language model (engine) from workspace.
+
+    Args:
+        workspace_dir: Directory path for workspace containing trained model.
+        device: Device to load model on ('cuda' or 'cpu').
+        max_new_tokens: Maximum number of new tokens to generate.
+
+    Returns:
+        Tuple of (engine, metadata_dict) where metadata_dict contains:
+            - tgt_stats: Target data statistics
+            - model_path: Path to the model
+            - is_peft_adapter: Whether the model is a PEFT adapter
+    """
+    workspace_dir = ensure_workspace_dir(workspace_dir)
+    workspace = Workspace(workspace_dir)
+    tgt_stats = workspace.tgt_stats.read()
+
+    is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
+    is_vllm_available = importlib.util.find_spec("vllm") is not None
+
+    if is_peft_adapter and ((device.type == "cuda" or platform.system() == "Darwin") and is_vllm_available):
+        from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
+
+        engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
+    else:
+        if device.type == "cuda" and not is_vllm_available:
+            _LOG.warning("CUDA device was found but vllm is not available. Please use extra [gpu] to install vllm")
+        from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
+
+        engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
+
+    metadata = {
+        "tgt_stats": tgt_stats,
+        "model_path": workspace.model_path,
+        "is_peft_adapter": is_peft_adapter,
+    }
+
+    return engine, metadata

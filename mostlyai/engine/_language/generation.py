@@ -13,10 +13,8 @@
 # limitations under the License.
 
 import contextlib
-import importlib
 import logging
 import os
-import platform
 import time
 from pathlib import Path
 from typing import Any
@@ -36,7 +34,7 @@ from mostlyai.engine._encoding_types.language.categorical import decode_language
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
 from mostlyai.engine._encoding_types.language.numeric import decode_language_numeric
 from mostlyai.engine._encoding_types.language.text import decode_text
-from mostlyai.engine._language.common import MAX_LENGTH
+from mostlyai.engine._language.common import load_model
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._language.xgrammar_utils import create_schemas, ensure_seed_can_be_tokenized
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
@@ -256,39 +254,32 @@ def generate(
 
         t0 = time.time()
 
-        is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
-        is_vllm_available = importlib.util.find_spec("vllm") is not None
-        if is_peft_adapter and ((device.type == "cuda" or platform.system() == "Darwin") and is_vllm_available):
-            from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
+        model, _ = load_model(
+            workspace_dir=workspace_dir,
+            device=device,
+            max_new_tokens=max_new_tokens,
+        )
+        _LOG.info(f"inference engine: {model.__class__.__name__}")
 
-            engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
-        else:
-            if device.type == "cuda" and not is_vllm_available:
-                _LOG.warning("CUDA device was found but vllm is not available. Please use extra [gpu] to install vllm")
-            from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
-
-            engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
-        _LOG.info(f"inference engine: {engine.__class__.__name__}")
-
-        batch_size = batch_size or engine.get_default_batch_size()
+        batch_size = batch_size or model.get_default_batch_size()
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
 
         if batch_size > sample_size:
             batch_size = sample_size
         _LOG.info(f"{batch_size=}")
 
-        seed_data = ensure_seed_can_be_tokenized(seed_data, engine.tokenizer)
+        seed_data = ensure_seed_can_be_tokenized(seed_data, model.tokenizer)
         seeded_tgt_columns = seed_data.columns.to_list()
 
         total_tokenize_fn_time = 0
         total_logits_processor_build_time = 0
         total_generate_fn_time = 0
 
-        enforce_json_output = engine.supports_json_enforcing()
+        enforce_json_output = model.supports_json_enforcing()
         _LOG.info(f"{enforce_json_output=}")
 
         # Check if we can optimize by reusing schemas/constraints across batches
-        can_reuse_schemas = len(seeded_tgt_columns) == 0 and engine.can_reuse_schemas()
+        can_reuse_schemas = len(seeded_tgt_columns) == 0 and model.can_reuse_schemas()
 
         # Prepare schemas once if optimization is possible
         if enforce_json_output and can_reuse_schemas:
@@ -298,7 +289,7 @@ def generate(
                 stats=tgt_stats,
                 rare_category_replacement_method=rare_category_replacement_method,
             )
-            engine.update_json_constraints(schemas_for_optimization)
+            model.update_json_constraints(schemas_for_optimization)
             total_logits_processor_build_time += time.time() - t0
 
         # keep at most 500k samples in memory before decoding and writing to disk
@@ -320,14 +311,14 @@ def generate(
                     stats=tgt_stats,
                     rare_category_replacement_method=rare_category_replacement_method,
                 )
-                engine.update_json_constraints(schemas)
+                model.update_json_constraints(schemas)
                 total_logits_processor_build_time += time.time() - t0
             elif not enforce_json_output:
                 # Clear any existing constraints if JSON enforcement is disabled
-                engine.update_json_constraints(None)
+                model.update_json_constraints(None)
 
             # Generate outputs using single generate method
-            outputs, metrics = engine.generate(
+            outputs, metrics = model.generate(
                 encoded_ctx_batch["ctx"].tolist(),
                 sampling_temperature=sampling_temperature,
                 sampling_top_p=sampling_top_p,
@@ -338,7 +329,7 @@ def generate(
             buffer.add((outputs, ctx_keys, seed_data_batch))
             if buffer.is_full():
                 decoded_data = decode_buffered_samples(
-                    buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens
+                    buffer, model.tokenizer, tgt_stats, tgt_context_key, max_new_tokens
                 )
                 persist_data_part(
                     decoded_data,
@@ -350,7 +341,7 @@ def generate(
             samples_processed += len(ctx_batch)
 
         if not buffer.is_empty():
-            decoded_data = decode_buffered_samples(buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens)
+            decoded_data = decode_buffered_samples(buffer, model.tokenizer, tgt_stats, tgt_context_key, max_new_tokens)
             persist_data_part(
                 decoded_data,
                 output_path,
@@ -360,5 +351,5 @@ def generate(
         _LOG.info(f"{total_tokenize_fn_time=:.2f}s")
         _LOG.info(f"{total_logits_processor_build_time=:.2f}s")
         _LOG.info(f"{total_generate_fn_time=:.2f}s")
-        engine.cleanup()
+        model.cleanup()
     _LOG.info(f"GENERATE_LANGUAGE finished in {time.time() - t0_:.2f}s")

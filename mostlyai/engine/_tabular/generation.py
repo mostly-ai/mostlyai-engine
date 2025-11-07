@@ -76,11 +76,10 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
 from mostlyai.engine._memory import get_available_ram_for_heuristics, get_available_vram_for_heuristics
 from mostlyai.engine._tabular.argn import (
     FlatModel,
-    ModelSize,
     SequentialModel,
     get_no_of_model_parameters,
 )
-from mostlyai.engine._tabular.common import load_model_weights
+from mostlyai.engine._tabular.common import load_model
 from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
@@ -833,42 +832,23 @@ def generate(
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
     with ProgressCallbackWrapper(update_progress) as progress:
-        # build paths based on workspace dir
+        # Load workspace and stats needed for gen_column_order calculation
         workspace_dir = ensure_workspace_dir(workspace_dir)
         workspace = Workspace(workspace_dir)
-        output_path = workspace.generated_data_path
-        reset_dir(output_path)
-
         model_configs = workspace.model_configs.read()
         tgt_stats = workspace.tgt_stats.read()
-        is_sequential = tgt_stats["is_sequential"]
-        _LOG.info(f"{is_sequential=}")
-        has_context = workspace.ctx_stats.path.exists()
-        _LOG.info(f"{has_context=}")
         ctx_stats = workspace.ctx_stats.read()
-
-        # read model config
-        model_units = model_configs.get("model_units") or ModelSize.M
-        _LOG.debug(f"{model_units=}")
+        is_sequential = tgt_stats.get("is_sequential", False)
+        _LOG.info(f"{is_sequential=}")
+        has_context = workspace.ctx_stats_path.exists()
+        _LOG.info(f"{has_context=}")
         enable_flexible_generation = model_configs.get("enable_flexible_generation", True)
         _LOG.info(f"{enable_flexible_generation=}")
 
-        # handle different approaches to sequence modeling (backwards compatibility)
-        has_slen = has_ridx = has_sdec = None
-        if is_sequential:
-            if isinstance(model_units, dict):
-                has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-                has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-                has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-            else:
-                has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
-
-        tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
-        ctx_cardinalities = get_cardinalities(ctx_stats)
-        tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
-        ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
-        _LOG.info(f"{len(tgt_sub_columns)=}")
-        _LOG.info(f"{len(ctx_sub_columns)=}")
+        tgt_primary_key = tgt_stats.get("keys", {}).get("primary_key")
+        tgt_context_key = tgt_stats.get("keys", {}).get("context_key")
+        ctx_primary_key = ctx_stats.get("keys", {}).get("primary_key")
+        _LOG.info(f"{tgt_primary_key=}, {tgt_context_key=}, {ctx_primary_key=}")
 
         # resolve device
         device = (
@@ -877,11 +857,6 @@ def generate(
             else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
         )
         _LOG.info(f"{device=}")
-
-        tgt_primary_key = tgt_stats.get("keys", {}).get("primary_key")
-        tgt_context_key = tgt_stats.get("keys", {}).get("context_key")
-        ctx_primary_key = ctx_stats.get("keys", {}).get("primary_key")
-        _LOG.info(f"{tgt_primary_key=}, {tgt_context_key=}, {ctx_primary_key=}")
 
         if rebalancing and isinstance(rebalancing, dict):
             rebalancing = RebalancingConfig(**rebalancing)
@@ -893,6 +868,26 @@ def generate(
         _LOG.info(f"rebalancing: {rebalancing}")
         _LOG.info(f"fairness: {fairness}")
         _LOG.info(f"seed_data: {list(seed_data.columns) if isinstance(seed_data, pd.DataFrame) else None}")
+
+        # Determine generation column order
+        # This must be calculated before loading the model since we pass it to load_model
+        # First, get cardinalities from stats to calculate gen_column_order
+        has_slen = has_ridx = has_sdec = None
+        if is_sequential:
+            model_units = model_configs.get("model_units")
+            if isinstance(model_units, dict):
+                has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+            else:
+                has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
+        tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
+        ctx_cardinalities = get_cardinalities(ctx_stats)
+        tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
+        ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
+        _LOG.info(f"{len(tgt_sub_columns)=}")
+        _LOG.info(f"{len(ctx_sub_columns)=}")
+
         gen_column_order = _resolve_gen_column_order(
             column_stats=tgt_stats["columns"],
             cardinalities=tgt_cardinalities,
@@ -970,10 +965,8 @@ def generate(
 
         # sequence lengths
         seq_len_stats = get_sequence_length_stats(tgt_stats)
-        seq_len_median = seq_len_stats["median"]
         seq_len_min = seq_len_stats["min"]
         seq_len_max = seq_len_stats["max"]
-        ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
 
         # validate sequential seed_data has tgt_context_key
         if is_sequential and tgt_context_key not in seed_data.columns:
@@ -1016,43 +1009,19 @@ def generate(
         # init progress with total_count; +1 for the final decoding step
         progress.update(completed=0, total=no_of_batches * (seq_len_max + 1))
 
-        _LOG.info("create generative model")
-        model: FlatModel | SequentialModel
-        if is_sequential:
-            model = SequentialModel(
-                tgt_cardinalities=tgt_cardinalities,
-                tgt_seq_len_median=seq_len_median,
-                tgt_seq_len_max=seq_len_max,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_units,
-                column_order=gen_column_order,
-                device=device,
-            )
-        else:
-            model = FlatModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_units,
-                column_order=gen_column_order,
-                device=device,
-            )
+        _LOG.info("load generative model")
+        model, metadata = load_model(
+            workspace_dir=workspace_dir,
+            device=device,
+            column_order=gen_column_order,
+        )
+
+        # Setup output directory
+        output_path = workspace.generated_data_path
+        reset_dir(output_path)
 
         no_of_model_params = get_no_of_model_parameters(model)
         _LOG.info(f"{no_of_model_params=}")
-
-        if workspace.model_tabular_weights_path.exists():
-            load_model_weights(
-                model=model,
-                path=workspace.model_tabular_weights_path,
-                device=device,
-            )
-        else:
-            _LOG.warning("model weights not found; generating data with an untrained model")
-
-        model.to(device)
-        model.eval()
 
         # calculate fairness transforms only once before batch generation
         fairness_transforms: FairnessTransforms | None = None

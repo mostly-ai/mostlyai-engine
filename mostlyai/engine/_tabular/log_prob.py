@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import warnings
 from itertools import zip_longest
 from pathlib import Path
 
@@ -24,23 +23,15 @@ import torch
 from mostlyai.engine._common import (
     CTXFLT,
     CTXSEQ,
-    DEFAULT_HAS_RIDX,
-    DEFAULT_HAS_SDEC,
-    DEFAULT_HAS_SLEN,
     RIDX_SUB_COLUMN_PREFIX,
     SDEC_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
     encode_positional_column,
-    get_cardinalities,
-    get_columns_from_cardinalities,
-    get_sequence_length_stats,
 )
-from mostlyai.engine._tabular.argn import FlatModel, SequentialModel
-from mostlyai.engine._tabular.common import load_model_weights
+from mostlyai.engine._tabular.common import load_model
 from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.training import _calculate_sample_losses
-from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
 
 _LOG = logging.getLogger(__name__)
 
@@ -72,30 +63,28 @@ def log_prob(
         ValueError: If model has not been trained yet, or if ctx_data is provided when model has no context.
     """
     _LOG.info("LOG_PROB_TABULAR started")
-    workspace = Workspace(ensure_workspace_dir(workspace_dir))
 
-    # Check if all required files and keys exist before proceeding
-    if not workspace.tgt_stats.path.exists() or not workspace.model_configs.path.exists():
-        raise ValueError("Model statistics or config missing. Train the model first.")
+    # Set device
+    device = (
+        torch.device(device)
+        if device is not None
+        else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    )
+    _LOG.info(f"{device=}")
 
-    # Load stats and config after all checks
-    tgt_stats = workspace.tgt_stats.read()
-    model_configs = workspace.model_configs.read()
+    # Load model and metadata
+    model, metadata = load_model(
+        workspace_dir=workspace_dir,
+        device=device,
+    )
 
-    # Prepare sequential info
-    tgt_stats.setdefault("is_sequential", False)
-    is_sequential = tgt_stats["is_sequential"]
-    seq_len_stats = get_sequence_length_stats(tgt_stats)
-
-    # Load context stats
-    has_context = workspace.ctx_stats_path.exists()
-    if has_context:
-        ctx_stats = workspace.ctx_stats.read()
-    else:
-        ctx_stats = {"columns": {}, "is_sequential": False}
-
-    tgt_cardinalities = get_cardinalities(tgt_stats)
-    ctx_cardinalities = get_cardinalities(ctx_stats)
+    # Extract metadata
+    tgt_stats = metadata["tgt_stats"]
+    ctx_stats = metadata["ctx_stats"]
+    ctx_cardinalities = metadata["ctx_cardinalities"]
+    is_sequential = metadata["is_sequential"]
+    seq_len_stats = metadata["seq_len_stats"]
+    has_context = metadata["has_context"]
 
     # Validate ctx_data usage
     if ctx_data is not None and not has_context:
@@ -116,75 +105,10 @@ def log_prob(
     tgt_context_key = tgt_stats.get("keys", {}).get("context_key")
     ctx_primary_key = ctx_stats.get("keys", {}).get("primary_key")
 
-    # Get column order from configs (for backwards compatibility)
-    trn_column_order = model_configs.get("trn_column_order")
-    if trn_column_order is None and not model_configs.get("enable_flexible_generation", True):
-        # Fixed column order based on cardinalities
-        trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
-
-    # Set device
-    device = (
-        torch.device(device)
-        if device is not None
-        else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-    )
-    _LOG.info(f"{device=}")
-
-    # Get model size
-    model_units = model_configs.get("model_units")
-    if model_units is None:
-        raise ValueError("Model units not found in model config")
-
-    # Create model
-    if is_sequential:
-        tgt_seq_len_median = model_configs.get("tgt_seq_len_median", seq_len_stats.get("median", 1))
-        tgt_seq_len_max = model_configs.get("tgt_seq_len_max", seq_len_stats.get("max", 1))
-        ctx_seq_len_median = model_configs.get("ctx_seq_len_median", {})
-
-        model = SequentialModel(
-            tgt_cardinalities=tgt_cardinalities,
-            tgt_seq_len_median=tgt_seq_len_median,
-            tgt_seq_len_max=tgt_seq_len_max,
-            ctx_cardinalities=ctx_cardinalities,
-            ctxseq_len_median=ctx_seq_len_median,
-            model_size=model_units,
-            column_order=trn_column_order,
-            device=device,
-        )
-    else:
-        ctx_seq_len_median = model_configs.get("ctx_seq_len_median", {})
-
-        model = FlatModel(
-            tgt_cardinalities=tgt_cardinalities,
-            ctx_cardinalities=ctx_cardinalities,
-            ctxseq_len_median=ctx_seq_len_median,
-            model_size=model_units,
-            column_order=trn_column_order,
-            device=device,
-        )
-
-    # Load trained weights
-    if workspace.model_tabular_weights_path.exists():
-        load_model_weights(
-            model=model,
-            path=workspace.model_tabular_weights_path,
-            device=device,
-        )
-    else:
-        warnings.warn("Model weights not found; scores will be from untrained model")
-
-    model.to(device)
-    model.eval()
-
-    # Determine which positional columns are needed for sequential models
-    has_slen = has_ridx = has_sdec = None
-    if is_sequential:
-        if isinstance(model_units, dict):
-            has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-            has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-            has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-        else:
-            has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
+    # Get positional column flags for sequential models
+    has_slen = metadata.get("has_slen")
+    has_ridx = metadata.get("has_ridx")
+    has_sdec = metadata.get("has_sdec")
 
     # For sequential target data, group by context key to create sequences
     if is_sequential and tgt_context_key and tgt_context_key in tgt_data.columns:
