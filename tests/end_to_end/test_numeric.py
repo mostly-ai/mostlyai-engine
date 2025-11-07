@@ -72,7 +72,13 @@ def prepare_ws(tmp_path: Path, df: pd.DataFrame, keys: dict, encoding_types: dic
     ]:
         path.mkdir(exist_ok=True, parents=True)
 
-    df.to_parquet(tgt_data_path / "part.000000-trn.parquet")
+    # Split data into train and validation sets (80/20 split)
+    split_idx = int(len(df) * 0.8)
+    df_trn = df.iloc[:split_idx]
+    df_val = df.iloc[split_idx:]
+
+    df_trn.to_parquet(tgt_data_path / "part.000000-trn.parquet")
+    df_val.to_parquet(tgt_data_path / "part.000000-val.parquet")
     write_json(keys, tgt_meta_path / "keys.json")
     write_json(encoding_types, tgt_meta_path / "encoding-types.json")
 

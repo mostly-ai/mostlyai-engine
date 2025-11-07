@@ -672,7 +672,9 @@ class TabularARGNClassifier(TabularARGN):
             X_df = X_df.drop(columns=[self._target_column])
 
         # Create a sampler to generate predictions
-        sampler = TabularARGNSampler(self._base_argn, **kwargs)
+        # Use self._base_argn if available, otherwise use self (since classifier IS a TabularARGN)
+        base_model = self._base_argn if self._base_argn is not None else self
+        sampler = TabularARGNSampler(base_model, **kwargs)
 
         # Generate predictions across multiple draws
         all_predictions = []
@@ -716,7 +718,9 @@ class TabularARGNClassifier(TabularARGN):
             X_df = X_df.drop(columns=[self._target_column])
 
         # Create a sampler to generate predictions
-        sampler = TabularARGNSampler(self._base_argn, **kwargs)
+        # Use self._base_argn if available, otherwise use self (since classifier IS a TabularARGN)
+        base_model = self._base_argn if self._base_argn is not None else self
+        sampler = TabularARGNSampler(base_model, **kwargs)
 
         # Generate predictions across multiple draws
         all_predictions = []
@@ -875,7 +879,9 @@ class TabularARGNRegressor(TabularARGN):
             X_df = X_df.drop(columns=[self._target_column])
 
         # Create a sampler to generate predictions
-        sampler = TabularARGNSampler(self._base_argn, **kwargs)
+        # Use self._base_argn if available, otherwise use self (since regressor IS a TabularARGN)
+        base_model = self._base_argn if self._base_argn is not None else self
+        sampler = TabularARGNSampler(base_model, **kwargs)
 
         # Generate predictions across multiple draws
         all_predictions = []
@@ -1007,7 +1013,9 @@ class TabularARGNImputer(TabularARGN):
         imputation_config = ImputationConfig(columns=X_df.columns.tolist())
 
         # Create a sampler with imputation config
-        sampler = TabularARGNSampler(self._base_argn, imputation=imputation_config, **kwargs)
+        # Use self._base_argn if available, otherwise use self (since imputer IS a TabularARGN)
+        base_model = self._base_argn if self._base_argn is not None else self
+        sampler = TabularARGNSampler(base_model, imputation=imputation_config, **kwargs)
 
         # Generate imputed data
         X_imputed = sampler.sample(n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df)

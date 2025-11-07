@@ -193,9 +193,9 @@ def test_tabular_argn_parameters_stored():
 
 
 def test_tabular_argn_not_fitted_error():
-    """Test that appropriate error is raised when using unfitted model."""
-    model = TabularARGN()
-    sampler = TabularARGNSampler(model)
+    """Test that appropriate error is raised when using unfitted sampler."""
+    # Create a sampler without a fitted model
+    sampler = TabularARGNSampler()
 
     with pytest.raises(ValueError, match="must be fitted"):
         sampler.sample(n_samples=10)
@@ -379,13 +379,9 @@ def test_language_model_basic():
 
 
 def test_language_model_not_fitted_error():
-    """Test that appropriate error is raised when using unfitted model."""
-    model = LanguageModel(
-        tgt_encoding_types={
-            "text": "LANGUAGE_TEXT",
-        }
-    )
-    sampler = LanguageSampler(model)
+    """Test that appropriate error is raised when using unfitted sampler."""
+    # Create a sampler without a fitted model
+    sampler = LanguageSampler()
 
     with pytest.raises(ValueError, match="must be fitted"):
         sampler.sample(n_samples=10)

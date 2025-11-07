@@ -81,7 +81,7 @@ from mostlyai.engine import TabularARGN
 
 # load original data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
-data = pd.read_csv(f"{url}/census.csv.gz")
+data = pd.read_csv(f"{url}/census.csv.gz").head(10_000)
 trn_data, val_data = train_test_split(data, test_size=0.1, random_state=42)
 
 # fit the model
@@ -127,7 +127,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from mostlyai.engine import TabularARGNClassifier
 
 # create classifier from trained model
-clf = TabularARGNClassifier(argn, target="income", n_draws=100)
+clf = TabularARGNClassifier(argn, target="income", n_draws=10)
 
 # sample predictions
 preds = clf.predict(val_data)
@@ -148,7 +148,7 @@ from sklearn.metrics import mean_absolute_error
 from mostlyai.engine import TabularARGNRegressor
 
 # create regressor from trained model
-reg = TabularARGNRegressor(argn, target="age", n_draws=100)
+reg = TabularARGNRegressor(argn, target="age", n_draws=10)
 
 # sample predictions
 preds = reg.predict(val_data)
