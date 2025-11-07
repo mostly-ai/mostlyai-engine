@@ -13,12 +13,8 @@
 # limitations under the License.
 import warnings
 
-from mostlyai.engine.analysis import analyze
-from mostlyai.engine.encoding import encode
-from mostlyai.engine.generation import generate
-from mostlyai.engine.interface import (
-    LanguageModel,
-    LanguageSampler,
+from mostlyai.engine._language.interface import LanguageModel, LanguageSampler
+from mostlyai.engine._tabular.interface import (
     TabularARGN,
     TabularARGNClassifier,
     TabularARGNDensity,
@@ -26,6 +22,9 @@ from mostlyai.engine.interface import (
     TabularARGNRegressor,
     TabularARGNSampler,
 )
+from mostlyai.engine.analysis import analyze
+from mostlyai.engine.encoding import encode
+from mostlyai.engine.generation import generate
 from mostlyai.engine.log_prob import log_prob
 from mostlyai.engine.logging import init_logging
 from mostlyai.engine.random_state import set_random_state

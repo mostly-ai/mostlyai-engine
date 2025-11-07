@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Scikit-learn compatible interface for MOSTLY AI models.
+Scikit-learn compatible interface for MOSTLY AI tabular models.
 
 This module provides sklearn-compatible estimators that wrap the MOSTLY AI engine
 for sampling, classification, regression, imputation, and density estimation tasks.
@@ -23,7 +23,6 @@ import logging
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,7 +30,7 @@ import torch
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score, r2_score
 
-from mostlyai.engine._workspace import Workspace
+from mostlyai.engine._common import ensure_dataframe, load_generated_data
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
@@ -48,33 +47,6 @@ from mostlyai.engine.splitting import split
 from mostlyai.engine.training import train
 
 _LOG = logging.getLogger(__name__)
-
-
-def _ensure_dataframe(X: Any, columns: list[str] | None = None) -> pd.DataFrame:
-    """Convert array-like to DataFrame with column names."""
-    if isinstance(X, pd.DataFrame):
-        return X
-    elif isinstance(X, np.ndarray):
-        if columns is None:
-            columns = [f"col_{i}" for i in range(X.shape[1])]
-        return pd.DataFrame(X, columns=columns)
-    elif hasattr(X, "__array__"):
-        arr = np.asarray(X)
-        if columns is None:
-            columns = [f"col_{i}" for i in range(arr.shape[1])]
-        return pd.DataFrame(arr, columns=columns)
-    else:
-        raise ValueError(f"Unsupported data type: {type(X)}")
-
-
-def _load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
-    """Load generated parquet files from SyntheticData directory."""
-    workspace = Workspace(workspace_dir)
-    generated_files = workspace.generated_data.fetch_all()
-    if not generated_files:
-        raise ValueError(f"No generated data found in {workspace_dir}/SyntheticData")
-    dfs = [pd.read_parquet(f) for f in generated_files]
-    return pd.concat(dfs, ignore_index=True)
 
 
 class TabularARGN(BaseEstimator):
@@ -203,7 +175,7 @@ class TabularARGN(BaseEstimator):
         self._set_random_state()
 
         # Convert to DataFrame
-        X_df = _ensure_dataframe(X)
+        X_df = ensure_dataframe(X)
         self._feature_names = list(X_df.columns)
 
         # Add target column if provided
@@ -232,7 +204,7 @@ class TabularARGN(BaseEstimator):
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
         if self.ctx_data is not None:
-            ctx_data_df = _ensure_dataframe(self.ctx_data)
+            ctx_data_df = ensure_dataframe(self.ctx_data)
 
         # Split data
         split(
@@ -425,7 +397,7 @@ class TabularARGNSampler(BaseEstimator):
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
         if ctx_data is not None:
-            ctx_data_df = _ensure_dataframe(ctx_data)
+            ctx_data_df = ensure_dataframe(ctx_data)
 
             # Infer n_samples from ctx_data if it was explicitly provided and n_samples not specified
             if ctx_data_explicit and n_samples is None:
@@ -458,7 +430,7 @@ class TabularARGNSampler(BaseEstimator):
         )
 
         # Load and return synthetic data
-        synthetic_data = _load_generated_data(workspace_dir)
+        synthetic_data = load_generated_data(workspace_dir)
 
         return synthetic_data
 
@@ -562,12 +534,12 @@ class TabularARGNDensity(BaseEstimator):
         """
         from mostlyai.engine.log_prob import log_prob
 
-        X_df = _ensure_dataframe(X, columns=self._base_argn._feature_names)
+        X_df = ensure_dataframe(X, columns=self._base_argn._feature_names)
 
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
         if ctx_data is not None:
-            ctx_data_df = _ensure_dataframe(ctx_data)
+            ctx_data_df = ensure_dataframe(ctx_data)
 
         workspace_dir = self._base_argn._get_workspace_dir()
 
@@ -693,7 +665,7 @@ class TabularARGNClassifier(TabularARGN):
 
             agg_fn = mode_fn
 
-        X_df = _ensure_dataframe(X, columns=self._feature_names)
+        X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
         if self._target_column in X_df.columns:
@@ -737,7 +709,7 @@ class TabularARGNClassifier(TabularARGN):
         if self._target_column is None:
             raise ValueError("Target column must be specified for prediction.")
 
-        X_df = _ensure_dataframe(X, columns=self._feature_names)
+        X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
         if self._target_column in X_df.columns:
@@ -896,7 +868,7 @@ class TabularARGNRegressor(TabularARGN):
         if agg_fn is None:
             agg_fn = np.mean
 
-        X_df = _ensure_dataframe(X, columns=self._feature_names)
+        X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
         if self._target_column in X_df.columns:
@@ -1020,7 +992,7 @@ class TabularARGNImputer(TabularARGN):
         if not self._fitted:
             raise ValueError("Imputer must be fitted before transform. Call fit() first.")
 
-        X_df = _ensure_dataframe(X, columns=self._feature_names)
+        X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Use ctx_data from training if not provided
         if ctx_data is None:
@@ -1029,7 +1001,7 @@ class TabularARGNImputer(TabularARGN):
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
         if ctx_data is not None:
-            ctx_data_df = _ensure_dataframe(ctx_data)
+            ctx_data_df = ensure_dataframe(ctx_data)
 
         # Use imputation config to specify which columns to impute
         imputation_config = ImputationConfig(columns=X_df.columns.tolist())
@@ -1056,349 +1028,3 @@ class TabularARGNImputer(TabularARGN):
         """
         self.fit(X, y)
         return self.transform(X, **kwargs)
-
-
-class LanguageModel(BaseEstimator):
-    """
-    Language model with sklearn interface for text data generation.
-
-    This class wraps the MOSTLY AI engine to provide a scikit-learn compatible
-    interface for training language models on text data and generating synthetic samples.
-
-    Args:
-        tgt_encoding_types: Dictionary mapping column names to encoding types.
-            Example: {'category': 'LANGUAGE_CATEGORICAL', 'headline': 'LANGUAGE_TEXT'}
-        model: The identifier of the language model to train. Defaults to MOSTLY_AI/LSTMFromScratch-3m.
-        max_training_time: Maximum training time in minutes. Defaults to 14400 (10 days).
-        max_epochs: Maximum number of training epochs. Defaults to 100.
-        batch_size: Per-device batch size for training and validation. If None, determined automatically.
-        gradient_accumulation_steps: Number of steps to accumulate gradients. If None, determined automatically.
-        enable_flexible_generation: Whether to enable flexible order generation. Defaults to True.
-        value_protection: Whether to enable value protection for rare values. Defaults to True.
-        differential_privacy: Configuration for differential privacy training. If None, DP is disabled.
-        tgt_context_key: Context key column name in the target data for sequential models.
-        tgt_primary_key: Primary key column name in the target data.
-        ctx_data: DataFrame containing the context data for two-table sequential models.
-        ctx_primary_key: Primary key column name in the context data.
-        ctx_encoding_types: Dictionary mapping context column names to encoding types.
-        device: Device to run training on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        workspace_dir: Directory path for workspace. If None, a temporary directory will be created.
-        random_state: Random seed for reproducibility.
-        verbose: Verbosity level. 0 = silent, 1 = progress messages.
-    """
-
-    def __init__(
-        self,
-        tgt_encoding_types: dict[str, str] | None = None,
-        model: str | None = None,
-        max_training_time: float | None = 14400.0,
-        max_epochs: float | None = 100.0,
-        batch_size: int | None = None,
-        gradient_accumulation_steps: int | None = None,
-        enable_flexible_generation: bool = True,
-        value_protection: bool = True,
-        differential_privacy: DifferentialPrivacyConfig | dict | None = None,
-        tgt_context_key: str | None = None,
-        tgt_primary_key: str | None = None,
-        ctx_data: pd.DataFrame | None = None,
-        ctx_primary_key: str | None = None,
-        ctx_encoding_types: dict[str, str] | None = None,
-        device: torch.device | str | None = None,
-        workspace_dir: str | Path | None = None,
-        random_state: int | None = None,
-        verbose: int = 0,
-    ):
-        self.tgt_encoding_types = tgt_encoding_types
-        self.model = model
-        self.max_training_time = max_training_time
-        self.max_epochs = max_epochs
-        self.batch_size = batch_size
-        self.gradient_accumulation_steps = gradient_accumulation_steps
-        self.enable_flexible_generation = enable_flexible_generation
-        self.value_protection = value_protection
-        self.differential_privacy = differential_privacy
-        self.tgt_context_key = tgt_context_key
-        self.tgt_primary_key = tgt_primary_key
-        self.ctx_data = ctx_data
-        self.ctx_primary_key = ctx_primary_key
-        self.ctx_encoding_types = ctx_encoding_types
-        self.device = device
-        self.workspace_dir = workspace_dir
-        self.random_state = random_state
-        self.verbose = verbose
-
-        self._fitted = False
-        self._temp_dir = None
-        self._workspace_path = None
-        self._feature_names = None
-
-        # Initialize or disable logging based on verbose setting
-        if self.verbose > 0:
-            init_logging()
-        else:
-            disable_logging()
-
-    def _get_workspace_dir(self) -> Path:
-        """Get or create workspace directory."""
-        if self._workspace_path is not None:
-            return self._workspace_path
-
-        if self.workspace_dir is not None:
-            self._workspace_path = Path(self.workspace_dir)
-            return self._workspace_path
-
-        if self._temp_dir is None:
-            self._temp_dir = tempfile.TemporaryDirectory(prefix="mostlyai_language_")
-            self._workspace_path = Path(self._temp_dir.name)
-            self.workspace_dir = str(self._workspace_path)
-
-        return self._workspace_path
-
-    def _set_random_state(self):
-        """Set random state for reproducibility."""
-        if self.random_state is not None:
-            from mostlyai.engine import set_random_state
-
-            set_random_state(self.random_state)
-
-    def fit(self, X):
-        """
-        Fit the LanguageModel on training data.
-
-        This method wraps the MOSTLY AI engine's split(), analyze(), encode(), and train() pipeline
-        for language models.
-
-        Args:
-            X: Training data as pd.DataFrame of shape (n_samples, n_features).
-
-        Returns:
-            self: Returns self.
-        """
-        self._set_random_state()
-
-        # Convert to DataFrame
-        X_df = _ensure_dataframe(X)
-        self._feature_names = list(X_df.columns)
-
-        # Get workspace directory
-        workspace_dir = self._get_workspace_dir()
-
-        # Convert ctx_data to DataFrame if provided
-        ctx_data_df = None
-        if self.ctx_data is not None:
-            ctx_data_df = _ensure_dataframe(self.ctx_data)
-
-        # Split data
-        split(
-            tgt_data=X_df,
-            ctx_data=ctx_data_df,
-            tgt_primary_key=self.tgt_primary_key,
-            ctx_primary_key=self.ctx_primary_key,
-            tgt_context_key=self.tgt_context_key,
-            tgt_encoding_types=self.tgt_encoding_types,
-            ctx_encoding_types=self.ctx_encoding_types,
-            model_type=ModelType.language,
-            workspace_dir=workspace_dir,
-        )
-
-        # Analyze data
-        analyze(
-            value_protection=self.value_protection,
-            differential_privacy=self.differential_privacy,
-            workspace_dir=workspace_dir,
-        )
-
-        # Encode data
-        encode(
-            workspace_dir=workspace_dir,
-        )
-
-        # Train model
-        model_id = self.model or "MOSTLY_AI/LSTMFromScratch-3m"
-        train(
-            model=model_id,
-            max_training_time=self.max_training_time,
-            max_epochs=self.max_epochs,
-            batch_size=self.batch_size,
-            gradient_accumulation_steps=self.gradient_accumulation_steps,
-            enable_flexible_generation=self.enable_flexible_generation,
-            differential_privacy=self.differential_privacy,
-            device=self.device,
-            workspace_dir=workspace_dir,
-        )
-
-        self._fitted = True
-
-        # Add sklearn-compatible fitted attributes
-        self.n_features_in_ = X_df.shape[1]
-        self.feature_names_in_ = np.array(self._feature_names)
-        self.workspace_path_ = str(workspace_dir)
-
-        return self
-
-    def __del__(self):
-        """Clean up temporary directory if created."""
-        if self._temp_dir is not None:
-            try:
-                self._temp_dir.cleanup()
-            except Exception:
-                pass
-
-
-class LanguageSampler(BaseEstimator):
-    """
-    Sampler for generating synthetic text data from a fitted LanguageModel.
-
-    This class provides a scikit-learn compatible interface for synthetic text generation
-    with sampling parameters configured at initialization.
-
-    Args:
-        X: A fitted LanguageModel instance or training data to fit a new model.
-        batch_size: Batch size for generation. If None, determined automatically.
-        sampling_temperature: Sampling temperature. Higher values increase randomness. Defaults to 1.0.
-        sampling_top_p: Nucleus sampling probability threshold. Defaults to 1.0.
-        device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        rare_category_replacement_method: Method for handling rare categories.
-        **kwargs: Additional arguments passed to LanguageModel if X is not a fitted model.
-    """
-
-    def __init__(
-        self,
-        X=None,
-        batch_size: int | None = None,
-        sampling_temperature: float = 1.0,
-        sampling_top_p: float = 1.0,
-        device: str | None = None,
-        rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
-        **kwargs,
-    ):
-        # Store all parameters for sklearn compatibility
-        self.X = X
-        self.batch_size = batch_size
-        self.sampling_temperature = sampling_temperature
-        self.sampling_top_p = sampling_top_p
-        self.device = device
-        self.rare_category_replacement_method = rare_category_replacement_method
-
-        # Internal attributes
-        self._base_lm = None
-        self._fitted = False
-        self._X_init = X
-        self._kwargs = kwargs
-
-        # If X is a fitted LanguageModel, use it as base
-        if isinstance(X, LanguageModel):
-            if not X._fitted:
-                raise ValueError("Provided LanguageModel instance must be fitted")
-            self._base_lm = X
-            self._fitted = True
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the sampler.
-
-        If X was provided during initialization and is a fitted LanguageModel, this is a no-op.
-        Otherwise, trains a new LanguageModel.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Not used, present for API consistency.
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_lm is not None:
-            # Already fitted via base LanguageModel
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Create and fit a new LanguageModel
-        self._base_lm = LanguageModel(**self._kwargs)
-        self._base_lm.fit(X)
-        self._fitted = True
-
-        # Copy sklearn-compatible fitted attributes
-        if hasattr(self._base_lm, "n_features_in_"):
-            self.n_features_in_ = self._base_lm.n_features_in_
-        if hasattr(self._base_lm, "feature_names_in_"):
-            self.feature_names_in_ = self._base_lm.feature_names_in_
-
-        return self
-
-    def sample(
-        self,
-        n_samples: int | None = None,
-        seed_data: pd.DataFrame | None = None,
-        ctx_data: pd.DataFrame | None = None,
-    ) -> pd.DataFrame:
-        """
-        Generate synthetic samples from the fitted model.
-
-        Args:
-            n_samples: Number of samples to generate. If None and ctx_data is provided, infers from ctx_data length.
-                      If None and no ctx_data, defaults to 1.
-            seed_data: Seed data to condition generation on fixed columns.
-            ctx_data: Context data for generation. If None, uses the context data from training.
-
-        Returns:
-            Generated synthetic samples as pd.DataFrame.
-        """
-        if not self._fitted:
-            raise ValueError("Sampler must be fitted before sampling. Call fit() first.")
-
-        workspace_dir = self._base_lm._get_workspace_dir()
-
-        # Determine if ctx_data was explicitly provided
-        ctx_data_explicit = ctx_data is not None
-
-        # Use ctx_data from training if not provided
-        if ctx_data is None:
-            ctx_data = self._base_lm.ctx_data
-
-        # Convert ctx_data to DataFrame if provided
-        ctx_data_df = None
-        if ctx_data is not None:
-            ctx_data_df = _ensure_dataframe(ctx_data)
-
-            # Infer n_samples from ctx_data if it was explicitly provided and n_samples not specified
-            if ctx_data_explicit and n_samples is None:
-                n_samples = len(ctx_data_df)
-
-            # For sequential models: if ctx_data was not explicitly provided and n_samples is specified,
-            # take a random sample of the training ctx_data
-            if not ctx_data_explicit and n_samples is not None and self._base_lm.tgt_context_key is not None:
-                if len(ctx_data_df) > n_samples:
-                    ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self._base_lm.random_state)
-
-        # Default n_samples to 1 if still None and no seed_data
-        if n_samples is None and seed_data is None:
-            n_samples = 1
-
-        # Generate synthetic data using configured parameters
-        generate(
-            ctx_data=ctx_data_df,
-            seed_data=seed_data,
-            sample_size=None if seed_data is not None else n_samples,
-            batch_size=self.batch_size,
-            sampling_temperature=self.sampling_temperature,
-            sampling_top_p=self.sampling_top_p,
-            device=self.device,
-            rare_category_replacement_method=self.rare_category_replacement_method,
-            workspace_dir=workspace_dir,
-        )
-
-        # Load and return synthetic data
-        synthetic_data = _load_generated_data(workspace_dir)
-
-        return synthetic_data

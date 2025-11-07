@@ -946,3 +946,32 @@ def impute_from_non_nan_distribution(values: pd.Series, column_stats: dict) -> t
     # NOTE: an alternative will be to use the largest remainder method
     values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
     return values, nan_mask.astype(int)
+
+
+def ensure_dataframe(X: Any, columns: list[str] | None = None) -> pd.DataFrame:
+    """Convert array-like to DataFrame with column names."""
+    if isinstance(X, pd.DataFrame):
+        return X
+    elif isinstance(X, np.ndarray):
+        if columns is None:
+            columns = [f"col_{i}" for i in range(X.shape[1])]
+        return pd.DataFrame(X, columns=columns)
+    elif hasattr(X, "__array__"):
+        arr = np.asarray(X)
+        if columns is None:
+            columns = [f"col_{i}" for i in range(arr.shape[1])]
+        return pd.DataFrame(arr, columns=columns)
+    else:
+        raise ValueError(f"Unsupported data type: {type(X)}")
+
+
+def load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
+    """Load generated parquet files from SyntheticData directory."""
+    from mostlyai.engine._workspace import Workspace
+
+    workspace = Workspace(workspace_dir)
+    generated_files = workspace.generated_data.fetch_all()
+    if not generated_files:
+        raise ValueError(f"No generated data found in {workspace_dir}/SyntheticData")
+    dfs = [pd.read_parquet(f) for f in generated_files]
+    return pd.concat(dfs, ignore_index=True)

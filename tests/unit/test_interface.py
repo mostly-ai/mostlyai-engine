@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine.interface import (
+from mostlyai.engine import (
     LanguageModel,
     LanguageSampler,
     TabularARGN,

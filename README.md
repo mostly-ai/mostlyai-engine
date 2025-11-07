@@ -31,10 +31,16 @@ Create high-fidelity privacy-safe synthetic data:
 
 Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.
 
-Two model classes are available:
+Two models with these classes are available:
 
 1. `TabularARGN`: For structured, flat or sequential tabular data.
+   * `TabularARGNSampler`
+   * `TabularARGNDensity`
+   * `TabularARGNImputer`
+   * `TabularARGNClassifier`
+   * `TabularARGNRegressor`
 2. `LanguageModel`: For semi-structured, flat textual tabular data.
+   * `LanguageModelSampler`
 
 This library serves as the core model engine for the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). For an easy-to-use, higher-level toolkit, please refer to the SDK.
 
