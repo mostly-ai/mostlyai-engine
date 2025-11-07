@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine.sklearn_interface import (
+from mostlyai.engine.interface import (
     LanguageModel,
     TabularARGN,
     TabularARGNClassifier,
