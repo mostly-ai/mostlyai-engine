@@ -22,9 +22,9 @@ Create high-fidelity privacy-safe synthetic data:
     * rebalance categories
     * impute missing values
     * incorporate fairness
-    * predict / classify / regress
-    * assess sample probabilities
     * adjust sampling temperature
+    * predict / classify / regress
+    * detect outliers / anomalies
     * and more
 
 ...all within your own compute environment, all with a few lines of Python code 💥.
