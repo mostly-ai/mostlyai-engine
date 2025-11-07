@@ -965,6 +965,71 @@ def ensure_dataframe(X: Any, columns: list[str] | None = None) -> pd.DataFrame:
         raise ValueError(f"Unsupported data type: {type(X)}")
 
 
+def mode_fn(x: np.ndarray) -> Any:
+    """
+    Calculate the mode (most common value) of an array.
+
+    Handles NaN values by excluding them from the calculation.
+    If all values are NaN, returns np.nan.
+
+    Args:
+        x: Array of values.
+
+    Returns:
+        The most common value in the array, or np.nan if all values are NaN.
+    """
+    # Handle both numeric and categorical data
+    if pd.isna(x).all():
+        return np.nan
+    x_notna = x[~pd.isna(x)]
+    if len(x_notna) == 0:
+        return np.nan
+    values, counts = np.unique(x_notna, return_counts=True)
+    return values[np.argmax(counts)]
+
+
+def mean_fn(x: np.ndarray) -> float:
+    """
+    Calculate the mean (average) of an array.
+
+    Handles NaN values by excluding them from the calculation.
+    If all values are NaN, returns np.nan.
+
+    Args:
+        x: Array of numeric values.
+
+    Returns:
+        The mean of the array, or np.nan if all values are NaN.
+    """
+    if pd.isna(x).all():
+        return np.nan
+    x_notna = x[~pd.isna(x)]
+    if len(x_notna) == 0:
+        return np.nan
+    return float(np.mean(x_notna))
+
+
+def median_fn(x: np.ndarray) -> float:
+    """
+    Calculate the median (middle value) of an array.
+
+    Handles NaN values by excluding them from the calculation.
+    If all values are NaN, returns np.nan.
+
+    Args:
+        x: Array of numeric values.
+
+    Returns:
+        The median of the array, or np.nan if all values are NaN.
+    """
+    if pd.isna(x).all():
+        return np.nan
+    x_notna = x[~pd.isna(x)]
+    if len(x_notna) == 0:
+        return np.nan
+    return float(np.median(x_notna))
+
+
 def load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
     """Load generated parquet files from SyntheticData directory."""
     from mostlyai.engine._workspace import Workspace

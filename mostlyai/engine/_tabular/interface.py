@@ -21,8 +21,8 @@ for sampling, classification, regression, imputation, and density estimation tas
 
 import logging
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -30,7 +30,7 @@ import torch
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score, r2_score
 
-from mostlyai.engine._common import ensure_dataframe, load_generated_data
+from mostlyai.engine._common import ensure_dataframe, load_generated_data, mean_fn, median_fn, mode_fn
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
@@ -561,8 +561,8 @@ class TabularARGNClassifier(TabularARGN):
     Args:
         X: Training data or a fitted TabularARGN instance.
         target: Name of the target column to predict.
-        n_draws: Number of draws to generate for each sample during prediction. Defaults to 10.
-        agg_fn: Aggregation function to combine predictions across draws. Defaults to mode (most common value).
+        n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
+        agg_fn: Aggregation method to combine predictions across draws. Options: "mode" (default), "mean", "median".
         **kwargs: All other arguments are passed to TabularARGN base class.
             See TabularARGN docstring for available parameters.
     """
@@ -571,8 +571,8 @@ class TabularARGNClassifier(TabularARGN):
         self,
         X=None,
         target: str | None = None,
-        n_draws: int = 10,
-        agg_fn: Callable = None,
+        n_draws: int = 1,
+        agg_fn: Literal["mode", "mean", "median"] = "mode",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -656,14 +656,9 @@ class TabularARGNClassifier(TabularARGN):
         if self._target_column is None:
             raise ValueError("Target column must be specified for prediction.")
 
-        agg_fn = self.agg_fn
-        if agg_fn is None:
-            # Default to mode (most common value)
-            def mode_fn(x):
-                values, counts = np.unique(x, return_counts=True)
-                return values[np.argmax(counts)]
-
-            agg_fn = mode_fn
+        # Map aggregation method to function
+        agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
+        agg_fn = agg_fn_map[self.agg_fn]
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
@@ -773,8 +768,8 @@ class TabularARGNRegressor(TabularARGN):
     Args:
         X: Training data or a fitted TabularARGN instance.
         target: Name of the target column to predict.
-        n_draws: Number of draws to generate for each sample during prediction. Defaults to 10.
-        agg_fn: Aggregation function to combine predictions across draws. Defaults to np.mean.
+        n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
+        agg_fn: Aggregation method to combine predictions across draws. Options: "mean" (default), "mode", "median".
         **kwargs: All other arguments are passed to TabularARGN base class.
             See TabularARGN docstring for available parameters.
     """
@@ -783,8 +778,8 @@ class TabularARGNRegressor(TabularARGN):
         self,
         X=None,
         target: str | None = None,
-        n_draws: int = 10,
-        agg_fn: Callable = None,
+        n_draws: int = 1,
+        agg_fn: Literal["mode", "mean", "median"] = "mean",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -868,9 +863,9 @@ class TabularARGNRegressor(TabularARGN):
         if self._target_column is None:
             raise ValueError("Target column must be specified for prediction.")
 
-        agg_fn = self.agg_fn
-        if agg_fn is None:
-            agg_fn = np.mean
+        # Map aggregation method to function
+        agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
+        agg_fn = agg_fn_map[self.agg_fn]
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
@@ -922,6 +917,8 @@ class TabularARGNImputer(TabularARGN):
 
     Args:
         X: Training data or a fitted TabularARGN instance.
+        n_draws: Number of draws to generate for each row during imputation. Defaults to 1.
+        agg_fn: Aggregation method to combine imputed values across draws. Options: "mode" (default), "mean", "median".
         **kwargs: All other arguments are passed to TabularARGN base class.
             See TabularARGN docstring for available parameters.
     """
@@ -929,11 +926,15 @@ class TabularARGNImputer(TabularARGN):
     def __init__(
         self,
         X=None,
+        n_draws: int = 1,
+        agg_fn: Literal["mode", "mean", "median"] = "mode",
         **kwargs,
     ):
         super().__init__(**kwargs)
         # Store parameters as attributes for sklearn compatibility
         self.X = X
+        self.n_draws = n_draws
+        self.agg_fn = agg_fn
 
         # Internal attributes
         self._base_argn = None
@@ -1017,8 +1018,28 @@ class TabularARGNImputer(TabularARGN):
         base_model = self._base_argn if self._base_argn is not None else self
         sampler = TabularARGNSampler(base_model, imputation=imputation_config, **kwargs)
 
-        # Generate imputed data
-        X_imputed = sampler.sample(n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df)
+        # If n_draws == 1, use simple imputation (no aggregation needed)
+        if self.n_draws == 1:
+            X_imputed = sampler.sample(n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df)
+        else:
+            # Generate multiple imputations and aggregate
+            # Map aggregation method to function
+            agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
+            agg_fn = agg_fn_map[self.agg_fn]
+
+            # Generate multiple imputed datasets
+            all_imputations = []
+            for _ in range(self.n_draws):
+                imputed = sampler.sample(n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df)
+                all_imputations.append(imputed)
+
+            # Aggregate across imputations for each column
+            X_imputed = X_df.copy()
+            for col in X_df.columns:
+                # Stack the column values from all imputations
+                col_values = np.column_stack([imp[col].values for imp in all_imputations])
+                # Apply aggregation function row-wise
+                X_imputed[col] = np.apply_along_axis(agg_fn, 1, col_values)
 
         return X_imputed
 
