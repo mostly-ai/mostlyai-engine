@@ -17,10 +17,14 @@ from mostlyai.engine.analysis import analyze
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
 from mostlyai.engine.interface import (
+    LanguageModel,
+    LanguageSampler,
     TabularARGN,
     TabularARGNClassifier,
+    TabularARGNDensity,
     TabularARGNImputer,
     TabularARGNRegressor,
+    TabularARGNSampler,
 )
 from mostlyai.engine.log_prob import log_prob
 from mostlyai.engine.logging import init_logging
@@ -37,10 +41,14 @@ __all__ = [
     "log_prob",
     "init_logging",
     "set_random_state",
+    "LanguageModel",
+    "LanguageSampler",
     "TabularARGN",
     "TabularARGNClassifier",
+    "TabularARGNDensity",
     "TabularARGNRegressor",
     "TabularARGNImputer",
+    "TabularARGNSampler",
 ]
 __version__ = "1.7.0"
 

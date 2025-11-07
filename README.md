@@ -11,7 +11,7 @@
 Create high-fidelity privacy-safe synthetic data:
 
 1. train a generative model once
-    * fit to flat or sequential data
+    * fit flat or sequential data
     * control training time & parameters
     * monitor training progress
     * optionally enable differential privacy
@@ -29,12 +29,14 @@ Create high-fidelity privacy-safe synthetic data:
 
 ...all within your own compute environment, all with a few lines of Python code 💥.
 
-Two model classes are provided:
+Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.
 
-1. **TabularARGN**: For structured, flat or sequential, tabular data.
-2. **LanguageModel**: For semi-structured flat textual tabular data.
+Two model classes are available:
 
-Note: This library is the underlying model engine of the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). Please refer to the latter, for an easy-to-use, higher-level software toolkit.
+1. `TabularARGN`: For structured, flat or sequential tabular data.
+2. `LanguageModel`: For semi-structured, flat textual tabular data.
+
+This library serves as the core model engine for the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). For an easy-to-use, higher-level toolkit, please refer to the SDK.
 
 
 ## Installation
@@ -62,8 +64,6 @@ uv pip install -U torch==2.8.0+cpu torchvision==0.23.0+cpu mostlyai-engine --ext
 
 The `TabularARGN` class provides a scikit-learn-compatible interface for working with structured tabular data. It can be used for synthetic data generation, classification, regression, density estimation, and imputation.
 
-**Key advantage**: Train the model once, then flexibly reuse it for any downstream task—whether that's regression, classification, imputation, or conditional sampling—without needing to retrain.
-
 ### Flat Tables
 
 Load your data and train the model:
@@ -85,15 +85,32 @@ argn.fit(trn_data)
 
 #### Synthetic Data Generation
 
-Generate new synthetic samples, either unconditionally or conditionally:
+Use the trained model to generate new synthetic samples:
+
+```python
+from mostlyai.engine import TabularARGNSampler
+
+# create sampler from trained model
+sampler = TabularARGNSampler(argn, sampling_temperature=1.0)
+```
+
+Generate new (representative) synthetic samples:
 
 ```python
 # unconditional sampling
-syn_data = argn.sample(n_samples=1000)
-
-# conditional sampling with seed values
-syn_data = argn.sample(seed=pd.DataFrame({"age": [25, 50], "education": ["Bachelors", "HS-grad"]}))
+sampler.sample(n_samples=1000)
 ```
+
+Generate new synthetic samples conditionally:
+
+```python
+# conditional sampling with seed values
+sampler.sample(seed_data=pd.DataFrame({
+    "age": [25, 50],
+    "education": ["Bachelors", "HS-grad"]
+}))
+```
+
 
 #### Classification
 
@@ -103,10 +120,14 @@ Use the trained model for classification tasks:
 from sklearn.metrics import accuracy_score, roc_auc_score
 from mostlyai.engine import TabularARGNClassifier
 
+# create classifier from trained model
 clf = TabularARGNClassifier(argn, target="income", n_draws=100)
+
+# sample predictions
 preds = clf.predict(val_data)
 probs = clf.predict_proba(val_data)
 
+# evaluate performance
 accuracy = accuracy_score(val_data["income"], preds)
 auc = roc_auc_score(val_data["income"], probs[:, 1])
 print(f"Accuracy: {accuracy:.3f}, AUC: {auc:.3f}")
@@ -120,9 +141,13 @@ Use the trained model for regression tasks:
 from sklearn.metrics import mean_absolute_error
 from mostlyai.engine import TabularARGNRegressor
 
+# create regressor from trained model
 reg = TabularARGNRegressor(argn, target="age", n_draws=100)
+
+# sample predictions
 preds = reg.predict(val_data)
 
+# evaluate performance
 mae = mean_absolute_error(val_data["age"], preds)
 print(f"MAE: {mae:.1f} years")
 ```
@@ -132,9 +157,17 @@ print(f"MAE: {mae:.1f} years")
 Compute log probabilities to detect outliers:
 
 ```python
-log_probs = argn.log_prob(data)
+from mostlyai.engine import TabularARGNDensity
+
+# create classifier from trained model
+density = TabularARGNDensity(argn)
+
+# calculate log likelihood
+log_probs = density.score_samples(data)
+
+# determine biggest outlier
 idx_outlier = log_probs.argmin()
-most_unusual = data.iloc[idx_outlier]
+data.iloc[idx_outlier]
 ```
 
 #### Imputation
@@ -144,11 +177,13 @@ Fill in missing values using the trained model:
 ```python
 from mostlyai.engine import TabularARGNImputer
 
-# with pre-trained model
+# create imputer from trained model
 imputer = TabularARGNImputer(argn)
+
+# sample imputed data
 imputed_data = imputer.transform(data_with_missings)
 
-# or fit and impute in one go
+# OR: fit and impute in one go
 imputer = TabularARGNImputer(max_training_time=1)
 imputed_data = imputer.fit_transform(data_with_missings)
 ```
@@ -159,26 +194,31 @@ For sequential data (e.g., time series or event logs), specify the context key:
 
 ```python
 import pandas as pd
-from mostlyai.engine import TabularARGN
+from mostlyai.engine import TabularARGN, TabularARGNSampler
 
 # load sequential data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
 trn_df = pd.read_csv(f"{url}/batting.csv.gz")
 
-# fit model with context key
-argn = TabularARGN(tgt_context_key="players_id", max_training_time=1, random_state=42)
+# train model with context key
+argn = TabularARGN(
+    tgt_context_key="players_id",
+    max_training_time=1,
+    random_state=42,
+)
 argn.fit(trn_df)
+```
 
-# generate synthetic sequences
-syn_df = argn.sample(n_samples=100)
-
-# compute log probabilities for sequences
-log_probs = argn.log_prob(trn_df.head(100))
+Use the trained model to generate new samples:
+```python
+# unconditional sampling
+sampler = TabularARGNSampler(argn)
+sampler.sample(n_samples=100)
 ```
 
 ## Basic Usage of LanguageModel
 
-The `LanguageModel` class provides a scikit-learn-compatible interface for working with text data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.
+The `LanguageModel` class provides a scikit-learn-compatible interface for working with semi-structured textual data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.
 
 ### Text Data
 
@@ -194,6 +234,7 @@ trn_df = trn_df.sample(n=10_000, random_state=42)
 
 # fit the model
 lm = LanguageModel(
+    model="MOSTLY_AI/LSTMFromScratch-3m",
     tgt_encoding_types={
         'category': 'LANGUAGE_CATEGORICAL',
         'date': 'LANGUAGE_DATETIME',
@@ -207,14 +248,25 @@ lm.fit(trn_df)
 
 #### Synthetic Text Generation
 
+Generate new synthetic samples using the trained language model:
+
+```python
+from mostlyai.engine import LanguageSampler
+
+# create sampler from trained model
+sampler = LanguageSampler(lm, sampling_temperature=0.5)
+```
+
 Generate new synthetic samples:
 
 ```python
 # unconditional sampling
-syn_data = lm.sample(n_samples=100)
-
-# conditional sampling with seed values
-syn_data = lm.sample(seed_data=pd.DataFrame({"category": ["business", "tech"]}))
+sampler.sample(n_samples=100)
 ```
 
-**Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting `model="microsoft/phi-1.5"` (GPU required).
+```python
+# conditional sampling with seed values
+syn_data = sampler.sample(seed_data=pd.DataFrame({"category": ["business", "tech"]}))
+```
+
+**Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting e.g. `model="microsoft/phi-1.5"` (GPU required).

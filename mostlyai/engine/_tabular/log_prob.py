@@ -13,22 +13,12 @@
 # limitations under the License.
 
 import logging
-from itertools import zip_longest
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 
-from mostlyai.engine._common import (
-    CTXFLT,
-    CTXSEQ,
-    RIDX_SUB_COLUMN_PREFIX,
-    SDEC_SUB_COLUMN_PREFIX,
-    SIDX_SUB_COLUMN_PREFIX,
-    SLEN_SUB_COLUMN_PREFIX,
-    encode_positional_column,
-)
 from mostlyai.engine._tabular.common import load_model
 from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.training import _calculate_sample_losses
@@ -44,14 +34,12 @@ def log_prob(
     workspace_dir: str | Path = "engine-ws",
 ) -> np.ndarray:
     """
-    Compute log-probability (log-likelihood) of samples under the trained tabular model.
+    Compute log-probability (log-likelihood) of samples under the trained flat tabular model.
 
     Args:
         tgt_data: Target data samples to score.
-        ctx_data: Optional context data for models trained with context. If the model was trained with
-            context data, this should be provided with the same structure. For flat models, must have
-            the same number of rows as tgt_data. For sequential models, should contain the context
-            records that link to tgt_data via the context key.
+        ctx_data: Optional context data for models trained with context. Must have
+            the same number of rows as tgt_data.
         device: Device to run computation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
         workspace_dir: Directory path for workspace containing trained model.
 
@@ -60,7 +48,9 @@ def log_prob(
         More positive values indicate higher likelihood under the model.
 
     Raises:
-        ValueError: If model has not been trained yet, or if ctx_data is provided when model has no context.
+        ValueError: If model has not been trained yet, if model is sequential,
+            if ctx_data is provided when model has no context, or if ctx_data
+            has different number of rows than tgt_data.
     """
     _LOG.info("LOG_PROB_TABULAR started")
 
@@ -83,8 +73,13 @@ def log_prob(
     ctx_stats = metadata["ctx_stats"]
     ctx_cardinalities = metadata["ctx_cardinalities"]
     is_sequential = metadata["is_sequential"]
-    seq_len_stats = metadata["seq_len_stats"]
     has_context = metadata["has_context"]
+
+    # Check if model is sequential and raise error
+    if is_sequential:
+        raise ValueError(
+            "This log_prob function only supports flat models. The loaded model is sequential, which is not supported."
+        )
 
     # Validate ctx_data usage
     if ctx_data is not None and not has_context:
@@ -102,75 +97,10 @@ def log_prob(
         )
 
     # Get keys
-    tgt_context_key = tgt_stats.get("keys", {}).get("context_key")
     ctx_primary_key = ctx_stats.get("keys", {}).get("primary_key")
 
-    # Get positional column flags for sequential models
-    has_slen = metadata.get("has_slen")
-    has_ridx = metadata.get("has_ridx")
-    has_sdec = metadata.get("has_sdec")
-
-    # For sequential target data, group by context key to create sequences
-    if is_sequential and tgt_context_key and tgt_context_key in tgt_data.columns:
-        # Group by context key and aggregate each column into lists
-        tgt_data_grouped = tgt_data.groupby(tgt_context_key, sort=False).agg(list).reset_index()
-        tgt_data_to_encode = tgt_data_grouped
-    else:
-        tgt_data_to_encode = tgt_data
-
     # Encode target data
-    tgt_data_encoded, _, tgt_context_key_encoded = encode_df(
-        df=tgt_data_to_encode, stats=tgt_stats, tgt_context_key=tgt_context_key
-    )
-
-    # For sequential target data, add positional columns (SIDX, SLEN, RIDX, SDEC)
-    if is_sequential:
-        # Get sequence lengths for each record (look at first data column to determine length)
-        first_data_col = [col for col in tgt_data_encoded.columns if col != tgt_context_key_encoded][0]
-        seq_lengths = tgt_data_encoded[first_data_col].apply(
-            lambda x: len(x) if isinstance(x, (list, np.ndarray)) else 1
-        )
-        seq_len_max = seq_len_stats["max"]
-
-        # Generate SIDX (sequence index): [0, 1, 2, ..., seq_len-1]
-        sidx_lists = []
-        for seq_len in seq_lengths:
-            sidx_encoded = encode_positional_column(
-                pd.Series(range(seq_len)), max_seq_len=seq_len_max, prefix=SIDX_SUB_COLUMN_PREFIX
-            )
-            sidx_lists.append({col: sidx_encoded[col].tolist() for col in sidx_encoded.columns})
-        for col in sidx_lists[0].keys():
-            tgt_data_encoded[col] = [sidx[col] for sidx in sidx_lists]
-
-        # Generate SLEN (sequence length): [seq_len-1, seq_len-1, ..., seq_len-1]
-        # Note: SLEN is the last valid index (0-based), so it's seq_len - 1
-        if has_slen:
-            slen_lists = []
-            for seq_len in seq_lengths:
-                slen_encoded = encode_positional_column(
-                    pd.Series([seq_len - 1] * seq_len), max_seq_len=seq_len_max, prefix=SLEN_SUB_COLUMN_PREFIX
-                )
-                slen_lists.append({col: slen_encoded[col].tolist() for col in slen_encoded.columns})
-            for col in slen_lists[0].keys():
-                tgt_data_encoded[col] = [slen[col] for slen in slen_lists]
-
-        # Generate RIDX (reverse index): [seq_len-1, seq_len-2, ..., 1, 0]
-        if has_ridx:
-            ridx_lists = []
-            for seq_len in seq_lengths:
-                ridx_encoded = encode_positional_column(
-                    pd.Series(range(seq_len - 1, -1, -1)), max_seq_len=seq_len_max, prefix=RIDX_SUB_COLUMN_PREFIX
-                )
-                ridx_lists.append({col: ridx_encoded[col].tolist() for col in ridx_encoded.columns})
-            for col in ridx_lists[0].keys():
-                tgt_data_encoded[col] = [ridx[col] for ridx in ridx_lists]
-
-        # Generate SDEC (sequence index decile): [0, 0, ..., 9]
-        if has_sdec:
-            sdec_col = f"{SDEC_SUB_COLUMN_PREFIX}cat"
-            tgt_data_encoded[sdec_col] = [
-                [min(9, 10 * i // seq_len) for i in range(seq_len)] for seq_len in seq_lengths
-            ]
+    tgt_data_encoded, _, _ = encode_df(df=tgt_data, stats=tgt_stats, tgt_context_key=None)
 
     # Encode context data if provided
     if ctx_data is not None:
@@ -182,47 +112,24 @@ def log_prob(
         ctx_primary_key_encoded = None
 
     # Validate alignment between tgt_data and ctx_data
-    if ctx_data is not None:
-        if not is_sequential and len(tgt_data_encoded) != len(ctx_data_encoded):
-            raise ValueError(
-                f"For flat models, tgt_data and ctx_data must have the same number of rows. "
-                f"Got {len(tgt_data_encoded)} target rows and {len(ctx_data_encoded)} context rows."
-            )
-        if is_sequential and tgt_context_key and ctx_primary_key:
-            # Check that all tgt_context_keys exist in ctx_primary_keys
-            tgt_keys = set(tgt_data[tgt_context_key].unique()) if tgt_context_key in tgt_data.columns else set()
-            ctx_keys = set(ctx_data[ctx_primary_key].unique()) if ctx_primary_key in ctx_data.columns else set()
-            missing_keys = tgt_keys - ctx_keys
-            if missing_keys:
-                raise ValueError(
-                    f"Target data references context keys that are not present in ctx_data: "
-                    f"{list(missing_keys)[:5]}{'...' if len(missing_keys) > 5 else ''}"
-                )
+    if ctx_data is not None and len(tgt_data_encoded) != len(ctx_data_encoded):
+        raise ValueError(
+            f"tgt_data and ctx_data must have the same number of rows. "
+            f"Got {len(tgt_data_encoded)} target rows and {len(ctx_data_encoded)} context rows."
+        )
 
     # Convert to tensors and move to device
     data_dict = {}
 
-    # Filter out key columns from target data
-    tgt_data_cols = [col for col in tgt_data_encoded.columns if col != tgt_context_key_encoded]
-
     # Process target columns
-    for col in tgt_data_cols:
+    for col in tgt_data_encoded.columns:
         values = tgt_data_encoded[col].values
-        # Check if values are lists (sequential data) by looking at the first non-null value
-        if len(values) > 0 and isinstance(values[0], (list, np.ndarray)):
-            # Sequential target data - pad to longest sequence in batch
-            tensor = torch.tensor(
-                np.array(list(zip_longest(*values, fillvalue=0))).T,
-                dtype=torch.int64,
-                device=device,
-            ).unsqueeze(-1)
+        # Flat target data
+        if values.dtype == object:
+            values = pd.to_numeric(values, errors="coerce").fillna(0).astype(np.int64)
         else:
-            # Flat target data or scalar values
-            if values.dtype == object:
-                values = pd.to_numeric(values, errors="coerce").fillna(0).astype(np.int64)
-            else:
-                values = values.astype(np.int64)
-            tensor = torch.from_numpy(values).to(device).unsqueeze(-1)
+            values = values.astype(np.int64)
+        tensor = torch.from_numpy(values).to(device).unsqueeze(-1)
         data_dict[col] = tensor
 
     # Process context columns if they exist
@@ -232,27 +139,12 @@ def log_prob(
 
         for col in ctx_data_cols:
             values = ctx_data_encoded[col].values
-            if col.startswith(CTXSEQ):
-                # Sequential context columns - convert to nested tensor
-                tensor = torch.nested.as_nested_tensor(
-                    [torch.tensor(row, dtype=torch.int64, device=device) for row in values],
-                    dtype=torch.int64,
-                    device=device,
-                ).unsqueeze(-1)
-            elif col.startswith(CTXFLT):
-                # Flat context columns
-                if values.dtype == object:
-                    values = pd.to_numeric(values, errors="coerce").fillna(0).astype(np.int64)
-                else:
-                    values = values.astype(np.int64)
-                tensor = torch.from_numpy(values).to(device).unsqueeze(-1)
+            # Flat context columns
+            if values.dtype == object:
+                values = pd.to_numeric(values, errors="coerce").fillna(0).astype(np.int64)
             else:
-                # Handle any other columns (shouldn't happen, but be defensive)
-                if values.dtype == object:
-                    values = pd.to_numeric(values, errors="coerce").fillna(0).astype(np.int64)
-                else:
-                    values = values.astype(np.int64)
-                tensor = torch.from_numpy(values).to(device).unsqueeze(-1)
+                values = values.astype(np.int64)
+            tensor = torch.from_numpy(values).to(device).unsqueeze(-1)
             data_dict[col] = tensor
 
     # Calculate sample losses (negative log-likelihood)
