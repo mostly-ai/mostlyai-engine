@@ -89,8 +89,10 @@ class TabularARGN(BaseEstimator):
         differential_privacy: Configuration for differential privacy training. If None, DP is disabled.
         tgt_context_key: Context key column name in the target data for sequential models.
         tgt_primary_key: Primary key column name in the target data.
+        tgt_encoding_types: Dictionary mapping target column names to encoding types. If None, types are inferred.
         ctx_data: DataFrame containing the context data for two-table sequential models.
         ctx_primary_key: Primary key column name in the context data.
+        ctx_encoding_types: Dictionary mapping context column names to encoding types. If None, types are inferred.
         device: Device to run training on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
         workspace_dir: Directory path for workspace. If None, a temporary directory will be created.
         random_state: Random seed for reproducibility.
@@ -110,8 +112,10 @@ class TabularARGN(BaseEstimator):
         differential_privacy: DifferentialPrivacyConfig | dict | None = None,
         tgt_context_key: str | None = None,
         tgt_primary_key: str | None = None,
+        tgt_encoding_types: dict[str, str] | None = None,
         ctx_data: pd.DataFrame | None = None,
         ctx_primary_key: str | None = None,
+        ctx_encoding_types: dict[str, str] | None = None,
         device: torch.device | str | None = None,
         workspace_dir: str | Path | None = None,
         random_state: int | None = None,
@@ -128,8 +132,10 @@ class TabularARGN(BaseEstimator):
         self.differential_privacy = differential_privacy
         self.tgt_context_key = tgt_context_key
         self.tgt_primary_key = tgt_primary_key
+        self.tgt_encoding_types = tgt_encoding_types
         self.ctx_data = ctx_data
         self.ctx_primary_key = ctx_primary_key
+        self.ctx_encoding_types = ctx_encoding_types
         self.device = device
         self.workspace_dir = workspace_dir
         self.random_state = random_state
@@ -232,6 +238,8 @@ class TabularARGN(BaseEstimator):
             tgt_primary_key=self.tgt_primary_key,
             ctx_primary_key=self.ctx_primary_key,
             tgt_context_key=self.tgt_context_key,
+            tgt_encoding_types=self.tgt_encoding_types,
+            ctx_encoding_types=self.ctx_encoding_types,
             model_type=ModelType.tabular,
             workspace_dir=workspace_dir,
         )
