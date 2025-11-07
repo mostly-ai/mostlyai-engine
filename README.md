@@ -10,21 +10,29 @@
 
 Create high-fidelity privacy-safe synthetic data:
 
-1. train a generative model
+1. train a generative model once
     * fit to flat or sequential data
-    * optionally provide context data
     * control training time & parameters
     * monitor training progress
-    * ensure differential privacy
+    * optionally enable differential privacy
+    * optionally provide context data
 2. generate synthetic data samples to your needs:
     * up-sample / down-sample
     * conditionally generate
     * rebalance categories
-    * impute missings
+    * impute missing values
     * incorporate fairness
+    * predict / classify / regress
+    * assess sample probabilities
     * adjust sampling temperature
+    * and more
 
-...all within your safe compute environment, all with a few lines of Python code 💥.
+...all within your own compute environment, all with a few lines of Python code 💥.
+
+Two model classes are provided:
+
+1. **TabularARGN**: For structured, flat or sequential, tabular data.
+2. **LanguageModel**: For semi-structured flat textual tabular data.
 
 Note: This library is the underlying model engine of the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). Please refer to the latter, for an easy-to-use, higher-level software toolkit.
 
@@ -52,7 +60,7 @@ uv pip install -U torch==2.8.0+cpu torchvision==0.23.0+cpu mostlyai-engine --ext
 
 ## Basic Usage of TabularARGN
 
-The `TabularARGN` class provides a scikit-learn-compatible interface for working with tabular data. It can be used for synthetic data generation, classification, regression, density estimation, and imputation.
+The `TabularARGN` class provides a scikit-learn-compatible interface for working with structured tabular data. It can be used for synthetic data generation, classification, regression, density estimation, and imputation.
 
 **Key advantage**: Train the model once, then flexibly reuse it for any downstream task—whether that's regression, classification, imputation, or conditional sampling—without needing to retrain.
 
