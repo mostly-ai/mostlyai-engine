@@ -19,7 +19,7 @@ from mostlyai.engine.generation import generate
 from mostlyai.engine.log_prob import log_prob
 from mostlyai.engine.logging import init_logging
 from mostlyai.engine.random_state import set_random_state
-from mostlyai.engine.sklearn_interface import (
+from mostlyai.engine.models import (
     TabularARGN,
     TabularARGNClassifier,
     TabularARGNImputer,
