@@ -124,7 +124,7 @@ def tgt_only_text_dataset(tmp_path_factory):
 
 def test_tgt_only(tgt_only_text_dataset):
     workspace_dir = tgt_only_text_dataset
-    train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id)
     generate(workspace_dir=workspace_dir, sample_size=10)
 
     syn_data_path = workspace_dir / "SyntheticData"
@@ -145,7 +145,7 @@ def test_tgt_only(tgt_only_text_dataset):
 def test_language_with_context(encoded_text_dataset, model_name):
     workspace_dir = encoded_text_dataset
     ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-    train(workspace_dir=workspace_dir, model=model_name)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name)
     generate(
         workspace_dir=workspace_dir,
         ctx_data=ctx_data,
@@ -182,7 +182,13 @@ def test_language_with_dp(tmp_path, model_name, dp_max_epsilon):
     prepare_encoded_dataset(
         data, workspace_dir, tgt_encoding_types, ctx_encoding_types, differential_privacy=differential_privacy
     )
-    train(workspace_dir=workspace_dir, model=model_name, differential_privacy=differential_privacy, batch_size=16)
+    train(
+        max_epochs=1,
+        workspace_dir=workspace_dir,
+        model=model_name,
+        differential_privacy=differential_privacy,
+        batch_size=16,
+    )
     ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
     generate(
         workspace_dir=workspace_dir,
@@ -208,10 +214,10 @@ def test_language_with_dp(tmp_path, model_name, dp_max_epsilon):
 def test_training_strategy(encoded_text_dataset, model_name):
     workspace_dir = encoded_text_dataset
     workspace = Workspace(workspace_dir)
-    train(workspace_dir=workspace_dir, model=model_name, max_epochs=1, model_state_strategy=ModelStateStrategy.reset)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name, model_state_strategy=ModelStateStrategy.reset)
     progress_reset = pd.read_csv(workspace.model_progress_messages_path)
 
-    train(workspace_dir=workspace_dir, model=model_name, max_epochs=1, model_state_strategy=ModelStateStrategy.reuse)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name, model_state_strategy=ModelStateStrategy.reuse)
     progress_reuse = pd.read_csv(workspace.model_progress_messages_path)
     assert not progress_reuse["epoch"].duplicated().any()
     # progress should be different but with the same shape
@@ -219,7 +225,7 @@ def test_training_strategy(encoded_text_dataset, model_name):
     with pytest.raises(AssertionError):
         pd.testing.assert_frame_equal(progress_reset, progress_reuse)
 
-    train(workspace_dir=workspace_dir, model=model_name, max_epochs=2, model_state_strategy=ModelStateStrategy.resume)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name, model_state_strategy=ModelStateStrategy.resume)
     progress_resume = pd.read_csv(workspace.model_progress_messages_path)
     assert not progress_resume["epoch"].duplicated().any()
     # training resumed from epoch 1 and only appended a new line for epoch 2
@@ -228,7 +234,7 @@ def test_training_strategy(encoded_text_dataset, model_name):
 
     # in case the checkpoint doesn't exist, it should still work but change to reset strategy
     shutil.rmtree(workspace_dir / "ModelStore" / "model-data")
-    train(workspace_dir=workspace_dir, model=model_name, max_epochs=1, model_state_strategy=ModelStateStrategy.resume)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name, model_state_strategy=ModelStateStrategy.resume)
     progress_resume_without_checkpoint = pd.read_csv(workspace.model_progress_messages_path)
     # it's actually a fresh training, so the progress will look different
     with pytest.raises(AssertionError):
@@ -262,7 +268,13 @@ class TestConditionalGeneration:
         }
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model=LSTMFromScratchConfig.model_id, max_training_time=1.0, batch_size=32)
+        train(
+            max_epochs=40,
+            workspace_dir=workspace_dir,
+            model=LSTMFromScratchConfig.model_id,
+            max_training_time=1.0,
+            batch_size=32,
+        )
         generate(
             workspace_dir=workspace_dir,
             ctx_data=ctx_data,
@@ -306,7 +318,7 @@ class TestConditionalGeneration:
         )
         prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
         ctx_data = pd.read_parquet(workspace_dir / "OriginalData" / "ctx-data")
-        train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM2-135M")
+        train(max_epochs=1, workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM2-135M")
         generate(
             workspace_dir=workspace_dir,
             seed_data=seed_data,
@@ -342,7 +354,7 @@ def test_empty_generation_context(encoded_text_dataset):
     ctx_data_path = workspace_dir / "OriginalData" / "ctx-data"
     ctx_df = pd.read_parquet(ctx_data_path)
     empty_ctx_df = pd.DataFrame(columns=ctx_df.columns).astype(ctx_df.dtypes)
-    train(workspace_dir=workspace_dir, model=model_name)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name)
     generate(workspace_dir=workspace_dir, ctx_data=empty_ctx_df)
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
     assert len(syn_data) == 0
@@ -352,7 +364,7 @@ def test_empty_generation_context(encoded_text_dataset):
 def test_null_only_text_training(null_only_text_dataset):
     workspace_dir = null_only_text_dataset
     model_name = LSTMFromScratchConfig.model_id
-    train(workspace_dir=workspace_dir, model=model_name)
+    train(max_epochs=1, workspace_dir=workspace_dir, model=model_name)
     generate(workspace_dir=workspace_dir, ctx_data=None)
 
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
@@ -457,7 +469,7 @@ def test_special_character_column_name(tmp_path_factory):
         "hello国": ModelEncodingType.language_text.value,
     }
     prepare_encoded_dataset(data, workspace_dir, tgt_encoding_types)
-    train(workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM2-135M")
+    train(max_epochs=1, workspace_dir=workspace_dir, model="HuggingFaceTB/SmolLM2-135M")
     generate(workspace_dir=workspace_dir, sample_size=50)
 
     syn_data = pd.read_parquet(workspace_dir / "SyntheticData")
@@ -518,7 +530,7 @@ def encoded_numeric_categorical_datetime_dataset(tmp_path_factory):
 )
 def test_categorical_numeric_datetime(encoded_numeric_categorical_datetime_dataset, model_name):
     workspace_dir = encoded_numeric_categorical_datetime_dataset
-    train(workspace_dir=workspace_dir, model=model_name)
+    train(max_epochs=3, workspace_dir=workspace_dir, model=model_name)
     generate(
         workspace_dir=workspace_dir,
         sample_size=40,
