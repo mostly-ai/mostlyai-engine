@@ -447,7 +447,7 @@ def test_itt_constant(tmp_path):
     tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir)
+    train(max_epochs=4, workspace_dir=workspace_dir)
     generate(workspace_dir=workspace_dir)
     syn_data_path = workspace_dir / "SyntheticData"
     tgt = pd.read_parquet(tgt_data_path)

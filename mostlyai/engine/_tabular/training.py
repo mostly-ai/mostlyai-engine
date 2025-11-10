@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import math
 import time
 import warnings
 from collections.abc import Callable
@@ -391,12 +390,7 @@ def train(
         max_training_time = max(0.0, max_training_time) * 60  # convert to seconds
         _LOG.info(f"{max_training_time=}s")
         max_epochs = max(0.0, max_epochs)
-        max_epochs_cap = math.ceil((trn_cnt + val_cnt) / 25)
-        if max_epochs_cap < max_epochs:
-            _LOG.info(f"{max_epochs=} -> max_epochs={max_epochs_cap} due to small sample size")
-            max_epochs = max_epochs_cap
-        else:
-            _LOG.info(f"{max_epochs=}")
+        _LOG.info(f"{max_epochs=}")
         model_sizes = {
             "MOSTLY_AI/Small": ModelSize.S,
             "MOSTLY_AI/Medium": ModelSize.M,
