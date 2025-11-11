@@ -33,10 +33,17 @@ Create high-fidelity privacy-safe synthetic data:
 
 Note: Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.
 
-Two model classes are available:
+Two model classes with these methods are available:
 
-1. `TabularARGN`: For structured, flat or sequential tabular data.
-2. `LanguageModel`: For semi-structured, flat textual tabular data.
+1. `TabularARGN()`: For structured, flat or sequential tabular data.
+   * `argn.fit(data)`: Train a TabularARGN model
+   * `argn.sample(n_samples)`: Generate samples
+   * `argn.predict(target, n_draws, agg_fn)`: Predict a feature
+   * `argn.predict_proba(target, n_draws)`: Estimate probabilities
+   * `argn.impute(data)`: Fill missing values
+2. `LanguageModel()`: For semi-structured, flat textual tabular data.
+   * `.fit(data)`: Train a Language model
+   * `.sample(n_samples)`: Generate samples
 
 This library serves as the core model engine for the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). For an easy-to-use, higher-level toolkit, please refer to the SDK.
 
@@ -81,7 +88,7 @@ data_train, data_test = train_test_split(data, test_size=0.2)
 
 # fit TabularARGN
 argn = TabularARGN()
-argn.fit(X=data_train)
+argn.fit(data_train)
 ```
 
 ### Sampling / Synthetic Data Generation
@@ -178,7 +185,7 @@ argn = TabularARGN(
     max_training_time=2,  # 2 minutes
     verbose=0,
 )
-argn.fit(X=tgt_data)
+argn.fit(tgt_data)
 ```
 
 ### Sampling / Synthetic Data Generation
@@ -228,7 +235,7 @@ lm = LanguageModel(
     max_training_time=10,  # 10 minutes
     verbose=1,
 )
-lm.fit(X=data)
+lm.fit(data)
 ```
 
 ### Sampling / Synthetic Text Generation
