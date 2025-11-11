@@ -230,103 +230,16 @@ class LanguageModel(BaseEstimator):
             except Exception:
                 pass
 
-
-class LanguageSampler(BaseEstimator):
-    """
-    Sampler for generating synthetic text data from a fitted LanguageModel.
-
-    This class provides a scikit-learn compatible interface for synthetic text generation
-    with sampling parameters configured at initialization.
-
-    Args:
-        X: A fitted LanguageModel instance or training data to fit a new model.
-        batch_size: Batch size for generation. If None, determined automatically.
-        sampling_temperature: Sampling temperature. Higher values increase randomness. Defaults to 1.0.
-        sampling_top_p: Nucleus sampling probability threshold. Defaults to 1.0.
-        device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        rare_category_replacement_method: Method for handling rare categories.
-        **kwargs: Additional arguments passed to LanguageModel if X is not a fitted model.
-    """
-
-    def __init__(
-        self,
-        X=None,
-        batch_size: int | None = None,
-        sampling_temperature: float = 1.0,
-        sampling_top_p: float = 1.0,
-        device: str | None = None,
-        rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
-        **kwargs,
-    ):
-        # Store all parameters for sklearn compatibility
-        self.X = X
-        self.batch_size = batch_size
-        self.sampling_temperature = sampling_temperature
-        self.sampling_top_p = sampling_top_p
-        self.device = device
-        self.rare_category_replacement_method = rare_category_replacement_method
-
-        # Internal attributes
-        self._base_lm = None
-        self._fitted = False
-        self._X_init = X
-        self._kwargs = kwargs
-
-        # If X is a fitted LanguageModel, use it as base
-        if isinstance(X, LanguageModel):
-            if not X._fitted:
-                raise ValueError("Provided LanguageModel instance must be fitted")
-            self._base_lm = X
-            self._fitted = True
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the sampler.
-
-        If X was provided during initialization and is a fitted LanguageModel, this is a no-op.
-        Otherwise, trains a new LanguageModel.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Not used, present for API consistency.
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_lm is not None:
-            # Already fitted via base LanguageModel
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Create and fit a new LanguageModel
-        self._base_lm = LanguageModel(**self._kwargs)
-        self._base_lm.fit(X)
-        self._fitted = True
-
-        # Copy sklearn-compatible fitted attributes
-        if hasattr(self._base_lm, "n_features_in_"):
-            self.n_features_in_ = self._base_lm.n_features_in_
-        if hasattr(self._base_lm, "feature_names_in_"):
-            self.feature_names_in_ = self._base_lm.feature_names_in_
-
-        return self
-
     def sample(
         self,
         n_samples: int | None = None,
         seed_data: pd.DataFrame | None = None,
         ctx_data: pd.DataFrame | None = None,
+        batch_size: int | None = None,
+        sampling_temperature: float = 1.0,
+        sampling_top_p: float = 1.0,
+        device: str | None = None,
+        rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
     ) -> pd.DataFrame:
         """
         Generate synthetic samples from the fitted model.
@@ -336,21 +249,26 @@ class LanguageSampler(BaseEstimator):
                       If None and no ctx_data, defaults to 1.
             seed_data: Seed data to condition generation on fixed columns.
             ctx_data: Context data for generation. If None, uses the context data from training.
+            batch_size: Batch size for generation. If None, determined automatically.
+            sampling_temperature: Sampling temperature. Higher values increase randomness. Defaults to 1.0.
+            sampling_top_p: Nucleus sampling probability threshold. Defaults to 1.0.
+            device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
+            rare_category_replacement_method: Method for handling rare categories.
 
         Returns:
             Generated synthetic samples as pd.DataFrame.
         """
         if not self._fitted:
-            raise ValueError("Sampler must be fitted before sampling. Call fit() first.")
+            raise ValueError("Model must be fitted before sampling. Call fit() first.")
 
-        workspace_dir = self._base_lm._get_workspace_dir()
+        workspace_dir = self._get_workspace_dir()
 
         # Determine if ctx_data was explicitly provided
         ctx_data_explicit = ctx_data is not None
 
         # Use ctx_data from training if not provided
         if ctx_data is None:
-            ctx_data = self._base_lm.ctx_data
+            ctx_data = self.ctx_data
 
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
@@ -363,9 +281,9 @@ class LanguageSampler(BaseEstimator):
 
             # For sequential models: if ctx_data was not explicitly provided and n_samples is specified,
             # take a random sample of the training ctx_data
-            if not ctx_data_explicit and n_samples is not None and self._base_lm.tgt_context_key is not None:
+            if not ctx_data_explicit and n_samples is not None and self.tgt_context_key is not None:
                 if len(ctx_data_df) > n_samples:
-                    ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self._base_lm.random_state)
+                    ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self.random_state)
 
         # Default n_samples to 1 if still None and no seed_data
         if n_samples is None and seed_data is None:
@@ -376,11 +294,11 @@ class LanguageSampler(BaseEstimator):
             ctx_data=ctx_data_df,
             seed_data=seed_data,
             sample_size=None if seed_data is not None else n_samples,
-            batch_size=self.batch_size,
-            sampling_temperature=self.sampling_temperature,
-            sampling_top_p=self.sampling_top_p,
-            device=self.device,
-            rare_category_replacement_method=self.rare_category_replacement_method,
+            batch_size=batch_size,
+            sampling_temperature=sampling_temperature,
+            sampling_top_p=sampling_top_p,
+            device=device or self.device,
+            rare_category_replacement_method=rare_category_replacement_method,
             workspace_dir=workspace_dir,
         )
 

@@ -13,14 +13,12 @@
 # limitations under the License.
 import warnings
 
-from mostlyai.engine._language.interface import LanguageModel, LanguageSampler
+from mostlyai.engine._language.interface import LanguageModel
 from mostlyai.engine._tabular.interface import (
     TabularARGN,
     TabularARGNClassifier,
-    TabularARGNDensity,
     TabularARGNImputer,
     TabularARGNRegressor,
-    TabularARGNSampler,
 )
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.encoding import encode
@@ -41,13 +39,10 @@ __all__ = [
     "init_logging",
     "set_random_state",
     "LanguageModel",
-    "LanguageSampler",
     "TabularARGN",
     "TabularARGNClassifier",
-    "TabularARGNDensity",
     "TabularARGNRegressor",
     "TabularARGNImputer",
-    "TabularARGNSampler",
 ]
 __version__ = "1.7.0"
 

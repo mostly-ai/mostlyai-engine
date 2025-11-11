@@ -263,30 +263,11 @@ class TabularARGN(BaseEstimator):
             except Exception:
                 pass
 
-
-class TabularARGNSampler(BaseEstimator):
-    """
-    Sampler for generating synthetic data from a fitted TabularARGN model.
-
-    This class provides a scikit-learn compatible interface for synthetic data generation
-    with sampling parameters configured at initialization.
-
-    Args:
-        X: A fitted TabularARGN instance or training data to fit a new model.
-        batch_size: Batch size for generation. If None, determined automatically.
-        sampling_temperature: Sampling temperature. Higher values increase randomness. Defaults to 1.0.
-        sampling_top_p: Nucleus sampling probability threshold. Defaults to 1.0.
-        device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        rare_category_replacement_method: Method for handling rare categories.
-        rebalancing: Configuration for rebalancing column distributions.
-        imputation: Configuration for imputing missing values.
-        fairness: Configuration for fairness constraints.
-        **kwargs: Additional arguments passed to TabularARGN if X is not a fitted model.
-    """
-
-    def __init__(
+    def sample(
         self,
-        X=None,
+        n_samples: int | None = None,
+        seed_data: pd.DataFrame | None = None,
+        ctx_data: pd.DataFrame | None = None,
         batch_size: int | None = None,
         sampling_temperature: float = 1.0,
         sampling_top_p: float = 1.0,
@@ -295,80 +276,6 @@ class TabularARGNSampler(BaseEstimator):
         rebalancing: RebalancingConfig | dict | None = None,
         imputation: ImputationConfig | dict | None = None,
         fairness: FairnessConfig | dict | None = None,
-        **kwargs,
-    ):
-        # Store all parameters for sklearn compatibility
-        self.X = X
-        self.batch_size = batch_size
-        self.sampling_temperature = sampling_temperature
-        self.sampling_top_p = sampling_top_p
-        self.device = device
-        self.rare_category_replacement_method = rare_category_replacement_method
-        self.rebalancing = rebalancing
-        self.imputation = imputation
-        self.fairness = fairness
-
-        # Internal attributes
-        self._base_argn = None
-        self._fitted = False
-        self._X_init = X
-        self._kwargs = kwargs
-
-        # If X is a fitted TabularARGN, use it as base
-        if isinstance(X, TabularARGN):
-            if not X._fitted:
-                raise ValueError("Provided TabularARGN instance must be fitted")
-            self._base_argn = X
-            self._fitted = True
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the sampler.
-
-        If X was provided during initialization and is a fitted TabularARGN, this is a no-op.
-        Otherwise, trains a new TabularARGN model.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Target values (optional).
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_argn is not None:
-            # Already fitted via base TabularARGN
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Create and fit a new TabularARGN
-        self._base_argn = TabularARGN(**self._kwargs)
-        self._base_argn.fit(X, y=y)
-        self._fitted = True
-
-        # Copy sklearn-compatible fitted attributes
-        if hasattr(self._base_argn, "n_features_in_"):
-            self.n_features_in_ = self._base_argn.n_features_in_
-        if hasattr(self._base_argn, "feature_names_in_"):
-            self.feature_names_in_ = self._base_argn.feature_names_in_
-
-        return self
-
-    def sample(
-        self,
-        n_samples: int | None = None,
-        seed_data: pd.DataFrame | None = None,
-        ctx_data: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """
         Generate synthetic samples from the fitted model.
@@ -378,21 +285,29 @@ class TabularARGNSampler(BaseEstimator):
                       If None and no ctx_data, defaults to 1.
             seed_data: Seed data to condition generation on fixed columns.
             ctx_data: Context data for generation. If None, uses the context data from training.
+            batch_size: Batch size for generation. If None, determined automatically.
+            sampling_temperature: Sampling temperature. Higher values increase randomness. Defaults to 1.0.
+            sampling_top_p: Nucleus sampling probability threshold. Defaults to 1.0.
+            device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
+            rare_category_replacement_method: Method for handling rare categories.
+            rebalancing: Configuration for rebalancing column distributions.
+            imputation: Configuration for imputing missing values.
+            fairness: Configuration for fairness constraints.
 
         Returns:
             Generated synthetic samples as pd.DataFrame.
         """
         if not self._fitted:
-            raise ValueError("Sampler must be fitted before sampling. Call fit() first.")
+            raise ValueError("Model must be fitted before sampling. Call fit() first.")
 
-        workspace_dir = self._base_argn._get_workspace_dir()
+        workspace_dir = self._get_workspace_dir()
 
         # Determine if ctx_data was explicitly provided (vs using training default)
         ctx_data_explicit = ctx_data is not None
 
         # Use ctx_data from training if not provided
         if ctx_data is None:
-            ctx_data = self._base_argn.ctx_data
+            ctx_data = self.ctx_data
 
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
@@ -405,9 +320,9 @@ class TabularARGNSampler(BaseEstimator):
 
             # For sequential models: if ctx_data was not explicitly provided and n_samples is specified,
             # take a random sample of the training ctx_data
-            if not ctx_data_explicit and n_samples is not None and self._base_argn.tgt_context_key is not None:
+            if not ctx_data_explicit and n_samples is not None and self.tgt_context_key is not None:
                 if len(ctx_data_df) > n_samples:
-                    ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self._base_argn.random_state)
+                    ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self.random_state)
 
         # Default n_samples to 1 if still None
         if n_samples is None:
@@ -418,14 +333,14 @@ class TabularARGNSampler(BaseEstimator):
             ctx_data=ctx_data_df,
             seed_data=seed_data,
             sample_size=n_samples,
-            batch_size=self.batch_size,
-            sampling_temperature=self.sampling_temperature,
-            sampling_top_p=self.sampling_top_p,
-            device=self.device,
-            rare_category_replacement_method=self.rare_category_replacement_method,
-            rebalancing=self.rebalancing,
-            imputation=self.imputation,
-            fairness=self.fairness,
+            batch_size=batch_size,
+            sampling_temperature=sampling_temperature,
+            sampling_top_p=sampling_top_p,
+            device=device or self.device,
+            rare_category_replacement_method=rare_category_replacement_method,
+            rebalancing=rebalancing,
+            imputation=imputation,
+            fairness=fairness,
             workspace_dir=workspace_dir,
         )
 
@@ -434,89 +349,13 @@ class TabularARGNSampler(BaseEstimator):
 
         return synthetic_data
 
-
-class TabularARGNDensity(BaseEstimator):
-    """
-    Density estimator for computing log-likelihoods using a fitted TabularARGN model.
-
-    This class provides a scikit-learn compatible interface for density estimation
-    following sklearn conventions (uses .score_samples() method).
-
-    Args:
-        X: A fitted TabularARGN instance or training data to fit a new model.
-        batch_size: Batch size for computation. If None, determined automatically.
-        device: Device to run computation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        **kwargs: Additional arguments passed to TabularARGN if X is not a fitted model.
-    """
-
-    def __init__(
+    def log_prob(
         self,
-        X=None,
+        X,
+        ctx_data: pd.DataFrame | None = None,
         batch_size: int | None = None,
         device: str | None = None,
-        **kwargs,
-    ):
-        self.X = X
-        self.batch_size = batch_size
-        self.device = device
-
-        # Internal attributes
-        self._base_argn = None
-        self._fitted = False
-        self._X_init = X
-        self._kwargs = kwargs
-
-        # If X is a fitted TabularARGN, use it as base
-        if isinstance(X, TabularARGN):
-            if not X._fitted:
-                raise ValueError("Provided TabularARGN instance must be fitted")
-            self._base_argn = X
-            self._fitted = True
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the density estimator.
-
-        If X was provided during initialization and is a fitted TabularARGN, this is a no-op.
-        Otherwise, trains a new TabularARGN model.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Target values (optional).
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_argn is not None:
-            # Already fitted via base TabularARGN
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Create and fit a new TabularARGN
-        self._base_argn = TabularARGN(**self._kwargs)
-        self._base_argn.fit(X, y=y)
-        self._fitted = True
-
-        # Copy sklearn-compatible fitted attributes
-        if hasattr(self._base_argn, "n_features_in_"):
-            self.n_features_in_ = self._base_argn.n_features_in_
-        if hasattr(self._base_argn, "feature_names_in_"):
-            self.feature_names_in_ = self._base_argn.feature_names_in_
-
-        return self
-
-    def score_samples(self, X, ctx_data: pd.DataFrame | None = None) -> np.ndarray:
+    ) -> np.ndarray:
         """
         Compute the log-likelihood of each sample under the model.
 
@@ -527,6 +366,8 @@ class TabularARGNDensity(BaseEstimator):
         Args:
             X: Data samples to score. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
             ctx_data: Optional context data for models trained with context.
+            batch_size: Batch size for computation. If None, determined automatically.
+            device: Device to run computation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
 
         Returns:
             Log-likelihood of each sample as np.ndarray of shape (n_samples,).
@@ -534,20 +375,23 @@ class TabularARGNDensity(BaseEstimator):
         """
         from mostlyai.engine.log_prob import log_prob
 
-        X_df = ensure_dataframe(X, columns=self._base_argn._feature_names)
+        if not self._fitted:
+            raise ValueError("Model must be fitted before computing log probabilities. Call fit() first.")
+
+        X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Convert ctx_data to DataFrame if provided
         ctx_data_df = None
         if ctx_data is not None:
             ctx_data_df = ensure_dataframe(ctx_data)
 
-        workspace_dir = self._base_argn._get_workspace_dir()
+        workspace_dir = self._get_workspace_dir()
 
         return log_prob(
             tgt_data=X_df,
             ctx_data=ctx_data_df,
             workspace_dir=workspace_dir,
-            device=self.device or self._base_argn.device,
+            device=device or self.device,
         )
 
 
@@ -666,15 +510,13 @@ class TabularARGNClassifier(TabularARGN):
         if self._target_column in X_df.columns:
             X_df = X_df.drop(columns=[self._target_column])
 
-        # Create a sampler to generate predictions
         # Use self._base_argn if available, otherwise use self (since classifier IS a TabularARGN)
         base_model = self._base_argn if self._base_argn is not None else self
-        sampler = TabularARGNSampler(base_model, **kwargs)
 
         # Generate predictions across multiple draws
         all_predictions = []
         for _ in range(self.n_draws):
-            samples = sampler.sample(seed_data=X_df, ctx_data=ctx_data)
+            samples = base_model.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
             all_predictions.append(samples[self._target_column].values)
 
         # Stack predictions and aggregate
@@ -712,15 +554,13 @@ class TabularARGNClassifier(TabularARGN):
         if self._target_column in X_df.columns:
             X_df = X_df.drop(columns=[self._target_column])
 
-        # Create a sampler to generate predictions
         # Use self._base_argn if available, otherwise use self (since classifier IS a TabularARGN)
         base_model = self._base_argn if self._base_argn is not None else self
-        sampler = TabularARGNSampler(base_model, **kwargs)
 
         # Generate predictions across multiple draws
         all_predictions = []
         for _ in range(self.n_draws):
-            samples = sampler.sample(seed_data=X_df, ctx_data=ctx_data)
+            samples = base_model.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
             if self._target_column in samples.columns:
                 all_predictions.append(samples[self._target_column].values)
             else:
@@ -873,15 +713,13 @@ class TabularARGNRegressor(TabularARGN):
         if self._target_column in X_df.columns:
             X_df = X_df.drop(columns=[self._target_column])
 
-        # Create a sampler to generate predictions
         # Use self._base_argn if available, otherwise use self (since regressor IS a TabularARGN)
         base_model = self._base_argn if self._base_argn is not None else self
-        sampler = TabularARGNSampler(base_model, **kwargs)
 
         # Generate predictions across multiple draws
         all_predictions = []
         for _ in range(self.n_draws):
-            samples = sampler.sample(seed_data=X_df, ctx_data=ctx_data)
+            samples = base_model.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
             if self._target_column in samples.columns:
                 all_predictions.append(samples[self._target_column].values)
             else:
@@ -1013,14 +851,14 @@ class TabularARGNImputer(TabularARGN):
         # Use imputation config to specify which columns to impute
         imputation_config = ImputationConfig(columns=X_df.columns.tolist())
 
-        # Create a sampler with imputation config
         # Use self._base_argn if available, otherwise use self (since imputer IS a TabularARGN)
         base_model = self._base_argn if self._base_argn is not None else self
-        sampler = TabularARGNSampler(base_model, imputation=imputation_config, **kwargs)
 
         # If n_draws == 1, use simple imputation (no aggregation needed)
         if self.n_draws == 1:
-            X_imputed = sampler.sample(n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df)
+            X_imputed = base_model.sample(
+                n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
+            )
         else:
             # Generate multiple imputations and aggregate
             # Map aggregation method to function
@@ -1030,7 +868,9 @@ class TabularARGNImputer(TabularARGN):
             # Generate multiple imputed datasets
             all_imputations = []
             for _ in range(self.n_draws):
-                imputed = sampler.sample(n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df)
+                imputed = base_model.sample(
+                    n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
+                )
                 all_imputations.append(imputed)
 
             # Aggregate across imputations for each column

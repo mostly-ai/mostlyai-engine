@@ -34,13 +34,10 @@ Models only need to be trained once and can then be flexibly reused for various 
 Two models with these classes are available:
 
 1. `TabularARGN`: For structured, flat or sequential tabular data.
-   * `TabularARGNSampler`
-   * `TabularARGNDensity`
    * `TabularARGNImputer`
    * `TabularARGNClassifier`
    * `TabularARGNRegressor`
 2. `LanguageModel`: For semi-structured, flat textual tabular data.
-   * `LanguageModelSampler`
 
 This library serves as the core model engine for the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). For an easy-to-use, higher-level toolkit, please refer to the SDK.
 
@@ -79,12 +76,12 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from mostlyai.engine import TabularARGN
 
-# load original data
+# prepare data
 df = pd.read_csv("https://github.com/user-attachments/files/23478827/census10k.csv.gz")
-df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
+df_train, df_test = train_test_split(df, test_size=0.2)
 
-# fit the model
-argn = TabularARGN(random_state=42)
+# fit TabularARGN
+argn = TabularARGN()
 argn.fit(df_train)
 ```
 
@@ -93,29 +90,35 @@ argn.fit(df_train)
 Use the trained model to generate new synthetic samples:
 
 ```python
-from mostlyai.engine import TabularARGNSampler
-
-# create sampler from trained model
-sampler = TabularARGNSampler(argn, sampling_temperature=1.0)
-```
-
-Generate new (representative) synthetic samples:
-
-```python
 # unconditional sampling
-sampler.sample(n_samples=1000)
+argn.sample(n_samples=1000)
 ```
 
 Generate new synthetic samples conditionally:
 
 ```python
-# conditional sampling with seed values
-sampler.sample(seed_data=pd.DataFrame({
+# prepare seed
+df_seed = pd.DataFrame({
     "age": [25, 50],
     "education": ["Bachelors", "HS-grad"]
-}))
+})
+
+# conditional sampling
+argn.sample(seed_data=df_seed)
 ```
 
+
+#### Density Estimation
+
+Compute log probabilities to detect outliers:
+
+```python
+# calculate log likelihoods
+log_probs = argn.log_prob(df)
+
+# determine biggest outlier
+df.iloc[log_probs.argmin()]
+```
 
 #### Classification
 
@@ -157,24 +160,6 @@ mae = mean_absolute_error(df_test["age"], preds)
 print(f"MAE: {mae:.1f} years")
 ```
 
-#### Density Estimation
-
-Compute log probabilities to detect outliers:
-
-```python
-from mostlyai.engine import TabularARGNDensity
-
-# create classifier from trained model
-density = TabularARGNDensity(argn)
-
-# calculate log likelihood
-log_probs = density.score_samples(data)
-
-# determine biggest outlier
-idx_outlier = log_probs.argmin()
-data.iloc[idx_outlier]
-```
-
 #### Imputation
 
 Fill in missing values using the trained model:
@@ -199,7 +184,7 @@ For sequential data (e.g., time series or event logs), specify the context key:
 
 ```python
 import pandas as pd
-from mostlyai.engine import TabularARGN, TabularARGNSampler
+from mostlyai.engine import TabularARGN
 
 # load sequential data
 url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
@@ -217,8 +202,7 @@ argn.fit(trn_df)
 Use the trained model to generate new samples:
 ```python
 # unconditional sampling
-sampler = TabularARGNSampler(argn)
-sampler.sample(n_samples=100)
+argn.sample(n_samples=100)
 ```
 
 ## Basic Usage of LanguageModel
@@ -256,22 +240,13 @@ lm.fit(trn_df)
 Generate new synthetic samples using the trained language model:
 
 ```python
-from mostlyai.engine import LanguageSampler
-
-# create sampler from trained model
-sampler = LanguageSampler(lm, sampling_temperature=0.5)
-```
-
-Generate new synthetic samples:
-
-```python
 # unconditional sampling
-sampler.sample(n_samples=100)
+lm.sample(n_samples=100, sampling_temperature=0.5)
 ```
 
 ```python
 # conditional sampling with seed values
-syn_data = sampler.sample(seed_data=pd.DataFrame({"category": ["business", "tech"]}))
+syn_data = lm.sample(seed_data=pd.DataFrame({"category": ["business", "tech"]}), sampling_temperature=0.5)
 ```
 
 **Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting e.g. `model="microsoft/phi-1.5"` (GPU required).

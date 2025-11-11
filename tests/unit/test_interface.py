@@ -25,13 +25,10 @@ import pytest
 
 from mostlyai.engine import (
     LanguageModel,
-    LanguageSampler,
     TabularARGN,
     TabularARGNClassifier,
-    TabularARGNDensity,
     TabularARGNImputer,
     TabularARGNRegressor,
-    TabularARGNSampler,
 )
 
 
@@ -109,8 +106,7 @@ def test_tabular_argn_flat_data(flat_data):
         assert len(model.feature_names_in_) == 3
 
         # Generate samples
-        sampler = TabularARGNSampler(model)
-        synthetic_data = sampler.sample(n_samples=10)
+        synthetic_data = model.sample(n_samples=10)
 
         # Check output
         assert isinstance(synthetic_data, pd.DataFrame)
@@ -132,8 +128,7 @@ def test_tabular_argn_sequential_data(sequential_data):
 
         # Generate samples
         n_customers = sequential_data["customer_id"].nunique()
-        sampler = TabularARGNSampler(model)
-        synthetic_data = sampler.sample(n_samples=n_customers)
+        synthetic_data = model.sample(n_samples=n_customers)
 
         # Check output
         assert isinstance(synthetic_data, pd.DataFrame)
@@ -162,8 +157,7 @@ def test_tabular_argn_two_table_sequential(context_and_target_data):
         assert model._fitted
 
         # Generate samples with same context
-        sampler = TabularARGNSampler(model)
-        synthetic_data = sampler.sample(n_samples=len(ctx_data), ctx_data=ctx_data)
+        synthetic_data = model.sample(n_samples=len(ctx_data), ctx_data=ctx_data)
 
         # Check output
         assert isinstance(synthetic_data, pd.DataFrame)
@@ -193,12 +187,12 @@ def test_tabular_argn_parameters_stored():
 
 
 def test_tabular_argn_not_fitted_error():
-    """Test that appropriate error is raised when using unfitted sampler."""
-    # Create a sampler without a fitted model
-    sampler = TabularARGNSampler()
+    """Test that appropriate error is raised when using unfitted model."""
+    # Create a model without fitting
+    model = TabularARGN()
 
     with pytest.raises(ValueError, match="must be fitted"):
-        sampler.sample(n_samples=10)
+        model.sample(n_samples=10)
 
 
 def test_tabular_argn_workspace_persistence():
@@ -226,9 +220,8 @@ def test_tabular_argn_log_prob(flat_data):
         model.fit(flat_data)
 
         # Compute log probabilities
-        density = TabularARGNDensity(model)
         test_data = flat_data.head(10)
-        log_probs = density.score_samples(test_data)
+        log_probs = model.log_prob(test_data)
 
         # Check output
         assert isinstance(log_probs, np.ndarray)
@@ -368,8 +361,7 @@ def test_language_model_basic():
         assert len(model.feature_names_in_) == 2
 
         # Generate samples
-        sampler = LanguageSampler(model)
-        synthetic_data = sampler.sample(n_samples=10)
+        synthetic_data = model.sample(n_samples=10)
 
         # Check output
         assert isinstance(synthetic_data, pd.DataFrame)
@@ -379,12 +371,12 @@ def test_language_model_basic():
 
 
 def test_language_model_not_fitted_error():
-    """Test that appropriate error is raised when using unfitted sampler."""
-    # Create a sampler without a fitted model
-    sampler = LanguageSampler()
+    """Test that appropriate error is raised when using unfitted model."""
+    # Create a model without fitting
+    model = LanguageModel()
 
     with pytest.raises(ValueError, match="must be fitted"):
-        sampler.sample(n_samples=10)
+        model.sample(n_samples=10)
 
 
 def test_language_model_workspace_persistence():
