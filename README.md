@@ -190,7 +190,7 @@ argn = TabularARGN(
 argn.fit(X=tgt_data)
 ```
 
-### Sampling
+### Sampling / Synthetic Data Generation
 
 Generate new synthetic samples (using existing context):
 ```python
@@ -244,15 +244,7 @@ lm = LanguageModel(
 lm.fit(X=data)
 ```
 
-### Sampling
-
-Generate new synthetic samples:
-```python
-lm.sample(n_samples=5)
-```
-
-
-#### Synthetic Text Generation
+### Sampling / Synthetic Text Generation
 
 Generate new synthetic samples using the trained language model:
 

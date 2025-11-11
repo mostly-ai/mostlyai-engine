@@ -343,7 +343,11 @@ class TabularARGN(BaseEstimator):
         )
 
         # Load and return synthetic data
-        synthetic_data = load_generated_data(workspace_dir).sort_values(by=self.tgt_context_key).reset_index(drop=True)
+        synthetic_data = load_generated_data(workspace_dir)
+        if self.tgt_context_key is not None:
+            synthetic_data = synthetic_data.sort_values(by=self.tgt_context_key).reset_index(drop=True)
+        else:
+            synthetic_data = synthetic_data.reset_index(drop=True)
 
         return synthetic_data
 
