@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import contextlib
+import importlib
 import logging
 import os
+import platform
 import time
 from pathlib import Path
 from typing import Any
@@ -34,7 +36,7 @@ from mostlyai.engine._encoding_types.language.categorical import decode_language
 from mostlyai.engine._encoding_types.language.datetime import decode_language_datetime
 from mostlyai.engine._encoding_types.language.numeric import decode_language_numeric
 from mostlyai.engine._encoding_types.language.text import decode_text
-from mostlyai.engine._language.common import load_engine
+from mostlyai.engine._language.common import MAX_LENGTH
 from mostlyai.engine._language.encoding import encode_df
 from mostlyai.engine._language.xgrammar_utils import create_schemas, ensure_seed_can_be_tokenized
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
@@ -254,11 +256,18 @@ def generate(
 
         t0 = time.time()
 
-        engine, _ = load_engine(
-            workspace_dir=workspace_dir,
-            device=device,
-            max_new_tokens=max_new_tokens,
-        )
+        is_peft_adapter = (workspace.model_path / "adapter_config.json").exists()
+        is_vllm_available = importlib.util.find_spec("vllm") is not None
+        if is_peft_adapter and ((device.type == "cuda" or platform.system() == "Darwin") and is_vllm_available):
+            from mostlyai.engine._language.engine.vllm_engine import VLLMEngine
+
+            engine = VLLMEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
+        else:
+            if device.type == "cuda" and not is_vllm_available:
+                _LOG.warning("CUDA device was found but vllm is not available. Please use extra [gpu] to install vllm")
+            from mostlyai.engine._language.engine.hf_engine import HuggingFaceEngine
+
+            engine = HuggingFaceEngine(workspace.model_path, device, max_new_tokens, MAX_LENGTH)
         _LOG.info(f"inference engine: {engine.__class__.__name__}")
 
         batch_size = batch_size or engine.get_default_batch_size()
