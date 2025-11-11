@@ -34,7 +34,6 @@ Models only need to be trained once and can then be flexibly reused for various 
 Two models with these classes are available:
 
 1. `TabularARGN`: For structured, flat or sequential tabular data.
-   * `TabularARGNImputer`
    * `TabularARGNClassifier`
    * `TabularARGNRegressor`
 2. `LanguageModel`: For semi-structured, flat textual tabular data.
@@ -107,7 +106,6 @@ df_seed = pd.DataFrame({
 argn.sample(seed_data=df_seed)
 ```
 
-
 #### Density Estimation
 
 Compute log probabilities to detect outliers:
@@ -118,6 +116,21 @@ log_probs = argn.log_prob(df)
 
 # determine biggest outlier
 df.iloc[log_probs.argmin()]
+```
+
+#### Imputation
+
+Fill in missing values using the trained model:
+
+```python
+# prepare demo data with missings
+df_with_missings = df_test.head(300)
+df_with_missings.loc[0:299, "age"] = pd.NA
+df_with_missings.loc[0:199, "race"] = pd.NA
+df_with_missings.loc[100:299, "income"] = pd.NA
+
+# impute missing values
+argn.impute(df_with_missings)
 ```
 
 #### Classification
@@ -158,24 +171,6 @@ preds = reg.predict(df_test)
 # evaluate performance
 mae = mean_absolute_error(df_test["age"], preds)
 print(f"MAE: {mae:.1f} years")
-```
-
-#### Imputation
-
-Fill in missing values using the trained model:
-
-```python
-from mostlyai.engine import TabularARGNImputer
-
-# create imputer from trained model
-imputer = TabularARGNImputer(argn)
-
-# sample imputed data
-imputed_data = imputer.transform(data_with_missings)
-
-# OR: fit and impute in one go
-imputer = TabularARGNImputer(max_training_time=1)
-imputed_data = imputer.fit_transform(data_with_missings)
 ```
 
 ### Sequential Tables

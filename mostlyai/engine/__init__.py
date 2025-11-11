@@ -17,7 +17,6 @@ from mostlyai.engine._language.interface import LanguageModel
 from mostlyai.engine._tabular.interface import (
     TabularARGN,
     TabularARGNClassifier,
-    TabularARGNImputer,
     TabularARGNRegressor,
 )
 from mostlyai.engine.analysis import analyze
@@ -42,7 +41,6 @@ __all__ = [
     "TabularARGN",
     "TabularARGNClassifier",
     "TabularARGNRegressor",
-    "TabularARGNImputer",
 ]
 __version__ = "1.7.0"
 

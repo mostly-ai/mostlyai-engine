@@ -27,7 +27,6 @@ from mostlyai.engine import (
     LanguageModel,
     TabularARGN,
     TabularARGNClassifier,
-    TabularARGNImputer,
     TabularARGNRegressor,
 )
 
@@ -302,8 +301,8 @@ def test_tabular_argn_regressor():
         assert isinstance(score, float)
 
 
-def test_tabular_argn_imputer():
-    """Test TabularARGNImputer fit and transform."""
+def test_tabular_argn_impute():
+    """Test TabularARGN impute method."""
     np.random.seed(42)
 
     # Create data
@@ -318,11 +317,11 @@ def test_tabular_argn_imputer():
     test_data = data.head(8).copy()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        model = TabularARGNImputer(max_epochs=1, workspace_dir=tmp_dir, verbose=0)
+        model = TabularARGN(max_epochs=1, workspace_dir=tmp_dir, verbose=0)
 
-        # Test fit and transform
+        # Test fit and impute
         model.fit(data)
-        imputed_data = model.transform(test_data)
+        imputed_data = model.impute(test_data)
 
         assert isinstance(imputed_data, pd.DataFrame)
         assert imputed_data.shape == test_data.shape

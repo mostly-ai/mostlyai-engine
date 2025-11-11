@@ -394,6 +394,73 @@ class TabularARGN(BaseEstimator):
             device=device or self.device,
         )
 
+    def impute(
+        self,
+        X,
+        ctx_data: pd.DataFrame | None = None,
+        n_draws: int = 1,
+        agg_fn: Literal["mode", "mean", "median"] = "mode",
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Impute missing values in X.
+
+        Args:
+            X: Data with missing values to impute.
+            ctx_data: Context data for generation. If None, uses the context data from training.
+            n_draws: Number of draws to generate for each row during imputation. Defaults to 1.
+            agg_fn: Aggregation method to combine imputed values across draws. Options: "mode" (default), "mean", "median".
+            **kwargs: Additional arguments passed to sample() method.
+
+        Returns:
+            Data with imputed values as pd.DataFrame.
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before imputation. Call fit() first.")
+
+        X_df = ensure_dataframe(X, columns=self._feature_names)
+
+        # Use ctx_data from training if not provided
+        if ctx_data is None:
+            ctx_data = self.ctx_data
+
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if ctx_data is not None:
+            ctx_data_df = ensure_dataframe(ctx_data)
+
+        # Use imputation config to specify which columns to impute
+        imputation_config = ImputationConfig(columns=X_df.columns.tolist())
+
+        # If n_draws == 1, use simple imputation (no aggregation needed)
+        if n_draws == 1:
+            X_imputed = self.sample(
+                n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
+            )
+        else:
+            # Generate multiple imputations and aggregate
+            # Map aggregation method to function
+            agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
+            agg_fn_func = agg_fn_map[agg_fn]
+
+            # Generate multiple imputed datasets
+            all_imputations = []
+            for _ in range(n_draws):
+                imputed = self.sample(
+                    n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
+                )
+                all_imputations.append(imputed)
+
+            # Aggregate across imputations for each column
+            X_imputed = X_df.copy()
+            for col in X_df.columns:
+                # Stack the column values from all imputations
+                col_values = np.column_stack([imp[col].values for imp in all_imputations])
+                # Apply aggregation function row-wise
+                X_imputed[col] = np.apply_along_axis(agg_fn_func, 1, col_values)
+
+        return X_imputed
+
 
 class TabularARGNClassifier(TabularARGN):
     """
@@ -745,155 +812,3 @@ class TabularARGNRegressor(TabularARGN):
         """
         y_pred = self.predict(X, **kwargs)
         return r2_score(y, y_pred)
-
-
-class TabularARGNImputer(TabularARGN):
-    """
-    TabularARGN imputer with sklearn interface.
-
-    This imputer trains a generative model and uses it to impute missing values in the data.
-
-    Args:
-        X: Training data or a fitted TabularARGN instance.
-        n_draws: Number of draws to generate for each row during imputation. Defaults to 1.
-        agg_fn: Aggregation method to combine imputed values across draws. Options: "mode" (default), "mean", "median".
-        **kwargs: All other arguments are passed to TabularARGN base class.
-            See TabularARGN docstring for available parameters.
-    """
-
-    def __init__(
-        self,
-        X=None,
-        n_draws: int = 1,
-        agg_fn: Literal["mode", "mean", "median"] = "mode",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        # Store parameters as attributes for sklearn compatibility
-        self.X = X
-        self.n_draws = n_draws
-        self.agg_fn = agg_fn
-
-        # Internal attributes
-        self._base_argn = None
-        self._X_init = X
-
-        # If X is a fitted TabularARGN, use it as base
-        if isinstance(X, TabularARGN):
-            if not X._fitted:
-                raise ValueError("Provided TabularARGN instance must be fitted")
-            self._base_argn = X
-            self._fitted = True
-            self._workspace_path = X._workspace_path
-            self._feature_names = X._feature_names
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-            if hasattr(X, "workspace_path_"):
-                self.workspace_path_ = X.workspace_path_
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the imputer.
-
-        If X was provided during initialization and is array-like, trains the model.
-        If X was a fitted TabularARGN, this is a no-op.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Not used, present for API consistency.
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_argn is not None:
-            # Already fitted via base TabularARGN
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Call parent fit
-        return super().fit(X, y=None)
-
-    def transform(self, X, ctx_data: pd.DataFrame | None = None, **kwargs) -> pd.DataFrame:
-        """
-        Impute missing values in X.
-
-        Args:
-            X: Data with missing values to impute.
-            ctx_data: Context data for generation. If None, uses the context data from training.
-            **kwargs: Additional arguments passed to generate() function.
-
-        Returns:
-            Data with imputed values as pd.DataFrame.
-        """
-        if not self._fitted:
-            raise ValueError("Imputer must be fitted before transform. Call fit() first.")
-
-        X_df = ensure_dataframe(X, columns=self._feature_names)
-
-        # Use ctx_data from training if not provided
-        if ctx_data is None:
-            ctx_data = self.ctx_data
-
-        # Convert ctx_data to DataFrame if provided
-        ctx_data_df = None
-        if ctx_data is not None:
-            ctx_data_df = ensure_dataframe(ctx_data)
-
-        # Use imputation config to specify which columns to impute
-        imputation_config = ImputationConfig(columns=X_df.columns.tolist())
-
-        # Use self._base_argn if available, otherwise use self (since imputer IS a TabularARGN)
-        base_model = self._base_argn if self._base_argn is not None else self
-
-        # If n_draws == 1, use simple imputation (no aggregation needed)
-        if self.n_draws == 1:
-            X_imputed = base_model.sample(
-                n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
-            )
-        else:
-            # Generate multiple imputations and aggregate
-            # Map aggregation method to function
-            agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
-            agg_fn = agg_fn_map[self.agg_fn]
-
-            # Generate multiple imputed datasets
-            all_imputations = []
-            for _ in range(self.n_draws):
-                imputed = base_model.sample(
-                    n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
-                )
-                all_imputations.append(imputed)
-
-            # Aggregate across imputations for each column
-            X_imputed = X_df.copy()
-            for col in X_df.columns:
-                # Stack the column values from all imputations
-                col_values = np.column_stack([imp[col].values for imp in all_imputations])
-                # Apply aggregation function row-wise
-                X_imputed[col] = np.apply_along_axis(agg_fn, 1, col_values)
-
-        return X_imputed
-
-    def fit_transform(self, X, y=None, **kwargs):
-        """
-        Fit the imputer and transform X.
-
-        Args:
-            X: Training data with missing values.
-            y: Not used, present for API consistency.
-            **kwargs: Additional arguments passed to transform() method.
-
-        Returns:
-            Data with imputed values as pd.DataFrame.
-        """
-        self.fit(X, y)
-        return self.transform(X, **kwargs)
