@@ -187,16 +187,15 @@ import pandas as pd
 from mostlyai.engine import TabularARGN
 
 # load sequential data
-url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
-trn_df = pd.read_csv(f"{url}/batting.csv.gz")
+df = pd.read_csv("https://github.com/user-attachments/files/23479267/batting.csv.gz")
 
-# train model with context key
+# fit TabularARGN with a context key column
 argn = TabularARGN(
     tgt_context_key="players_id",
     max_training_time=1,
     random_state=42,
 )
-argn.fit(trn_df)
+argn.fit(df)
 ```
 
 Use the trained model to generate new samples:
@@ -217,11 +216,10 @@ Load your data and train the model:
 import pandas as pd
 from mostlyai.engine import LanguageModel
 
-# load original data
-trn_df = pd.read_parquet("https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/headlines/headlines.parquet")
-trn_df = trn_df.sample(n=10_000, random_state=42)
+# load data
+df = pd.read_csv("https://github.com/user-attachments/files/23479325/news10k.csv.gz")
 
-# fit the model
+# fit LanguageModel
 lm = LanguageModel(
     model="MOSTLY_AI/LSTMFromScratch-3m",
     tgt_encoding_types={
@@ -232,7 +230,7 @@ lm = LanguageModel(
     max_training_time=2,
     random_state=42,
 )
-lm.fit(trn_df)
+lm.fit(df)
 ```
 
 #### Synthetic Text Generation
@@ -241,12 +239,18 @@ Generate new synthetic samples using the trained language model:
 
 ```python
 # unconditional sampling
-lm.sample(n_samples=100, sampling_temperature=0.5)
+lm.sample(
+    n_samples=100,
+    sampling_temperature=0.5,
+)
 ```
 
 ```python
+# prepare seed
+df_seed = pd.DataFrame({"category": ["business", "tech"]})
+
 # conditional sampling with seed values
-syn_data = lm.sample(seed_data=pd.DataFrame({"category": ["business", "tech"]}), sampling_temperature=0.5)
+syn_data = lm.sample(seed_data=df_seed, sampling_temperature=0.5)
 ```
 
 **Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting e.g. `model="microsoft/phi-1.5"` (GPU required).
