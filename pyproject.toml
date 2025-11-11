@@ -97,9 +97,7 @@ build-backend = "hatchling.build"
 [tool.ruff]
 target-version = "py310"
 line-length = 120
-
 [tool.ruff.format]
 exclude = ["examples/*.ipynb"]
-
 [tool.ruff.lint]
 extend-select = ["I"]
