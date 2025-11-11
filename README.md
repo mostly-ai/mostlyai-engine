@@ -10,9 +10,9 @@
 
 Create high-fidelity privacy-safe synthetic data:
 
-1. train a generative model once
-    * fit flat or sequential data
-    * control training time & parameters
+1. train a generative model once:
+    * train on flat or sequential data
+    * control training time & params
     * monitor training progress
     * optionally enable differential privacy
     * optionally provide context data
@@ -29,9 +29,9 @@ Create high-fidelity privacy-safe synthetic data:
 
 ...all within your own compute environment, all with a few lines of Python code 💥.
 
-Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.
+Note: Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.
 
-Two models are available:
+Two model classes are available:
 
 1. `TabularARGN`: For structured, flat or sequential tabular data.
 2. `LanguageModel`: For semi-structured, flat textual tabular data.
@@ -60,11 +60,11 @@ On Linux, one can explicitly install the CPU-only variant of torch together with
 uv pip install -U torch==2.8.0+cpu torchvision==0.23.0+cpu mostlyai-engine --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
-## Basic Usage of TabularARGN
+## TabularARGN for Flat Data
 
 The `TabularARGN` class provides a scikit-learn-compatible interface for working with structured tabular data. It can be used for synthetic data generation, classification, regression, density estimation, and imputation.
 
-### Flat Tables
+### Model Training
 
 Load your data and train the model:
 
@@ -74,15 +74,15 @@ from sklearn.model_selection import train_test_split
 from mostlyai.engine import TabularARGN
 
 # prepare data
-df = pd.read_csv("https://github.com/user-attachments/files/23478827/census10k.csv.gz")
-df_train, df_test = train_test_split(df, test_size=0.2)
+data = pd.read_csv("https://github.com/user-attachments/files/23480587/census10k.csv.gz")
+data_train, data_test = train_test_split(data, test_size=0.2)
 
 # fit TabularARGN
 argn = TabularARGN()
-argn.fit(df_train)
+argn.fit(X=data_train)
 ```
 
-#### Sampling / Synthetic Data Generation
+### Sampling / Synthetic Data Generation
 
 Generate new synthetic samples:
 
@@ -95,43 +95,43 @@ Generate new synthetic samples conditionally:
 
 ```python
 # prepare seed
-df_seed = pd.DataFrame({
+seed_data = pd.DataFrame({
     "age": [25, 50],
     "education": ["Bachelors", "HS-grad"]
 })
 
 # conditional sampling
-argn.sample(seed_data=df_seed)
+argn.sample(seed_data=seed_data)
 ```
 
-#### Density Estimation / Log Likelihood
+### Density Estimation / Log Likelihood
 
 Compute log probabilities to detect outliers:
 
 ```python
 # calculate log likelihoods
-log_probs = argn.log_prob(df)
+log_probs = argn.log_prob(data)
 
 # determine biggest outlier
-df.iloc[log_probs.argmin()]
+data.iloc[log_probs.argmin()]
 ```
 
-#### Imputation / Filling Gaps
+### Imputation / Filling Gaps
 
 Fill in missing values:
 
 ```python
 # prepare demo data with missings
-df_with_missings = df_test.head(300)
-df_with_missings.loc[0:299, "age"] = pd.NA
-df_with_missings.loc[0:199, "race"] = pd.NA
-df_with_missings.loc[100:299, "income"] = pd.NA
+data_with_missings = data_test.head(300)
+data_with_missings.loc[0:299, "age"] = pd.NA
+data_with_missings.loc[0:199, "race"] = pd.NA
+data_with_missings.loc[100:299, "income"] = pd.NA
 
 # impute missing values
-argn.impute(df_with_missings)
+argn.impute(data_with_missings)
 ```
 
-#### Predictions / Classification
+### Predictions / Classification
 
 Predict any categorical target column:
 
@@ -139,18 +139,18 @@ Predict any categorical target column:
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 # predict class labels for a categorical
-preds = argn.predict(df_test, target="income", n_draws=10, agg_fn="mode")
+preds = argn.predict(data_test, target="income", n_draws=10, agg_fn="mode")
 
 # predict class probabilities for a categorical
-probs = argn.predict_proba(df_test, target="income", n_draws=10, agg_fn="mode")
+probs = argn.predict_proba(data_test, target="income", n_draws=10, agg_fn="mode")
 
 # evaluate performance
-accuracy = accuracy_score(df_test["income"], preds)
-auc = roc_auc_score(df_test["income"], probs[:, 1])
+accuracy = accuracy_score(data_test["income"], preds)
+auc = roc_auc_score(data_test["income"], probs[:, 1])
 print(f"Accuracy: {accuracy:.3f}, AUC: {auc:.3f}")
 ```
 
-#### Predictions / Regression
+### Predictions / Regression
 
 Predict any numerical target column:
 
@@ -158,37 +158,61 @@ Predict any numerical target column:
 from sklearn.metrics import mean_absolute_error
 
 # predict target values
-preds = argn.predict(df_test, target="age", n_draws=10, agg_fn="mean")
+preds = argn.predict(data_test, target="age", n_draws=10, agg_fn="mean")
 
 # evaluate performance
-mae = mean_absolute_error(df_test["age"], preds)
+mae = mean_absolute_error(data_test["age"], preds)
 print(f"MAE: {mae:.1f} years")
 ```
 
-### Sequential Tables
+## TabularARGN for Sequential Data
 
 For sequential data (e.g., time series or event logs), specify the context key:
+
+### Model Training - With Context Data
 
 ```python
 import pandas as pd
 from mostlyai.engine import TabularARGN
 
 # load sequential data
-df = pd.read_csv("https://github.com/user-attachments/files/23479267/batting.csv.gz")
+tgt_data = pd.read_csv("https://github.com/user-attachments/files/23480787/batting.csv.gz")
+ctx_data = pd.read_csv("https://github.com/user-attachments/files/23480786/players.csv.gz")
 
 # fit TabularARGN with a context key column
 argn = TabularARGN(
     tgt_context_key="players_id",
-    max_training_time=1,
-    random_state=42,
+    ctx_primary_key="id",
+    ctx_data=ctx_data,
+    max_training_time=2,  # 2 minutes
+    verbose=0,
 )
-argn.fit(df)
+argn.fit(X=tgt_data)
 ```
 
-Use the trained model to generate new samples:
+### Sampling
+
+Generate new synthetic samples (using existing context):
 ```python
-# unconditional sampling
-argn.sample(n_samples=100)
+argn.sample(n_samples=5)
+```
+
+Generate new synthetic samples conditionally (using custom context and seed):
+
+```python
+ctx_data = pd.DataFrame({
+    "id": ["Player1", "Player2"],
+    "weight": [170, 160],
+    "height": [70, 68],
+    "bats": ["R", "L"],
+    "throws": ["R", "L"],
+})
+seed_data = pd.DataFrame({
+    "players_id": ["Player1", "Player1"],
+    "team": ["BOS", "BOS"],
+    "G": [100, 100],
+})
+argn.sample(ctx_data=ctx_data, seed_data=seed_data)
 ```
 
 ## Basic Usage of LanguageModel
@@ -204,7 +228,7 @@ import pandas as pd
 from mostlyai.engine import LanguageModel
 
 # load data
-df = pd.read_csv("https://github.com/user-attachments/files/23479325/news10k.csv.gz")
+data = pd.read_csv("https://github.com/user-attachments/files/23480586/news10k.csv.gz")
 
 # fit LanguageModel
 lm = LanguageModel(
@@ -217,7 +241,7 @@ lm = LanguageModel(
     max_training_time=2,
     random_state=42,
 )
-lm.fit(df)
+lm.fit(X=data)
 ```
 
 #### Synthetic Text Generation
@@ -234,10 +258,10 @@ lm.sample(
 
 ```python
 # prepare seed
-df_seed = pd.DataFrame({"category": ["business", "tech"]})
+seed_data = pd.DataFrame({"category": ["business", "tech"]})
 
 # conditional sampling with seed values
-syn_data = lm.sample(seed_data=df_seed, sampling_temperature=0.5)
+syn_data = lm.sample(seed_data=seed_data, sampling_temperature=0.5)
 ```
 
 **Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting e.g. `model="microsoft/phi-1.5"` (GPU required).
