@@ -31,11 +31,9 @@ Create high-fidelity privacy-safe synthetic data:
 
 Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.
 
-Two models with these classes are available:
+Two models are available:
 
 1. `TabularARGN`: For structured, flat or sequential tabular data.
-   * `TabularARGNClassifier`
-   * `TabularARGNRegressor`
 2. `LanguageModel`: For semi-structured, flat textual tabular data.
 
 This library serves as the core model engine for the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). For an easy-to-use, higher-level toolkit, please refer to the SDK.
@@ -84,9 +82,9 @@ argn = TabularARGN()
 argn.fit(df_train)
 ```
 
-#### Synthetic Data Generation
+#### Sampling / Synthetic Data Generation
 
-Use the trained model to generate new synthetic samples:
+Generate new synthetic samples:
 
 ```python
 # unconditional sampling
@@ -106,7 +104,7 @@ df_seed = pd.DataFrame({
 argn.sample(seed_data=df_seed)
 ```
 
-#### Density Estimation
+#### Density Estimation / Log Likelihood
 
 Compute log probabilities to detect outliers:
 
@@ -118,9 +116,9 @@ log_probs = argn.log_prob(df)
 df.iloc[log_probs.argmin()]
 ```
 
-#### Imputation
+#### Imputation / Filling Gaps
 
-Fill in missing values using the trained model:
+Fill in missing values:
 
 ```python
 # prepare demo data with missings
@@ -133,20 +131,18 @@ df_with_missings.loc[100:299, "income"] = pd.NA
 argn.impute(df_with_missings)
 ```
 
-#### Classification
+#### Predictions / Classification
 
-Use the trained model for classification tasks:
+Predict any categorical target column:
 
 ```python
 from sklearn.metrics import accuracy_score, roc_auc_score
-from mostlyai.engine import TabularARGNClassifier
 
-# create classifier from trained model
-clf = TabularARGNClassifier(argn, target="income", n_draws=10)
+# predict class labels for a categorical
+preds = argn.predict(df_test, target="income", n_draws=10, agg_fn="mode")
 
-# sample predictions
-preds = clf.predict(df_test)
-probs = clf.predict_proba(df_test)
+# predict class probabilities for a categorical
+probs = argn.predict_proba(df_test, target="income", n_draws=10, agg_fn="mode")
 
 # evaluate performance
 accuracy = accuracy_score(df_test["income"], preds)
@@ -154,19 +150,15 @@ auc = roc_auc_score(df_test["income"], probs[:, 1])
 print(f"Accuracy: {accuracy:.3f}, AUC: {auc:.3f}")
 ```
 
-#### Regression
+#### Predictions / Regression
 
-Use the trained model for regression tasks:
+Predict any numerical target column:
 
 ```python
 from sklearn.metrics import mean_absolute_error
-from mostlyai.engine import TabularARGNRegressor
 
-# create regressor from trained model
-reg = TabularARGNRegressor(argn, target="age", n_draws=10)
-
-# sample predictions
-preds = reg.predict(df_test)
+# predict target values
+preds = argn.predict(df_test, target="age", n_draws=10, agg_fn="mean")
 
 # evaluate performance
 mae = mean_absolute_error(df_test["age"], preds)

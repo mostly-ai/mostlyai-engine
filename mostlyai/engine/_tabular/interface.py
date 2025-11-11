@@ -21,16 +21,17 @@ for sampling, classification, regression, imputation, and density estimation tas
 
 import logging
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
-from sklearn.metrics import accuracy_score, r2_score
 
-from mostlyai.engine._common import ensure_dataframe, load_generated_data, mean_fn, median_fn, mode_fn
+from mostlyai.engine._common import ensure_dataframe, list_fn, load_generated_data, mean_fn, median_fn, mode_fn
+from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
@@ -182,21 +183,18 @@ class TabularARGN(BaseEstimator):
         if y is not None:
             y_array = np.asarray(y)
             # Infer target column name if not already set
-            if hasattr(self, "_target_column"):
-                if self._target_column is None:
-                    # Infer from y
-                    if isinstance(y, pd.Series) and y.name is not None:
-                        # Use Series name
-                        self._target_column = y.name
-                    elif isinstance(y, pd.DataFrame) and len(y.columns) == 1:
-                        # Use single DataFrame column name
-                        self._target_column = y.columns[0]
-                    else:
-                        # Fall back to default name
-                        self._target_column = "target"
-                X_df[self._target_column] = y_array
-            else:
-                X_df["target"] = y_array
+            if not hasattr(self, "_target_column") or self._target_column is None:
+                # Infer from y
+                if isinstance(y, pd.Series) and y.name is not None:
+                    # Use Series name
+                    self._target_column = y.name
+                elif isinstance(y, pd.DataFrame) and len(y.columns) == 1:
+                    # Use single DataFrame column name
+                    self._target_column = y.columns[0]
+                else:
+                    # Fall back to default name
+                    self._target_column = "target"
+            X_df[self._target_column] = y_array
 
         # Get workspace directory
         workspace_dir = self._get_workspace_dir()
@@ -399,7 +397,7 @@ class TabularARGN(BaseEstimator):
         X,
         ctx_data: pd.DataFrame | None = None,
         n_draws: int = 1,
-        agg_fn: Literal["mode", "mean", "median"] = "mode",
+        agg_fn: Literal["mode", "mean", "median", "list"] | Callable[[np.ndarray], Any] = "mode",
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -409,7 +407,12 @@ class TabularARGN(BaseEstimator):
             X: Data with missing values to impute.
             ctx_data: Context data for generation. If None, uses the context data from training.
             n_draws: Number of draws to generate for each row during imputation. Defaults to 1.
-            agg_fn: Aggregation method to combine imputed values across draws. Options: "mode" (default), "mean", "median".
+            agg_fn: Aggregation method to combine imputed values across draws. Options:
+                - "mode" (default): Most common value across draws.
+                - "mean": Average across draws.
+                - "median": Median across draws.
+                - "list": Return all draws as arrays.
+                - Callable: A function that takes a 1D numpy array and returns a scalar or array.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
@@ -438,10 +441,15 @@ class TabularARGN(BaseEstimator):
                 n_samples=len(X_df), seed_data=X_df, ctx_data=ctx_data_df, imputation=imputation_config, **kwargs
             )
         else:
-            # Generate multiple imputations and aggregate
-            # Map aggregation method to function
-            agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
-            agg_fn_func = agg_fn_map[agg_fn]
+            # Resolve aggregation function
+            if callable(agg_fn):
+                agg_fn_func = agg_fn
+                is_list_agg = False
+            else:
+                # Map aggregation method to function
+                agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn, "list": list_fn}
+                agg_fn_func = agg_fn_map[agg_fn]
+                is_list_agg = agg_fn == "list"
 
             # Generate multiple imputed datasets
             all_imputations = []
@@ -457,181 +465,207 @@ class TabularARGN(BaseEstimator):
                 # Stack the column values from all imputations
                 col_values = np.column_stack([imp[col].values for imp in all_imputations])
                 # Apply aggregation function row-wise
-                X_imputed[col] = np.apply_along_axis(agg_fn_func, 1, col_values)
+                if is_list_agg:
+                    # For list aggregation, store arrays directly
+                    X_imputed[col] = [agg_fn_func(row) for row in col_values]
+                else:
+                    X_imputed[col] = np.apply_along_axis(agg_fn_func, 1, col_values)
 
         return X_imputed
 
+    def _get_target_encoding_type(self, target_column: str | None = None) -> str | None:
+        """Get the encoding type of the target column from workspace stats."""
+        if not self._fitted:
+            return None
 
-class TabularARGNClassifier(TabularARGN):
-    """
-    TabularARGN classifier with sklearn interface.
+        target_col = target_column or self._target_column
+        if target_col is None:
+            return None
 
-    This classifier trains a generative model on the full dataset and uses it
-    to predict target classes by conditioning on input features.
+        workspace_dir = self._get_workspace_dir()
+        workspace = Workspace(workspace_dir)
+        stats = workspace.tgt_stats.read()
+        columns = stats.get("columns", {})
+        if target_col in columns:
+            return columns[target_col].get("encoding_type")
+        return None
 
-    Args:
-        X: Training data or a fitted TabularARGN instance.
-        target: Name of the target column to predict.
-        n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
-        agg_fn: Aggregation method to combine predictions across draws. Options: "mode" (default), "mean", "median".
-        **kwargs: All other arguments are passed to TabularARGN base class.
-            See TabularARGN docstring for available parameters.
-    """
+    def _is_numeric_or_datetime_encoding(self, encoding_type: str | None) -> bool:
+        """Check if encoding type is numeric or datetime."""
+        if encoding_type is None:
+            return False
+        encoding_type_upper = encoding_type.upper()
+        return "NUMERIC" in encoding_type_upper or encoding_type_upper in [
+            "TABULAR_DATETIME",
+            "TABULAR_DATETIME_RELATIVE",
+            "LANGUAGE_DATETIME",
+        ]
 
-    def __init__(
+    def _resolve_agg_fn(
         self,
-        X=None,
-        target: str | None = None,
-        n_draws: int = 1,
-        agg_fn: Literal["mode", "mean", "median"] = "mode",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        # Store parameters as attributes for sklearn compatibility
-        self.X = X
-        self.target = target
-        self.n_draws = n_draws
-        self.agg_fn = agg_fn
-
-        # Internal attributes
-        self._base_argn = None
-        self._target_column = target
-        self._X_init = X
-
-        # If X is a fitted TabularARGN, use it as base
-        if isinstance(X, TabularARGN):
-            if not X._fitted:
-                raise ValueError("Provided TabularARGN instance must be fitted")
-            if target is None:
-                raise ValueError("target parameter must be specified when using a fitted TabularARGN instance")
-            self._base_argn = X
-            self._fitted = True
-            self._workspace_path = X._workspace_path
-            self._feature_names = X._feature_names
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-            if hasattr(X, "workspace_path_"):
-                self.workspace_path_ = X.workspace_path_
-
-    def fit(self, X=None, y=None):
+        agg_fn: Literal["auto", "mode", "mean", "median", "list"] | Callable[[np.ndarray], Any] | None = None,
+        target_column: str | None = None,
+    ) -> Callable:
         """
-        Fit the classifier.
-
-        If X was provided during initialization and is array-like, trains the model.
-        If X was a fitted TabularARGN, this is a no-op.
+        Resolve aggregation function based on agg_fn parameter and target column encoding type.
 
         Args:
-            X: Training data. If None, uses X from initialization.
-            y: Target values. If None and target column is in X, uses that.
+            agg_fn: Aggregation method. If "auto", uses mean for numeric/datetime columns, mode for others.
+                   Can also be a callable function that takes a 1D numpy array and returns a scalar or array.
+            target_column: Target column name for encoding type lookup when agg_fn is "auto".
 
         Returns:
-            self: Returns self.
+            Aggregation function to use.
         """
-        if self._base_argn is not None:
-            # Already fitted via base TabularARGN
-            return self
+        if agg_fn is None:
+            agg_fn = "auto"
 
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
+        # If agg_fn is already a callable, return it directly
+        if callable(agg_fn):
+            return agg_fn
 
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Call parent fit which trains on full X (including target)
-        return super().fit(X, y=y)
+        if agg_fn == "auto":
+            encoding_type = self._get_target_encoding_type(target_column)
+            if self._is_numeric_or_datetime_encoding(encoding_type):
+                return mean_fn
+            else:
+                return mode_fn
+        elif agg_fn == "mean":
+            return mean_fn
+        elif agg_fn == "median":
+            return median_fn
+        elif agg_fn == "mode":
+            return mode_fn
+        elif agg_fn == "list":
+            return list_fn
+        else:
+            raise ValueError(
+                f"Invalid agg_fn: {agg_fn}. Must be one of 'auto', 'mean', 'median', 'mode', 'list', or a callable function."
+            )
 
     def predict(
         self,
         X,
+        target: str | None = None,
         ctx_data: pd.DataFrame | None = None,
+        n_draws: int = 1,
+        agg_fn: Literal["auto", "mode", "mean", "median", "list"] | Callable[[np.ndarray], Any] = "auto",
         **kwargs,
     ) -> np.ndarray:
         """
-        Predict class labels for samples in X.
+        Predict target values for samples in X.
+
+        This method generates synthetic samples conditioned on the input features and aggregates
+        the target column predictions across multiple draws.
 
         Args:
-            X: Input samples.
+            X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
+            target: Name of the target column to predict. If None, uses the target column from fit().
             ctx_data: Context data for generation. If None, uses the context data from training.
+            n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
+            agg_fn: Aggregation method to combine predictions across draws. Options:
+                - "auto" (default): Automatically selects aggregation based on target column encoding type.
+                  Uses "mean" for numeric and datetime columns, "mode" for others.
+                - "mean": Average across draws (suitable for numeric/datetime targets).
+                - "median": Median across draws (suitable for numeric/datetime targets).
+                - "mode": Most common value across draws (suitable for categorical targets).
+                - "list": Return all draws as arrays (returns shape (n_samples, n_draws) instead of (n_samples,)).
+                - Callable: A function that takes a 1D numpy array and returns a scalar or array.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
-            Predicted class labels as np.ndarray.
+            Predicted target values as np.ndarray of shape (n_samples,) or (n_samples, n_draws) if agg_fn="list".
         """
         if not self._fitted:
-            raise ValueError("Classifier must be fitted before prediction. Call fit() first.")
+            raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        if self._target_column is None:
-            raise ValueError("Target column must be specified for prediction.")
+        # Determine target column
+        target_column = target or self._target_column
+        if target_column is None:
+            raise ValueError(
+                "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
+            )
 
-        # Map aggregation method to function
-        agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
-        agg_fn = agg_fn_map[self.agg_fn]
+        # Resolve aggregation function
+        agg_fn_func = self._resolve_agg_fn(agg_fn, target_column)
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
-        if self._target_column in X_df.columns:
-            X_df = X_df.drop(columns=[self._target_column])
-
-        # Use self._base_argn if available, otherwise use self (since classifier IS a TabularARGN)
-        base_model = self._base_argn if self._base_argn is not None else self
+        if target_column in X_df.columns:
+            X_df = X_df.drop(columns=[target_column])
 
         # Generate predictions across multiple draws
         all_predictions = []
-        for _ in range(self.n_draws):
-            samples = base_model.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            all_predictions.append(samples[self._target_column].values)
+        for _ in range(n_draws):
+            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
+            if target_column in samples.columns:
+                all_predictions.append(samples[target_column].values)
+            else:
+                raise ValueError(f"Target column '{target_column}' not found in generated samples")
 
         # Stack predictions and aggregate
         predictions_array = np.column_stack(all_predictions)
-        y_pred = np.apply_along_axis(agg_fn, 1, predictions_array)
 
-        return y_pred
+        # Check if we should return all draws (list aggregation)
+        is_list_agg = (agg_fn == "list") if not callable(agg_fn) else False
+
+        if is_list_agg:
+            # For list aggregation, return all draws as a 2D array
+            return predictions_array
+        else:
+            y_pred = np.apply_along_axis(agg_fn_func, 1, predictions_array)
+            return y_pred
 
     def predict_proba(
         self,
         X,
+        target: str | None = None,
         ctx_data: pd.DataFrame | None = None,
+        n_draws: int = 1,
         **kwargs,
     ) -> np.ndarray:
         """
         Predict class probabilities for samples in X.
 
+        This method generates synthetic samples conditioned on the input features and computes
+        the probability of each class based on the frequency across multiple draws.
+
         Args:
-            X: Input samples.
+            X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
+            target: Name of the target column to predict. If None, uses the target column from fit().
             ctx_data: Context data for generation. If None, uses the context data from training.
+            n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
             Predicted class probabilities as np.ndarray of shape (n_samples, n_classes).
+            Each row sums to 1.0.
         """
         if not self._fitted:
-            raise ValueError("Classifier must be fitted before prediction. Call fit() first.")
+            raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        if self._target_column is None:
-            raise ValueError("Target column must be specified for prediction.")
+        # Determine target column
+        target_column = target or self._target_column
+        if target_column is None:
+            raise ValueError(
+                "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
+            )
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
-        if self._target_column in X_df.columns:
-            X_df = X_df.drop(columns=[self._target_column])
-
-        # Use self._base_argn if available, otherwise use self (since classifier IS a TabularARGN)
-        base_model = self._base_argn if self._base_argn is not None else self
+        if target_column in X_df.columns:
+            X_df = X_df.drop(columns=[target_column])
 
         # Generate predictions across multiple draws
         all_predictions = []
-        for _ in range(self.n_draws):
-            samples = base_model.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if self._target_column in samples.columns:
-                all_predictions.append(samples[self._target_column].values)
+        for _ in range(n_draws):
+            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
+            if target_column in samples.columns:
+                all_predictions.append(samples[target_column].values)
             else:
-                raise ValueError(f"Target column '{self._target_column}' not found in generated samples")
+                raise ValueError(f"Target column '{target_column}' not found in generated samples")
 
         # Stack predictions
         predictions_array = np.column_stack(all_predictions)
@@ -648,167 +682,3 @@ class TabularARGNClassifier(TabularARGN):
 
         self.classes_ = classes
         return proba
-
-    def score(self, X, y, **kwargs) -> float:
-        """
-        Return the accuracy score on the given test data and labels.
-
-        Args:
-            X: Test samples.
-            y: True labels for X.
-            **kwargs: Additional arguments passed to predict() method.
-
-        Returns:
-            Accuracy score as float.
-        """
-        y_pred = self.predict(X, **kwargs)
-        return accuracy_score(y, y_pred)
-
-
-class TabularARGNRegressor(TabularARGN):
-    """
-    TabularARGN regressor with sklearn interface.
-
-    This regressor trains a generative model on the full dataset and uses it
-    to predict continuous target values by conditioning on input features.
-
-    Args:
-        X: Training data or a fitted TabularARGN instance.
-        target: Name of the target column to predict.
-        n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
-        agg_fn: Aggregation method to combine predictions across draws. Options: "mean" (default), "mode", "median".
-        **kwargs: All other arguments are passed to TabularARGN base class.
-            See TabularARGN docstring for available parameters.
-    """
-
-    def __init__(
-        self,
-        X=None,
-        target: str | None = None,
-        n_draws: int = 1,
-        agg_fn: Literal["mode", "mean", "median"] = "mean",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        # Store parameters as attributes for sklearn compatibility
-        self.X = X
-        self.target = target
-        self.n_draws = n_draws
-        self.agg_fn = agg_fn
-
-        # Internal attributes
-        self._base_argn = None
-        self._target_column = target
-        self._X_init = X
-
-        # If X is a fitted TabularARGN, use it as base
-        if isinstance(X, TabularARGN):
-            if not X._fitted:
-                raise ValueError("Provided TabularARGN instance must be fitted")
-            if target is None:
-                raise ValueError("target parameter must be specified when using a fitted TabularARGN instance")
-            self._base_argn = X
-            self._fitted = True
-            self._workspace_path = X._workspace_path
-            self._feature_names = X._feature_names
-            # Copy sklearn-compatible fitted attributes
-            if hasattr(X, "n_features_in_"):
-                self.n_features_in_ = X.n_features_in_
-            if hasattr(X, "feature_names_in_"):
-                self.feature_names_in_ = X.feature_names_in_
-            if hasattr(X, "workspace_path_"):
-                self.workspace_path_ = X.workspace_path_
-
-    def fit(self, X=None, y=None):
-        """
-        Fit the regressor.
-
-        If X was provided during initialization and is array-like, trains the model.
-        If X was a fitted TabularARGN, this is a no-op.
-
-        Args:
-            X: Training data. If None, uses X from initialization.
-            y: Target values. If None and target column is in X, uses that.
-
-        Returns:
-            self: Returns self.
-        """
-        if self._base_argn is not None:
-            # Already fitted via base TabularARGN
-            return self
-
-        # Use X from init if not provided
-        if X is None:
-            X = self._X_init
-
-        if X is None:
-            raise ValueError("X must be provided either during initialization or fit()")
-
-        # Call parent fit which trains on full X (including target)
-        return super().fit(X, y=y)
-
-    def predict(
-        self,
-        X,
-        ctx_data: pd.DataFrame | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Predict continuous target values for samples in X.
-
-        Args:
-            X: Input samples.
-            ctx_data: Context data for generation. If None, uses the context data from training.
-            **kwargs: Additional arguments passed to sample() method.
-
-        Returns:
-            Predicted target values as np.ndarray.
-        """
-        if not self._fitted:
-            raise ValueError("Regressor must be fitted before prediction. Call fit() first.")
-
-        if self._target_column is None:
-            raise ValueError("Target column must be specified for prediction.")
-
-        # Map aggregation method to function
-        agg_fn_map = {"mode": mode_fn, "mean": mean_fn, "median": median_fn}
-        agg_fn = agg_fn_map[self.agg_fn]
-
-        X_df = ensure_dataframe(X, columns=self._feature_names)
-
-        # Exclude target column from seed if present
-        if self._target_column in X_df.columns:
-            X_df = X_df.drop(columns=[self._target_column])
-
-        # Use self._base_argn if available, otherwise use self (since regressor IS a TabularARGN)
-        base_model = self._base_argn if self._base_argn is not None else self
-
-        # Generate predictions across multiple draws
-        all_predictions = []
-        for _ in range(self.n_draws):
-            samples = base_model.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if self._target_column in samples.columns:
-                all_predictions.append(samples[self._target_column].values)
-            else:
-                raise ValueError(f"Target column '{self._target_column}' not found in generated samples")
-
-        # Stack predictions and aggregate
-        predictions_array = np.column_stack(all_predictions)
-        y_pred = np.apply_along_axis(agg_fn, 1, predictions_array)
-
-        return y_pred
-
-    def score(self, X, y, **kwargs) -> float:
-        """
-        Return the R² score on the given test data and labels.
-
-        Args:
-            X: Test samples.
-            y: True target values for X.
-            **kwargs: Additional arguments passed to predict() method.
-
-        Returns:
-            R² score as float.
-        """
-        y_pred = self.predict(X, **kwargs)
-        return r2_score(y, y_pred)

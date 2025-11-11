@@ -14,11 +14,7 @@
 import warnings
 
 from mostlyai.engine._language.interface import LanguageModel
-from mostlyai.engine._tabular.interface import (
-    TabularARGN,
-    TabularARGNClassifier,
-    TabularARGNRegressor,
-)
+from mostlyai.engine._tabular.interface import TabularARGN
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
@@ -39,8 +35,6 @@ __all__ = [
     "set_random_state",
     "LanguageModel",
     "TabularARGN",
-    "TabularARGNClassifier",
-    "TabularARGNRegressor",
 ]
 __version__ = "1.7.0"
 

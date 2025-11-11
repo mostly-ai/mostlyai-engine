@@ -26,8 +26,6 @@ import pytest
 from mostlyai.engine import (
     LanguageModel,
     TabularARGN,
-    TabularARGNClassifier,
-    TabularARGNRegressor,
 )
 
 
@@ -229,7 +227,7 @@ def test_tabular_argn_log_prob(flat_data):
 
 
 def test_tabular_argn_classifier():
-    """Test TabularARGNClassifier predict and score."""
+    """Test TabularARGN predict and predict_proba for classification."""
     np.random.seed(42)
 
     # Create classification data
@@ -242,35 +240,28 @@ def test_tabular_argn_classifier():
     )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        model = TabularARGNClassifier(target="target", n_draws=2, max_epochs=1, workspace_dir=tmp_dir, verbose=0)
+        model = TabularARGN(max_epochs=1, workspace_dir=tmp_dir, verbose=0)
 
-        model.fit(data)
+        model.fit(data, y=data["target"])
 
         # Test predict
         X_test = data[["feature1", "feature2"]].head(5)
-        y_pred = model.predict(X_test)
+        y_pred = model.predict(X_test, target="target", n_draws=2)
 
         assert isinstance(y_pred, np.ndarray)
         assert len(y_pred) == 5
 
         # Test predict_proba
-        y_proba = model.predict_proba(X_test)
+        y_proba = model.predict_proba(X_test, target="target", n_draws=2)
 
         assert isinstance(y_proba, np.ndarray)
         assert y_proba.shape[0] == 5
         assert y_proba.shape[1] >= 1  # At least one class
         assert np.allclose(y_proba.sum(axis=1), 1.0)  # Probabilities sum to 1
 
-        # Test score
-        y_true = data["target"].head(5).values
-        score = model.score(X_test, y_true)
-
-        assert isinstance(score, float)
-        assert 0 <= score <= 1
-
 
 def test_tabular_argn_regressor():
-    """Test TabularARGNRegressor predict and score."""
+    """Test TabularARGN predict for regression."""
     np.random.seed(42)
 
     # Create regression data
@@ -283,22 +274,16 @@ def test_tabular_argn_regressor():
     )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        model = TabularARGNRegressor(target="target", n_draws=2, max_epochs=1, workspace_dir=tmp_dir, verbose=0)
+        model = TabularARGN(max_epochs=1, workspace_dir=tmp_dir, verbose=0)
 
-        model.fit(data)
+        model.fit(data, y=data["target"])
 
         # Test predict
         X_test = data[["feature1", "feature2"]].head(5)
-        y_pred = model.predict(X_test)
+        y_pred = model.predict(X_test, target="target", n_draws=2)
 
         assert isinstance(y_pred, np.ndarray)
         assert len(y_pred) == 5
-
-        # Test score
-        y_true = data["target"].head(5).values
-        score = model.score(X_test, y_true)
-
-        assert isinstance(score, float)
 
 
 def test_tabular_argn_impute():

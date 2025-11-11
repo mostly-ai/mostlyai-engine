@@ -1030,6 +1030,22 @@ def median_fn(x: np.ndarray) -> float:
     return float(np.median(x_notna))
 
 
+def list_fn(x: np.ndarray) -> np.ndarray:
+    """
+    Return the array as-is without aggregation.
+
+    This function preserves all values in the array, useful when you want
+    to keep all draws instead of aggregating them.
+
+    Args:
+        x: Array of values.
+
+    Returns:
+        The array as a numpy array.
+    """
+    return np.array(x)
+
+
 def load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
     """Load generated parquet files from SyntheticData directory."""
     from mostlyai.engine._workspace import Workspace
