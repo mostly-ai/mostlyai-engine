@@ -982,8 +982,6 @@ def mode_fn(x: np.ndarray) -> Any:
     if pd.isna(x).all():
         return np.nan
     x_notna = x[~pd.isna(x)]
-    if len(x_notna) == 0:
-        return np.nan
     values, counts = np.unique(x_notna, return_counts=True)
     return values[np.argmax(counts)]
 
@@ -1004,8 +1002,6 @@ def mean_fn(x: np.ndarray) -> float:
     if pd.isna(x).all():
         return np.nan
     x_notna = x[~pd.isna(x)]
-    if len(x_notna) == 0:
-        return np.nan
     return float(np.mean(x_notna))
 
 
@@ -1025,8 +1021,6 @@ def median_fn(x: np.ndarray) -> float:
     if pd.isna(x).all():
         return np.nan
     x_notna = x[~pd.isna(x)]
-    if len(x_notna) == 0:
-        return np.nan
     return float(np.median(x_notna))
 
 
