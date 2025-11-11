@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mostlyai.engine._tabular.interface import TabularARGN
+from mostlyai.engine import TabularARGN
 
 from .conftest import MockData
 

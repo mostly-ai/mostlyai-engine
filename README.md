@@ -113,6 +113,7 @@ Fill in missing values:
 ```python
 # prepare demo data with missings
 data_with_missings = data_test.head(300)
+data_with_missings = data_test.reset_index(drop=True)
 data_with_missings.loc[0:299, "age"] = pd.NA
 data_with_missings.loc[0:199, "race"] = pd.NA
 data_with_missings.loc[100:299, "income"] = pd.NA
@@ -129,14 +130,14 @@ Predict any categorical target column:
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 # predict class labels for a categorical
-preds = argn.predict(data_test, target="income", n_draws=10, agg_fn="mode")
+predictions = argn.predict(data_test, target="income", n_draws=10, agg_fn="mode")
 
 # predict class probabilities for a categorical
-probs = argn.predict_proba(data_test, target="income", n_draws=10, agg_fn="mode")
+probabilities = argn.predict_proba(data_test, target="income", n_draws=10)
 
 # evaluate performance
-accuracy = accuracy_score(data_test["income"], preds)
-auc = roc_auc_score(data_test["income"], probs[:, 1])
+accuracy = accuracy_score(data_test["income"], predictions)
+auc = roc_auc_score(data_test["income"], probabilities[:, 1])
 print(f"Accuracy: {accuracy:.3f}, AUC: {auc:.3f}")
 ```
 
@@ -148,10 +149,10 @@ Predict any numerical target column:
 from sklearn.metrics import mean_absolute_error
 
 # predict target values
-preds = argn.predict(data_test, target="age", n_draws=10, agg_fn="mean")
+predictions = argn.predict(data_test, target="age", n_draws=10, agg_fn="mean")
 
 # evaluate performance
-mae = mean_absolute_error(data_test["age"], preds)
+mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
 ```
 
@@ -197,17 +198,14 @@ ctx_data = pd.DataFrame({
     "bats": ["R", "L"],
     "throws": ["R", "L"],
 })
-seed_data = pd.DataFrame({
-    "players_id": ["Player1", "Player1"],
-    "team": ["BOS", "BOS"],
-    "G": [100, 100],
-})
-argn.sample(ctx_data=ctx_data, seed_data=seed_data)
+argn.sample(ctx_data=ctx_data)
 ```
 
 ## Basic Usage of LanguageModel
 
 The `LanguageModel` class provides a scikit-learn-compatible interface for working with semi-structured textual data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.
+
+**Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU strongly recommended). You can also use pre-trained HuggingFace models by setting e.g. `model="microsoft/phi-1.5"` (GPU required).
 
 ### Model Training
 
@@ -218,18 +216,17 @@ import pandas as pd
 from mostlyai.engine import LanguageModel
 
 # load data
-data = pd.read_csv("https://github.com/user-attachments/files/23480586/news10k.csv.gz")
+data = pd.read_csv("https://github.com/user-attachments/files/23486562/airbnb20k.csv.gz")
 
 # fit LanguageModel
 lm = LanguageModel(
     model="MOSTLY_AI/LSTMFromScratch-3m",
     tgt_encoding_types={
-        'category': 'LANGUAGE_CATEGORICAL',
-        'date': 'LANGUAGE_DATETIME',
-        'headline': 'LANGUAGE_TEXT',
+        'neighbourhood': 'LANGUAGE_CATEGORICAL',
+        'title': 'LANGUAGE_TEXT',
     },
-    max_training_time=2,  # 2 minutes
-    verbose=0,
+    max_training_time=10,  # 10 minutes
+    verbose=1,
 )
 lm.fit(X=data)
 ```
@@ -242,16 +239,19 @@ Generate new synthetic samples using the trained language model:
 # unconditional sampling
 lm.sample(
     n_samples=100,
-    sampling_temperature=0.5,
+    sampling_temperature=0.8,
 )
 ```
 
 ```python
 # prepare seed
-seed_data = pd.DataFrame({"category": ["business", "tech"]})
+seed_data = pd.DataFrame({
+    "neighbourhood": ["Westminster", "Hackney"],
+})
 
 # conditional sampling with seed values
-syn_data = lm.sample(seed_data=seed_data, sampling_temperature=0.5)
+lm.sample(
+    seed_data=seed_data,
+    sampling_temperature=0.8,
+)
 ```
-
-**Note**: The default model is `"MOSTLY_AI/LSTMFromScratch-3m"`, a lightweight LSTM model trained from scratch (GPU recommended). You can also use pre-trained HuggingFace models by setting e.g. `model="microsoft/phi-1.5"` (GPU required).

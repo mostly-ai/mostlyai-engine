@@ -19,7 +19,7 @@ Functional tests for LanguageModel interface.
 import pandas as pd
 import pytest
 
-from mostlyai.engine._language.interface import LanguageModel
+from mostlyai.engine import LanguageModel
 from mostlyai.engine.domain import ModelEncodingType
 
 

@@ -13,6 +13,8 @@
 # limitations under the License.
 import warnings
 
+from mostlyai.engine._language.interface import LanguageModel
+from mostlyai.engine._tabular.interface import TabularARGN
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
@@ -21,7 +23,17 @@ from mostlyai.engine.random_state import set_random_state
 from mostlyai.engine.splitting import split
 from mostlyai.engine.training import train
 
-__all__ = ["split", "analyze", "encode", "train", "generate", "init_logging", "set_random_state"]
+__all__ = [
+    "split",
+    "analyze",
+    "encode",
+    "train",
+    "generate",
+    "init_logging",
+    "set_random_state",
+    "TabularARGN",
+    "LanguageModel",
+]
 __version__ = "1.7.1"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
