@@ -247,7 +247,7 @@ class TabularARGN(BaseEstimator):
 
         # Add sklearn-compatible fitted attributes (ending with underscore)
         # These signal to sklearn's HTML repr that the model is fitted
-        self.n_features_in_ = X_df.shape[1]
+        self.n_features_in_ = len(self._feature_names)
         self.feature_names_in_ = np.array(self._feature_names)
         self.workspace_path_ = str(workspace_dir)
 

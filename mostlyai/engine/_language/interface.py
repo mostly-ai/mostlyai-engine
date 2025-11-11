@@ -216,7 +216,7 @@ class LanguageModel(BaseEstimator):
         self._fitted = True
 
         # Add sklearn-compatible fitted attributes
-        self.n_features_in_ = X_df.shape[1]
+        self.n_features_in_ = len(self._feature_names)
         self.feature_names_in_ = np.array(self._feature_names)
         self.workspace_path_ = str(workspace_dir)
 
