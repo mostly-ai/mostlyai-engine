@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Scikit-learn compatible interface for MOSTLY AI tabular models.
+Scikit-learn compatible interface for the MOSTLY AI TabularARGN Models.
 
-This module provides sklearn-compatible estimators that wrap the MOSTLY AI engine
+This module provides a public interface for the MOSTLY AI TabularARGN Models
 for sampling, classification, regression, imputation, and density estimation tasks.
 """
 
@@ -52,10 +52,10 @@ _LOG = logging.getLogger(__name__)
 
 class TabularARGN(BaseEstimator):
     """
-    Base class for MOSTLY AI TabularARGN models with sklearn interface.
+    Scikit-learn compatible class TabularARGN.
 
-    This class wraps the MOSTLY AI engine to provide a scikit-learn compatible
-    interface for training generative models on tabular or language data.
+    This class wraps the MOSTLY AI TabularARGN Models to provide a public
+    interface for training generative models on tabular data.
 
     Args:
         model: The identifier of the tabular model to train. Defaults to MOSTLY_AI/Medium.

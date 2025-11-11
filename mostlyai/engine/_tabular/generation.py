@@ -832,9 +832,12 @@ def generate(
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
     with ProgressCallbackWrapper(update_progress) as progress:
-        # Load workspace and stats needed for gen_column_order calculation
+        # build paths based on workspace dir
         workspace_dir = ensure_workspace_dir(workspace_dir)
         workspace = Workspace(workspace_dir)
+        output_path = workspace.generated_data_path
+        reset_dir(output_path)
+
         model_configs = workspace.model_configs.read()
         tgt_stats = workspace.tgt_stats.read()
         ctx_stats = workspace.ctx_stats.read()
@@ -869,9 +872,7 @@ def generate(
         _LOG.info(f"fairness: {fairness}")
         _LOG.info(f"seed_data: {list(seed_data.columns) if isinstance(seed_data, pd.DataFrame) else None}")
 
-        # Determine generation column order
-        # This must be calculated before loading the model since we pass it to load_model
-        # First, get cardinalities from stats to calculate gen_column_order
+        # determine generation column order
         has_slen = has_ridx = has_sdec = None
         if is_sequential:
             model_units = model_configs.get("model_units")
@@ -1010,16 +1011,11 @@ def generate(
         progress.update(completed=0, total=no_of_batches * (seq_len_max + 1))
 
         _LOG.info("load generative model")
-        model, metadata = load_model(
+        model, _ = load_model(
             workspace_dir=workspace_dir,
             device=device,
             column_order=gen_column_order,
         )
-
-        # Setup output directory
-        output_path = workspace.generated_data_path
-        reset_dir(output_path)
-
         no_of_model_params = get_no_of_model_parameters(model)
         _LOG.info(f"{no_of_model_params=}")
 

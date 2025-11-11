@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Scikit-learn compatible interface for MOSTLY AI language models.
+Scikit-learn compatible interface for the MOSTLY AI Language Models.
 
 This module provides sklearn-compatible estimators that wrap the MOSTLY AI engine
 for training language models and generating synthetic text data.
@@ -46,10 +46,10 @@ _LOG = logging.getLogger(__name__)
 
 class LanguageModel(BaseEstimator):
     """
-    Language model with sklearn interface for text data generation.
+    Scikit-learn compatible class LanguageModel.
 
-    This class wraps the MOSTLY AI engine to provide a scikit-learn compatible
-    interface for training language models on text data and generating synthetic samples.
+    This class wraps the MOSTLY AI Language Models to provide a public
+    interface for training generative models on text data.
 
     Args:
         tgt_encoding_types: Dictionary mapping column names to encoding types.
