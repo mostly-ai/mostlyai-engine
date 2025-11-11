@@ -135,7 +135,7 @@ def load_base_model_and_config(
     return model, config
 
 
-def load_model(
+def load_engine(
     workspace_dir: str | Path,
     device: torch.device,
     max_new_tokens: int,
