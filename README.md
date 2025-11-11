@@ -1,5 +1,3 @@
-### README
-
 # Synthetic Data Engine 💎
 
 ![GitHub Release](https://img.shields.io/github/v/release/mostly-ai/mostlyai-engine)
@@ -119,8 +117,7 @@ Fill in missing values:
 
 ```python
 # prepare demo data with missings
-data_with_missings = data_test.head(300)
-data_with_missings = data_test.reset_index(drop=True)
+data_with_missings = data_test.head(300).reset_index(drop=True)
 data_with_missings.loc[0:299, "age"] = pd.NA
 data_with_missings.loc[0:199, "race"] = pd.NA
 data_with_missings.loc[100:299, "income"] = pd.NA

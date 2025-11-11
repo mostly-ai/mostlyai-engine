@@ -253,13 +253,27 @@ class TabularARGN(BaseEstimator):
 
         return self
 
-    def __del__(self):
-        """Clean up temporary directory if created."""
-        if self._temp_dir is not None:
+    def close(self):
+        """Explicitly clean up temporary directory if created."""
+        if getattr(self, "_temp_dir", None) is not None:
             try:
                 self._temp_dir.cleanup()
+                self._temp_dir = None  # Mark as cleaned up
             except Exception:
                 pass
+
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager and clean up resources."""
+        self.close()
+        return False  # Don't suppress exceptions
+
+    def __del__(self):
+        """Fallback cleanup if context manager wasn't used."""
+        self.close()
 
     def sample(
         self,
@@ -330,7 +344,7 @@ class TabularARGN(BaseEstimator):
         generate(
             ctx_data=ctx_data_df,
             seed_data=seed_data,
-            sample_size=n_samples,
+            sample_size=None if seed_data is not None else n_samples,
             batch_size=batch_size,
             sampling_temperature=sampling_temperature,
             sampling_top_p=sampling_top_p,
