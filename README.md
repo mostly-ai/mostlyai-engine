@@ -219,7 +219,7 @@ argn.sample(ctx_data=ctx_data, seed_data=seed_data)
 
 The `LanguageModel` class provides a scikit-learn-compatible interface for working with semi-structured textual data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.
 
-### Text Data
+### Model Training
 
 Load your data and train the model:
 
@@ -238,11 +238,19 @@ lm = LanguageModel(
         'date': 'LANGUAGE_DATETIME',
         'headline': 'LANGUAGE_TEXT',
     },
-    max_training_time=2,
-    random_state=42,
+    max_training_time=2,  # 2 minutes
+    verbose=0,
 )
 lm.fit(X=data)
 ```
+
+### Sampling
+
+Generate new synthetic samples:
+```python
+lm.sample(n_samples=5)
+```
+
 
 #### Synthetic Text Generation
 
