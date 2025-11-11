@@ -946,3 +946,101 @@ def impute_from_non_nan_distribution(values: pd.Series, column_stats: dict) -> t
     # NOTE: an alternative will be to use the largest remainder method
     values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
     return values, nan_mask.astype(int)
+
+
+def ensure_dataframe(X: Any, columns: list[str] | None = None) -> pd.DataFrame:
+    """Convert array-like to DataFrame with column names."""
+    if isinstance(X, pd.DataFrame):
+        return X
+    elif isinstance(X, np.ndarray):
+        if columns is None:
+            columns = [f"col_{i}" for i in range(X.shape[1])]
+        return pd.DataFrame(X, columns=columns)
+    elif hasattr(X, "__array__"):
+        arr = np.asarray(X)
+        if columns is None:
+            columns = [f"col_{i}" for i in range(arr.shape[1])]
+        return pd.DataFrame(arr, columns=columns)
+    else:
+        raise ValueError(f"Unsupported data type: {type(X)}")
+
+
+def mode_fn(x: np.ndarray) -> Any:
+    """
+    Calculate the mode (most common value) of an array.
+
+    Handles NaN values by excluding them from the calculation.
+    If all values are NaN, returns np.nan.
+
+    Args:
+        x: Array of values.
+
+    Returns:
+        The most common value in the array, or np.nan if all values are NaN.
+    """
+    # Handle both numeric and categorical data
+    if pd.isna(x).all():
+        return np.nan
+    x_notna = x[~pd.isna(x)]
+    if len(x_notna) == 0:
+        return np.nan
+    values, counts = np.unique(x_notna, return_counts=True)
+    return values[np.argmax(counts)]
+
+
+def mean_fn(x: np.ndarray) -> float:
+    """
+    Calculate the mean (average) of an array.
+
+    Handles NaN values by excluding them from the calculation.
+    If all values are NaN, returns np.nan.
+
+    Args:
+        x: Array of numeric values.
+
+    Returns:
+        The mean of the array, or np.nan if all values are NaN.
+    """
+    if pd.isna(x).all():
+        return np.nan
+    x_notna = x[~pd.isna(x)]
+    if len(x_notna) == 0:
+        return np.nan
+    return float(np.mean(x_notna))
+
+
+def median_fn(x: np.ndarray) -> float:
+    """
+    Calculate the median (middle value) of an array.
+
+    Handles NaN values by excluding them from the calculation.
+    If all values are NaN, returns np.nan.
+
+    Args:
+        x: Array of numeric values.
+
+    Returns:
+        The median of the array, or np.nan if all values are NaN.
+    """
+    if pd.isna(x).all():
+        return np.nan
+    x_notna = x[~pd.isna(x)]
+    if len(x_notna) == 0:
+        return np.nan
+    return float(np.median(x_notna))
+
+
+def list_fn(x: np.ndarray) -> np.ndarray:
+    """
+    Return the array as-is without aggregation.
+
+    This function preserves all values in the array, useful when you want
+    to keep all draws instead of aggregating them.
+
+    Args:
+        x: Array of values.
+
+    Returns:
+        The array as a numpy array.
+    """
+    return np.array(x)
