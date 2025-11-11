@@ -1044,3 +1044,26 @@ def list_fn(x: np.ndarray) -> np.ndarray:
         The array as a numpy array.
     """
     return np.array(x)
+
+
+def load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
+    """
+    Load generated synthetic data from workspace directory.
+
+    Args:
+        workspace_dir: Path to the workspace directory.
+
+    Returns:
+        DataFrame containing the generated synthetic data.
+    """
+    workspace_dir = Path(workspace_dir)
+    synthetic_data_path = workspace_dir / "SyntheticData"
+
+    # Read all parquet files from SyntheticData directory
+    parquet_files = sorted(synthetic_data_path.glob("*.parquet"))
+    if not parquet_files:
+        raise FileNotFoundError(f"No parquet files found in {synthetic_data_path}")
+
+    # Read and concatenate all parquet files
+    dfs = [pd.read_parquet(f) for f in parquet_files]
+    return pd.concat(dfs, ignore_index=True)
