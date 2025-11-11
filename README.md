@@ -80,13 +80,12 @@ from sklearn.model_selection import train_test_split
 from mostlyai.engine import TabularARGN
 
 # load original data
-url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
-data = pd.read_csv(f"{url}/census.csv.gz").head(10_000)
-trn_data, val_data = train_test_split(data, test_size=0.1, random_state=42)
+df = pd.read_csv("https://github.com/user-attachments/files/23478827/census10k.csv.gz")
+df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
 
 # fit the model
-argn = TabularARGN(max_training_time=1, random_state=42)
-argn.fit(trn_data)
+argn = TabularARGN(random_state=42)
+argn.fit(df_train)
 ```
 
 #### Synthetic Data Generation
@@ -130,12 +129,12 @@ from mostlyai.engine import TabularARGNClassifier
 clf = TabularARGNClassifier(argn, target="income", n_draws=10)
 
 # sample predictions
-preds = clf.predict(val_data)
-probs = clf.predict_proba(val_data)
+preds = clf.predict(df_test)
+probs = clf.predict_proba(df_test)
 
 # evaluate performance
-accuracy = accuracy_score(val_data["income"], preds)
-auc = roc_auc_score(val_data["income"], probs[:, 1])
+accuracy = accuracy_score(df_test["income"], preds)
+auc = roc_auc_score(df_test["income"], probs[:, 1])
 print(f"Accuracy: {accuracy:.3f}, AUC: {auc:.3f}")
 ```
 
@@ -151,10 +150,10 @@ from mostlyai.engine import TabularARGNRegressor
 reg = TabularARGNRegressor(argn, target="age", n_draws=10)
 
 # sample predictions
-preds = reg.predict(val_data)
+preds = reg.predict(df_test)
 
 # evaluate performance
-mae = mean_absolute_error(val_data["age"], preds)
+mae = mean_absolute_error(df_test["age"], preds)
 print(f"MAE: {mae:.1f} years")
 ```
 
