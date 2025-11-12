@@ -670,36 +670,28 @@ class TabularARGN(BaseEstimator):
         samples that are less likely according to the model, which can be useful for
         anomaly detection or model evaluation.
 
-        Note: This method only works for flat (non-sequential) models. An error will
-        be raised if the model was trained on sequential data.
+        For sequential models, X should be grouped by context key. The function
+        returns log probabilities per sequence (not per step).
 
         Args:
-            X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
+            X: Input samples. For flat models: array-like or pd.DataFrame of shape (n_samples, n_features).
+               For sequential models: pd.DataFrame with rows grouped by context key.
             ctx_data: Context data for evaluation. If None, uses the context data from training.
             **kwargs: Additional arguments passed to the underlying log_prob function
                      (e.g., device, batch_size).
 
         Returns:
-            Array of log probabilities with shape (n_samples,). Higher (less negative)
-            values indicate higher likelihood under the model.
+            Array of log probabilities. For flat models: shape (n_samples,).
+            For sequential models: shape (n_sequences,), one value per sequence.
+            Higher (less negative) values indicate higher likelihood under the model.
 
         Raises:
-            ValueError: If the model is not fitted or if the model is sequential.
+            ValueError: If the model is not fitted.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before computing log probabilities. Call fit() first.")
 
-        # Check if model is sequential
         workspace_dir = self._get_workspace_dir()
-        workspace = Workspace(workspace_dir)
-        tgt_stats = workspace.tgt_stats.read()
-        is_sequential = tgt_stats["is_sequential"]
-
-        if is_sequential:
-            raise ValueError(
-                "log_prob is only supported for flat (non-sequential) models. "
-                "Sequential models were trained with tgt_context_key or tgt_primary_key."
-            )
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 

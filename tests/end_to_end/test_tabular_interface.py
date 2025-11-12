@@ -532,8 +532,8 @@ class TestTabularARGNLogProb:
         detected_anomalies = is_anomaly[10:].sum()  # anomalous samples are at indices 10-14
         assert detected_anomalies >= 2  # at least 40% detected
 
-    def test_log_prob_sequential_raises_error(self, tmp_path_factory):
-        """Test that log_prob raises error for sequential models."""
+    def test_log_prob_sequential_model(self, tmp_path_factory):
+        """Test that log_prob works correctly for sequential models."""
         # Create sequential data
         tgt_data = pd.DataFrame(
             {
@@ -552,9 +552,16 @@ class TestTabularARGNLogProb:
         )
         argn.fit(X=tgt_data)
 
-        # Attempt to compute log_prob should raise error
-        with pytest.raises(ValueError, match="only supported for flat.*models"):
-            argn.log_prob(tgt_data)
+        # Compute log_prob should work for sequential models
+        log_probs = argn.log_prob(tgt_data)
+
+        # Verify output shape - should be one value per sequence
+        assert log_probs.shape == (2,)  # 2 sequences: seq1 and seq2
+        assert isinstance(log_probs, np.ndarray)
+
+        # Verify all values are finite and negative (since they're log probabilities)
+        assert np.all(np.isfinite(log_probs))
+        assert np.all(log_probs < 0)
 
     def test_log_prob_not_fitted_raises_error(self, simple_tabular_data):
         """Test that log_prob raises error when model is not fitted."""

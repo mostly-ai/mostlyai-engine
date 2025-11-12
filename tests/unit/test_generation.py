@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -487,8 +488,8 @@ class TestResolveGenColumnOrder:
 class TestLogProb:
     """Test the core log_prob function."""
 
-    def test_log_prob_validates_sequential_model(self, tmp_path_factory):
-        """Test that log_prob raises error for sequential models."""
+    def test_log_prob_sequential_model(self, tmp_path_factory):
+        """Test that log_prob works correctly for sequential models."""
         from mostlyai.engine import analyze, encode, split, train
         from mostlyai.engine.domain import ModelEncodingType
 
@@ -512,9 +513,16 @@ class TestLogProb:
         encode(workspace_dir=workspace_dir)
         train(max_epochs=1, workspace_dir=workspace_dir)
 
-        # Attempt to compute log_prob should raise error
-        with pytest.raises(ValueError, match="only supported for flat.*models"):
-            log_prob(data=tgt_data, workspace_dir=workspace_dir)
+        # Compute log_prob should work for sequential models
+        log_probs = log_prob(data=tgt_data, workspace_dir=workspace_dir)
+
+        # Verify output shape - should be one value per sequence
+        assert log_probs.shape == (2,)  # 2 sequences: seq1 and seq2
+        assert isinstance(log_probs, np.ndarray)
+
+        # Verify all values are finite and negative (since they're log probabilities)
+        assert np.all(np.isfinite(log_probs))
+        assert np.all(log_probs < 0)
 
     def test_log_prob_validates_model_weights_exist(self, tmp_path_factory):
         """Test that log_prob raises error when model weights don't exist."""
