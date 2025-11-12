@@ -161,9 +161,9 @@ mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
 ```
 
-### Log Probability / Anomaly Detection
+### Log Probability / Density Estimation
 
-Compute log probabilities to evaluate sample likelihood or detect anomalies:
+Compute log probabilities to find the biggest outlier:
 
 ```python
 import numpy as np
@@ -171,17 +171,15 @@ import numpy as np
 # compute log probabilities for test data
 log_probs = argn.log_prob(data_test)
 
-# evaluate model: higher (less negative) values indicate better fit
-mean_log_prob = np.mean(log_probs)
-print(f"Mean log probability: {mean_log_prob:.2f}")
+# identify the sample with the lowest log probability (biggest outlier)
+outlier_idx = np.argmin(log_probs)
+outlier_sample = data_test.iloc[outlier_idx]
+outlier_log_prob = log_probs[outlier_idx]
 
-# detect anomalies: samples with low log probability
-threshold = np.percentile(log_probs, 5)  # bottom 5%
-anomalies = data_test[log_probs < threshold]
-print(f"Detected {len(anomalies)} anomalies")
+print("Biggest outlier (lowest log probability):")
+print(outlier_sample)
+print(f"Log probability of outlier: {outlier_log_prob:.2f}")
 ```
-
-**Note**: `log_prob` only works for flat tables (not sequential data).
 
 ## TabularARGN for Sequential Data
 
