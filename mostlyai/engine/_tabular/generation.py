@@ -705,6 +705,7 @@ def decode_buffered_samples(
     tgt_context_key: str,
     decode_prev_steps: dict | None = None,
     impute_columns: list[str] | None = None,
+    extra_seed_data: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     is_sequential = tgt_stats["is_sequential"]
     seq_len_stats = get_sequence_length_stats(tgt_stats)
@@ -799,12 +800,17 @@ def decode_buffered_samples(
                         mask = df_overwrite[seed_col_name].notna()
                         df_syn.loc[mask, col] = df_overwrite.loc[mask, seed_col_name]
 
+    # merge extra seed columns back (before post-processing, while context key still exists)
+    if extra_seed_data is not None:
+        df_syn = df_syn.merge(extra_seed_data, on=tgt_context_key, how="left")
+
     # postprocess generated data
     _LOG.info(f"post-process generated data {df_syn.shape}")
     df_syn = _post_process_decoding(
         df_syn,
         tgt_primary_key=tgt_primary_key,
     )
+
     return df_syn
 
 
@@ -991,6 +997,10 @@ def generate(
         tgt_columns = (
             list(tgt_stats["columns"].keys()) + [tgt_context_key] + ([tgt_primary_key] if tgt_primary_key else [])
         )
+        # identify extra seed columns (in seed_data but not in model)
+        extra_seed_columns = [c for c in seed_data.columns if c not in tgt_columns]
+        extra_seed_data = seed_data[[tgt_context_key] + extra_seed_columns] if extra_seed_columns else None
+        _LOG.info(f"extra_seed_columns: {extra_seed_columns}")
         seed_data = seed_data[[c for c in tgt_columns if c in seed_data.columns]]
 
         # determine batch_size for generation
@@ -1354,6 +1364,7 @@ def generate(
                             tgt_context_key=tgt_context_key,
                             decode_prev_steps=decode_prev_steps,
                             impute_columns=imputation.columns if imputation else None,
+                            extra_seed_data=extra_seed_data,
                         )
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
@@ -1428,6 +1439,7 @@ def generate(
                     tgt_context_key=tgt_context_key,
                     decode_prev_steps=decode_prev_steps,
                     impute_columns=imputation.columns if imputation else None,
+                    extra_seed_data=extra_seed_data,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                 buffer.clear()
@@ -1444,6 +1456,7 @@ def generate(
                 tgt_context_key=tgt_context_key,
                 decode_prev_steps=decode_prev_steps,
                 impute_columns=imputation.columns if imputation else None,
+                extra_seed_data=extra_seed_data,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
