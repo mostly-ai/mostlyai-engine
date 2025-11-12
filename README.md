@@ -262,7 +262,7 @@ lm.sample(
 
 ## Further Examples
 
-Example notebooks demonstrating various use cases are available in the [`examples/`](examples/) directory:
-- [`flat.ipynb`](examples/flat.ipynb): TabularARGN for flat tabular data
-- [`sequential.ipynb`](examples/sequential.ipynb): TabularARGN for sequential data
-- [`language.ipynb`](examples/language.ipynb): LanguageModel for textual data
+Example notebooks demonstrating various use cases are available in the `examples` directory:
+- TabularARGN for flat tabular data [![Run on Colab](https://img.shields.io/badge/Open%20in-Colab-blue?logo=google-colab)](https://colab.research.google.com/github/mostly-ai/mostlyai-engine/blob/main/examples/flat.ipynb)
+- TabularARGN for sequential data [![Run on Colab](https://img.shields.io/badge/Open%20in-Colab-blue?logo=google-colab)](https://colab.research.google.com/github/mostly-ai/mostlyai-engine/blob/main/examples/language.ipynb)
+- LanguageModel for textual data [![Run on Colab](https://img.shields.io/badge/Open%20in-Colab-blue?logo=google-colab)](https://colab.research.google.com/github/mostly-ai/mostlyai-engine/blob/main/examples/sequential.ipynb)
