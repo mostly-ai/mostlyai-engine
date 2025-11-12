@@ -655,3 +655,73 @@ class TabularARGN(BaseEstimator):
 
         self.classes_ = classes
         return proba
+
+    def log_prob(
+        self,
+        X,
+        ctx_data: pd.DataFrame | None = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Compute log probabilities for samples in X.
+
+        This method evaluates the likelihood of each sample under the trained model,
+        returning per-sample log probabilities. Lower (more negative) values indicate
+        samples that are less likely according to the model, which can be useful for
+        anomaly detection or model evaluation.
+
+        Note: This method only works for flat (non-sequential) models. An error will
+        be raised if the model was trained on sequential data.
+
+        Args:
+            X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
+            ctx_data: Context data for evaluation. If None, uses the context data from training.
+            **kwargs: Additional arguments passed to the underlying log_prob function
+                     (e.g., device, batch_size).
+
+        Returns:
+            Array of log probabilities with shape (n_samples,). Higher (less negative)
+            values indicate higher likelihood under the model.
+
+        Raises:
+            ValueError: If the model is not fitted or if the model is sequential.
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before computing log probabilities. Call fit() first.")
+
+        # Check if model is sequential
+        workspace_dir = self._get_workspace_dir()
+        workspace = Workspace(workspace_dir)
+        tgt_stats = workspace.tgt_stats.read()
+        is_sequential = tgt_stats["is_sequential"]
+
+        if is_sequential:
+            raise ValueError(
+                "log_prob is only supported for flat (non-sequential) models. "
+                "Sequential models were trained with tgt_context_key or tgt_primary_key."
+            )
+
+        X_df = ensure_dataframe(X, columns=self._feature_names)
+
+        # Use ctx_data from training if not provided
+        if ctx_data is None:
+            ctx_data = self.ctx_data
+
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if ctx_data is not None:
+            ctx_data_df = ensure_dataframe(ctx_data)
+
+        # Import log_prob from _tabular.generation
+        from mostlyai.engine._tabular.generation import log_prob as log_prob_tabular
+
+        # Compute log probabilities
+        log_probs = log_prob_tabular(
+            data=X_df,
+            ctx_data=ctx_data_df,
+            device=self.device,
+            workspace_dir=workspace_dir,
+            **kwargs,
+        )
+
+        return log_probs

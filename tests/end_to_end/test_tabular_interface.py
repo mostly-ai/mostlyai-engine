@@ -413,3 +413,153 @@ class TestTabularARGNFlatWithContext:
         assert "ctx_id" in syn_data.columns
         assert "value" in syn_data.columns
         assert "label" in syn_data.columns
+
+
+class TestTabularARGNLogProb:
+    """Test log_prob functionality for density estimation and anomaly detection."""
+
+    @pytest.fixture
+    def fitted_flat_model(self, simple_tabular_data, tmp_path_factory):
+        """Create a fitted flat model for reuse in log_prob tests."""
+        data = simple_tabular_data
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=5,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=data)
+        return argn, data
+
+    def test_log_prob_basic(self, fitted_flat_model):
+        """Test basic log_prob computation on flat data."""
+        argn, data = fitted_flat_model
+
+        # Compute log probabilities for test data
+        test_data = data.head(20)
+        log_probs = argn.log_prob(test_data)
+
+        # Verify output shape
+        assert log_probs.shape == (20,)
+        assert isinstance(log_probs, np.ndarray)
+
+        # Verify all values are finite and negative (since they're log probabilities)
+        assert np.all(np.isfinite(log_probs))
+        assert np.all(log_probs < 0)
+
+        # Training data should generally have higher log probs than random data
+        random_data = pd.DataFrame(
+            {
+                "age": np.random.randint(0, 100, 20),
+                "category": np.random.choice(["X", "Y", "Z"], 20),
+                "score": np.random.uniform(0, 1000, 20),
+            }
+        )
+        random_log_probs = argn.log_prob(random_data)
+
+        # At least some training samples should have higher log probs than random
+        assert np.mean(log_probs) > np.mean(random_log_probs)
+
+    def test_log_prob_with_context(self, tmp_path_factory):
+        """Test log_prob with context data (flat, not sequential)."""
+        # Create flat data with context
+        ctx_data = pd.DataFrame(
+            {
+                "id": [f"ctx{i}" for i in range(100)],
+                "ctx_feature": np.random.choice(["A", "B"], 100),
+            }
+        )
+
+        tgt_data = pd.DataFrame(
+            {
+                "ctx_id": [f"ctx{i}" for i in range(100)],
+                "value": np.random.randint(10, 50, 100),
+            }
+        )
+
+        # Train model with context
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=3,
+            verbose=0,
+            tgt_context_key="ctx_id",
+            ctx_primary_key="id",
+            ctx_data=ctx_data,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=tgt_data)
+
+        # Compute log probs (should use training context by default)
+        test_data = tgt_data.head(10)
+        log_probs = argn.log_prob(test_data)
+
+        # Verify output
+        assert log_probs.shape == (10,)
+        assert np.all(np.isfinite(log_probs))
+
+    def test_log_prob_anomaly_detection(self, fitted_flat_model):
+        """Test anomaly detection use case with log_prob."""
+        argn, data = fitted_flat_model
+
+        # Create "normal" data similar to training
+        normal_data = data.sample(10, random_state=42).reset_index(drop=True)
+
+        # Create "anomalous" data with extreme values
+        anomalous_data = pd.DataFrame(
+            {
+                "age": [999, 999, 999, 999, 999],  # extreme ages
+                "category": ["Z", "Z", "Z", "Z", "Z"],  # unseen category
+                "score": [9999, 9999, 9999, 9999, 9999],  # extreme scores
+            }
+        )
+
+        # Compute log probs
+        normal_log_probs = argn.log_prob(normal_data)
+        anomalous_log_probs = argn.log_prob(anomalous_data)
+
+        # Anomalous samples should have lower (more negative) log probs
+        assert np.mean(anomalous_log_probs) < np.mean(normal_log_probs)
+
+        # Test percentile-based anomaly detection
+        all_data = pd.concat([normal_data, anomalous_data], ignore_index=True)
+        all_log_probs = argn.log_prob(all_data)
+
+        # Set threshold at 20th percentile
+        threshold = np.percentile(all_log_probs, 20)
+        is_anomaly = all_log_probs < threshold
+
+        # At least some anomalous samples should be detected
+        detected_anomalies = is_anomaly[10:].sum()  # anomalous samples are at indices 10-14
+        assert detected_anomalies >= 2  # at least 40% detected
+
+    def test_log_prob_sequential_raises_error(self, tmp_path_factory):
+        """Test that log_prob raises error for sequential models."""
+        # Create sequential data
+        tgt_data = pd.DataFrame(
+            {
+                "ctx_id": ["seq1", "seq1", "seq2", "seq2"],
+                "value": [10, 20, 15, 25],
+            }
+        )
+
+        # Train sequential model
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            tgt_context_key="ctx_id",
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=tgt_data)
+
+        # Attempt to compute log_prob should raise error
+        with pytest.raises(ValueError, match="only supported for flat.*models"):
+            argn.log_prob(tgt_data)
+
+    def test_log_prob_not_fitted_raises_error(self, simple_tabular_data):
+        """Test that log_prob raises error when model is not fitted."""
+        argn = TabularARGN(model="MOSTLY_AI/Small", max_epochs=1, verbose=0)
+
+        # Attempt to compute log_prob on unfitted model
+        with pytest.raises(ValueError, match="must be fitted"):
+            argn.log_prob(simple_tabular_data)

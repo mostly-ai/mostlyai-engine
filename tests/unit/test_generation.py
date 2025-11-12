@@ -42,6 +42,7 @@ from mostlyai.engine._tabular.generation import (
     _reshape_pt_to_pandas,
     _resolve_gen_column_order,
     _translate_fixed_probs,
+    log_prob,
 )
 from mostlyai.engine.domain import FairnessConfig, ImputationConfig, ModelEncodingType
 
@@ -481,3 +482,62 @@ class TestResolveGenColumnOrder:
         )
         gen_column_order = [col.split("/")[-1] for col in gen_column_order]
         assert gen_column_order == expected_order
+
+
+class TestLogProb:
+    """Test the core log_prob function."""
+
+    def test_log_prob_validates_sequential_model(self, tmp_path_factory):
+        """Test that log_prob raises error for sequential models."""
+        from mostlyai.engine import analyze, encode, split, train
+        from mostlyai.engine.domain import ModelEncodingType
+
+        # Create sequential data
+        workspace_dir = tmp_path_factory.mktemp("workspace-sequential")
+        tgt_data = pd.DataFrame(
+            {
+                "ctx_id": ["seq1", "seq1", "seq2", "seq2"],
+                "value": [10, 20, 15, 25],
+            }
+        )
+
+        # Train a sequential model
+        split(
+            tgt_data=tgt_data,
+            tgt_context_key="ctx_id",
+            tgt_encoding_types={"value": ModelEncodingType.tabular_numeric_auto},
+            workspace_dir=workspace_dir,
+        )
+        analyze(workspace_dir=workspace_dir)
+        encode(workspace_dir=workspace_dir)
+        train(max_epochs=1, workspace_dir=workspace_dir)
+
+        # Attempt to compute log_prob should raise error
+        with pytest.raises(ValueError, match="only supported for flat.*models"):
+            log_prob(data=tgt_data, workspace_dir=workspace_dir)
+
+    def test_log_prob_validates_model_weights_exist(self, tmp_path_factory):
+        """Test that log_prob raises error when model weights don't exist."""
+        from mostlyai.engine import analyze, encode, split
+        from mostlyai.engine.domain import ModelEncodingType
+
+        # Create flat data but don't train
+        workspace_dir = tmp_path_factory.mktemp("workspace-no-weights")
+        tgt_data = pd.DataFrame(
+            {
+                "value": [10, 20, 15, 25],
+            }
+        )
+
+        split(
+            tgt_data=tgt_data,
+            tgt_encoding_types={"value": ModelEncodingType.tabular_numeric_auto},
+            workspace_dir=workspace_dir,
+        )
+        analyze(workspace_dir=workspace_dir)
+        encode(workspace_dir=workspace_dir)
+        # Don't train - no weights
+
+        # Attempt to compute log_prob should raise error
+        with pytest.raises(ValueError, match="Model weights not found"):
+            log_prob(data=tgt_data, workspace_dir=workspace_dir)

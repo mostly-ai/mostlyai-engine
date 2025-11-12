@@ -24,6 +24,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
 
 from mostlyai.engine._common import (
     ARGN_COLUMN,
@@ -1448,3 +1449,201 @@ def generate(
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
     _LOG.info(f"GENERATE_TABULAR finished in {time.time() - t0:.2f}s")
+
+
+@torch.no_grad()
+def log_prob(
+    *,
+    data: pd.DataFrame,
+    ctx_data: pd.DataFrame | None = None,
+    device: torch.device | str | None = None,
+    workspace_dir: str | Path = "engine-ws",
+) -> np.ndarray:
+    """
+    Compute log probabilities for flat tabular data.
+
+    This function evaluates the likelihood of each sample under the trained model,
+    returning per-sample log probabilities. Lower (more negative) values indicate
+    samples that are less likely according to the model, which can be useful for
+    anomaly detection or model evaluation.
+
+    Note: This function only works for flat (non-sequential) models.
+
+    Args:
+        data: Input data to evaluate. DataFrame of shape (n_samples, n_features).
+        ctx_data: Optional context data for models trained with context.
+        device: Device to run computation on ('cuda' or 'cpu').
+               Defaults to 'cuda' if available, else 'cpu'.
+        workspace_dir: Directory path for workspace containing the trained model.
+
+    Returns:
+        Array of log probabilities with shape (n_samples,). Higher (less negative)
+        values indicate higher likelihood under the model.
+
+    Raises:
+        ValueError: If the model is sequential (not flat).
+    """
+    _LOG.info("LOG_PROB started")
+    t0 = time.time()
+
+    # Build paths based on workspace dir
+    workspace_dir = ensure_workspace_dir(workspace_dir)
+    workspace = Workspace(workspace_dir)
+
+    # Read stats and model config
+    tgt_stats = workspace.tgt_stats.read()
+    ctx_stats = workspace.ctx_stats.read()
+    model_configs = workspace.model_configs.read()
+
+    is_sequential = tgt_stats["is_sequential"]
+    if is_sequential:
+        raise ValueError(
+            "log_prob is only supported for flat (non-sequential) models. "
+            "For sequential models, the concept of per-sample log probability is not well-defined."
+        )
+
+    _LOG.info(f"Computing log probabilities for {len(data)} samples")
+
+    # Get model configuration
+    model_units = model_configs.get("model_units") or ModelSize.M
+
+    # Get cardinalities
+    tgt_cardinalities = get_cardinalities(tgt_stats)
+    ctx_cardinalities = get_cardinalities(ctx_stats)
+    ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
+    tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
+
+    # Resolve device
+    device = (
+        torch.device(device)
+        if device is not None
+        else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    )
+    _LOG.info(f"{device=}")
+
+    # Get keys
+    tgt_context_key = tgt_stats.get("keys", {}).get("context_key")
+    ctx_primary_key = ctx_stats.get("keys", {}).get("primary_key")
+
+    # Handle context data
+    has_context = workspace.ctx_stats.path.exists()
+    if has_context:
+        if ctx_data is None:
+            # Re-use context from training if no new context provided
+            ctx_data = pd.read_parquet(workspace.ctx_data_path)
+        _LOG.info(f"Using context data {ctx_data.shape}")
+        ctx_data = ctx_data.reset_index(drop=True)
+        # Validate we have enough context rows
+        if len(ctx_data) < len(data):
+            raise ValueError(
+                f"Context data has {len(ctx_data)} rows but data has {len(data)} rows. "
+                f"Context data must have at least as many rows as data."
+            )
+        # Take first len(data) rows of context
+        ctx_data = ctx_data.head(len(data))
+    else:
+        # Create on-the-fly context
+        ctx_primary_key = tgt_context_key or DUMMY_CONTEXT_KEY
+        tgt_context_key = ctx_primary_key
+        ctx_primary_keys = _generate_primary_keys(len(data), type="int")
+        ctx_primary_keys.rename(ctx_primary_key, inplace=True)
+        ctx_data = ctx_primary_keys.to_frame()
+
+    # Link data to context for flat data
+    if tgt_context_key and tgt_context_key not in data.columns:
+        data = data.copy()
+        data[tgt_context_key] = ctx_data[ctx_primary_key].values
+
+    # Resolve encoding types
+    ctx_encoding_types = (
+        {c_name: c_data["encoding_type"] for c_name, c_data in ctx_stats["columns"].items()} if has_context else {}
+    )
+    tgt_encoding_types = {c_name: c_data["encoding_type"] for c_name, c_data in tgt_stats["columns"].items()}
+
+    # Apply encoding types for dtype harmonization
+    ctx_data = apply_encoding_type_dtypes(ctx_data, ctx_encoding_types)
+    data = apply_encoding_type_dtypes(data, tgt_encoding_types)
+
+    # Encode context data
+    _LOG.info(f"Encoding context data {ctx_data.shape}")
+    ctx_data_encoded, ctx_primary_key_encoded, _ = encode_df(
+        df=ctx_data, stats=ctx_stats, ctx_primary_key=ctx_primary_key
+    )
+    # Pad left context sequences to ensure non-empty sequences
+    ctx_data_encoded = pad_ctx_sequences(ctx_data_encoded)
+
+    # Encode target data
+    _LOG.info(f"Encoding target data {data.shape}")
+    data_encoded, _, tgt_context_key_encoded = encode_df(df=data, stats=tgt_stats, tgt_context_key=tgt_context_key)
+
+    # Create model
+    _LOG.info("Creating FlatModel")
+    model = FlatModel(
+        tgt_cardinalities=tgt_cardinalities,
+        ctx_cardinalities=ctx_cardinalities,
+        ctxseq_len_median=ctx_seq_len_median,
+        model_size=model_units,
+        column_order=None,  # Use default training order
+        device=device,
+    )
+
+    no_of_model_params = get_no_of_model_parameters(model)
+    _LOG.info(f"{no_of_model_params=}")
+
+    # Load model weights
+    if workspace.model_tabular_weights_path.exists():
+        load_model_weights(
+            model=model,
+            path=workspace.model_tabular_weights_path,
+            device=device,
+        )
+    else:
+        raise ValueError("Model weights not found. Please train the model first.")
+
+    model.to(device)
+    model.eval()
+
+    # Prepare input tensors
+    ctxflt_inputs = {
+        col: torch.unsqueeze(
+            torch.as_tensor(ctx_data_encoded[col].to_numpy(), device=device).type(torch.int),
+            dim=-1,
+        )
+        for col in ctx_data_encoded.columns
+        if col.startswith(CTXFLT)
+    }
+    ctxseq_inputs = {
+        col: torch.unsqueeze(
+            torch.nested.as_nested_tensor(
+                [torch.as_tensor(t, device=device).type(torch.int) for t in ctx_data_encoded[col]],
+                device=device,
+            ),
+            dim=-1,
+        )
+        for col in ctx_data_encoded.columns
+        if col.startswith(CTXSEQ)
+    }
+    x = ctxflt_inputs | ctxseq_inputs
+
+    # Prepare target tensors
+    data_tensors = {
+        col: torch.as_tensor(data_encoded[col].to_numpy(), device=device).type(torch.int).unsqueeze(-1)
+        for col in tgt_sub_columns
+    }
+
+    # Forward pass
+    _LOG.info("Computing forward pass")
+    output, _ = model(x | data_tensors, mode="trn")
+
+    # Compute per-sample losses
+    criterion = nn.CrossEntropyLoss(reduction="none")
+    tgt_cols = list(tgt_cardinalities.keys())
+    losses_by_column = [criterion(output[col], data_tensors[col].squeeze(1)) for col in tgt_cols]
+    # sum up column level losses to get overall losses at sample level
+    losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
+
+    # Convert losses to log probabilities (negative loss)
+    log_probs = -losses.detach().cpu().numpy()
+
+    _LOG.info(f"LOG_PROB finished in {time.time() - t0:.2f}s")
+    return log_probs

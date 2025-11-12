@@ -39,6 +39,7 @@ Two model classes with these methods are available:
    * `argn.predict(target, n_draws, agg_fn)`: Predict a feature
    * `argn.predict_proba(target, n_draws)`: Estimate probabilities
    * `argn.impute(data)`: Fill missing values
+   * `argn.log_prob(data)`: Compute log probabilities (flat tables only)
 2. `LanguageModel()`: For semi-structured, flat textual tabular data.
    * `.fit(data)`: Train a Language model
    * `.sample(n_samples)`: Generate samples
@@ -159,6 +160,28 @@ predictions = argn.predict(data_test, target="age", n_draws=10, agg_fn="mean")
 mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
 ```
+
+### Log Probability / Anomaly Detection
+
+Compute log probabilities to evaluate sample likelihood or detect anomalies:
+
+```python
+import numpy as np
+
+# compute log probabilities for test data
+log_probs = argn.log_prob(data_test)
+
+# evaluate model: higher (less negative) values indicate better fit
+mean_log_prob = np.mean(log_probs)
+print(f"Mean log probability: {mean_log_prob:.2f}")
+
+# detect anomalies: samples with low log probability
+threshold = np.percentile(log_probs, 5)  # bottom 5%
+anomalies = data_test[log_probs < threshold]
+print(f"Detected {len(anomalies)} anomalies")
+```
+
+**Note**: `log_prob` only works for flat tables (not sequential data).
 
 ## TabularARGN for Sequential Data
 
