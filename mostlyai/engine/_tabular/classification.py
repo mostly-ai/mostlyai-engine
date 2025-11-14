@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,8 @@ from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.generation import _resolve_gen_column_order
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
 
+_LOG = logging.getLogger(__name__)
+
 
 @torch.no_grad()
 def classify(
@@ -48,6 +51,7 @@ def classify(
     target: str,
     workspace_dir: str | Path,
     output: pd.DataFrame | None = None,
+    device: torch.device | str | None = None,
 ) -> pd.DataFrame:
     """
     Compute predictive probabilities for a target column conditioned on feature columns.
@@ -112,7 +116,15 @@ def classify(
     is_sequential = tgt_stats.get("is_sequential", False)
     if is_sequential:
         raise NotImplementedError("classify is only implemented for flat tabular models")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Resolve device
+    device = (
+        torch.device(device)
+        if device is not None
+        else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    )
+    _LOG.info(f"{device=}")
+    
     model: FlatModel = FlatModel(
         tgt_cardinalities=tgt_cardinalities,
         ctx_cardinalities=ctx_cardinalities,

@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import torch
 
 from mostlyai.engine._workspace import resolve_model_type
 from mostlyai.engine.domain import ModelType
@@ -28,6 +29,7 @@ def classify(
     target: str,
     workspace_dir: str | Path,
     output: pd.DataFrame | None = None,
+    device: torch.device | str | None = None,
 ) -> pd.DataFrame:
     model_type = resolve_model_type(workspace_dir)
     if model_type != ModelType.tabular:
@@ -40,4 +42,5 @@ def classify(
         target=target,
         workspace_dir=workspace_dir,
         output=output,
+        device=device,
     )
