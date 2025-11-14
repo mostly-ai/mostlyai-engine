@@ -105,6 +105,19 @@ def _type_safe_numeric_series(numeric_array: np.ndarray | list, pd_dtype: str) -
     return pd.Series(np.array([v for v in numeric_array]).astype(np_dtype), dtype=pd_dtype)
 
 
+def _cast_based_on_min_decimal(values: pd.Series, min_decimal: int) -> pd.Series:
+    # try to convert to int when min_decimal is 0, if possible
+    dtype = "Int64" if min_decimal == 0 else "Float64"
+    if dtype == "Int64":
+        values = values.round()
+    try:
+        values = values.astype(dtype)
+    except TypeError:
+        if dtype == "Int64":
+            values = values.astype("Float64")  # if couldn't safely convert to int, stick to float
+    return values
+
+
 def split_sub_columns_digit(
     values: pd.Series,
     max_decimal=NUMERIC_DIGIT_MAX_DECIMAL,
@@ -295,6 +308,9 @@ def analyze_reduce_numeric(
             encoding_type = ModelEncodingType.tabular_numeric_binned
 
     if encoding_type == ModelEncodingType.tabular_numeric_discrete:
+        if min_decimal == 0:
+            # remove decimal part from categories
+            categories = [str(cat).split(".")[0] for cat in categories]
         # add NULL token if NaN values exist
         if has_nan:
             categories = [NUMERIC_DISCRETE_NULL_TOKEN] + categories
@@ -368,6 +384,8 @@ def analyze_reduce_numeric(
 
 
 def encode_numeric(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
+    values = safe_convert_numeric(values)
+
     if stats["encoding_type"] == ModelEncodingType.tabular_numeric_discrete:
         df = _encode_numeric_discrete(values, stats)
     elif stats["encoding_type"] == ModelEncodingType.tabular_numeric_digit:
@@ -380,31 +398,21 @@ def encode_numeric(values: pd.Series, stats: dict, _: pd.Series | None = None) -
 
 
 def _encode_numeric_discrete(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
-    values = safe_convert_numeric(values)
+    values = _cast_based_on_min_decimal(values, stats["min_decimal"])
     df = encode_categorical(values, stats)
     return df
 
 
 def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
-    values = safe_convert_numeric(values)
-    # try to convert to int, if possible
-    dtype = "Int64" if stats["min_decimal"] == 0 else "Float64"
-    if dtype == "Int64":
-        values = values.round()
-    try:
-        values = values.astype(dtype)
-    except TypeError:
-        if dtype == "Int64":  # if couldn't safely convert to int, stick to float
-            dtype = "Float64"
-            values = values.astype(dtype)
+    values = _cast_based_on_min_decimal(values, stats["min_decimal"])
     # reset index, as `values.mask` can throw errors for misaligned indices
     values.reset_index(drop=True, inplace=True)
     # replace extreme values with min/max
     if stats["min"] is not None:
-        reduced_min = _type_safe_numeric_series([stats["min"]], dtype).iloc[0]
+        reduced_min = _type_safe_numeric_series([stats["min"]], values.dtype).iloc[0]
         values = values.where((values.isna()) | (values >= reduced_min), reduced_min)
     if stats["max"] is not None:
-        reduced_max = _type_safe_numeric_series([stats["max"]], dtype).iloc[0]
+        reduced_max = _type_safe_numeric_series([stats["max"]], values.dtype).iloc[0]
         values = values.where((values.isna()) | (values <= reduced_max), reduced_max)
     values, nan_mask = impute_from_non_nan_distribution(values, stats)
     # split to sub_columns
@@ -431,7 +439,6 @@ def _encode_numeric_digit(values: pd.Series, stats: dict, _: pd.Series | None = 
 
 
 def _encode_numeric_binned(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
-    values = safe_convert_numeric(values)
     bins = stats["bins"].copy()
     min_value = bins[0]
     max_value = bins[-1]
