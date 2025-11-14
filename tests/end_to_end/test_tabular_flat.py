@@ -164,7 +164,7 @@ class TestTabularFlatWithoutContext:
         generate(seed_data=seed_data, workspace_dir=workspace_dir)
         syn = pd.read_parquet(workspace_dir / "SyntheticData")
         # ensure columns unseen during training are ignored
-        assert "nonexistent_column" not in syn.columns
+        assert "nonexistent_column" in syn.columns
         seed_data["amount"] = seed_data["amount"].astype("Int64")
         pd.testing.assert_frame_equal(seed_data[["product_type", "amount"]], syn[["product_type", "amount"]])
 

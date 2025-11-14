@@ -66,6 +66,7 @@ def decode_buffered_samples(
     tgt_stats: dict[str, str],
     tgt_context_key: str,
     max_new_tokens: int,
+    extra_seed_data: pd.DataFrame | None = None,
 ):
     t0 = time.time()
 
@@ -125,6 +126,10 @@ def decode_buffered_samples(
 
     # overwrite generated columns with the seeded values
     tgt_data.update(tgt_seed)
+
+    # merge extra seed columns back (before returning final data)
+    if extra_seed_data is not None:
+        tgt_data = tgt_data.merge(extra_seed_data, on=tgt_context_key, how="left")
 
     invalid_percentage = ((tgt_data[tgt_stats["columns"].keys()] == INVALID_VALUE).sum() / len(tgt_data) * 100.0).map(
         "{:.2f}%".format
@@ -225,6 +230,16 @@ def generate(
         if seed_data is None:
             # build dummy seed
             seed_data = pd.DataFrame(index=list(range(sample_size)))
+
+        # add context key to seed_data if missing (needed for merging extra columns later)
+        if tgt_context_key not in seed_data.columns:
+            seed_data[tgt_context_key] = ctx_data[ctx_primary_key].values
+
+        # identify extra seed columns (in seed_data but not in model)
+        extra_seed_columns = [c for c in seed_data.columns if c not in tgt_text_columns and c != tgt_context_key]
+        extra_seed_data = seed_data[[tgt_context_key] + extra_seed_columns] if extra_seed_columns else None
+        _LOG.info(f"extra_seed_columns: {extra_seed_columns}")
+
         seed_data = seed_data[[c for c in tgt_text_columns if c in seed_data.columns]]
         _LOG.info(f"{seed_data.shape=}")
 
@@ -338,7 +353,7 @@ def generate(
             buffer.add((outputs, ctx_keys, seed_data_batch))
             if buffer.is_full():
                 decoded_data = decode_buffered_samples(
-                    buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens
+                    buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens, extra_seed_data
                 )
                 persist_data_part(
                     decoded_data,
@@ -350,7 +365,9 @@ def generate(
             samples_processed += len(ctx_batch)
 
         if not buffer.is_empty():
-            decoded_data = decode_buffered_samples(buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens)
+            decoded_data = decode_buffered_samples(
+                buffer, engine.tokenizer, tgt_stats, tgt_context_key, max_new_tokens, extra_seed_data
+            )
             persist_data_part(
                 decoded_data,
                 output_path,
