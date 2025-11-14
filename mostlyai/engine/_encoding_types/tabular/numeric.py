@@ -107,7 +107,7 @@ def _type_safe_numeric_series(numeric_array: np.ndarray | list, pd_dtype: str) -
 
 def _cast_based_on_min_decimal(values: pd.Series, min_decimal: int) -> pd.Series:
     # try to convert to int when min_decimal is 0, if possible
-    dtype = "Int64" if min_decimal == 0 else "Float64"
+    dtype = "Float64" if min_decimal < 0 else "Int64"
     if dtype == "Int64":
         values = values.round()
     try:
@@ -308,7 +308,7 @@ def analyze_reduce_numeric(
             encoding_type = ModelEncodingType.tabular_numeric_binned
 
     if encoding_type == ModelEncodingType.tabular_numeric_discrete:
-        if min_decimal == 0:
+        if min_decimal >= 0:
             # remove decimal part from categories
             categories = [str(cat).split(".")[0] for cat in categories]
         # add NULL token if NaN values exist
