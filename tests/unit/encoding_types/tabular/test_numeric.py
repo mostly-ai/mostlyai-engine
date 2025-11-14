@@ -628,7 +628,7 @@ class TestNumericDiscrete:
             [stats1, stats2], value_protection=False, encoding_type=ModelEncodingType.tabular_numeric_discrete
         )
         assert NUMERIC_DISCRETE_UNKNOWN_TOKEN in stats["codes"]
-        assert all([v in stats["codes"].keys() for v in values1])
+        assert all([str(v) in stats["codes"].keys() for v in values1])
 
     def test_encode_decode(self):
         stats = {
