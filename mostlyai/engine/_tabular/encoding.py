@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import logging
+import os
 import time
-from multiprocessing import current_process
 from pathlib import Path
 
 import numpy as np
@@ -234,7 +234,7 @@ def encode_df(
                 values=df[column],
                 column_stats=column_stats,
                 context_keys=context_keys,
-                parent_pid=current_process().pid,
+                parent_pid=os.getpid(),
             )
         )
     if delayed_encodes:
@@ -251,7 +251,7 @@ def _encode_col(
     context_keys: pd.Series | None = None,
     parent_pid: int | None = None,
 ) -> pd.DataFrame:
-    if current_process().pid != parent_pid:
+    if os.getpid() != parent_pid:
         set_random_state(worker=True)
     is_sequential_column = is_sequential(values)
     if is_sequential_column:
