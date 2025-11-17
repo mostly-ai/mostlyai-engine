@@ -122,8 +122,12 @@ data_with_missings.loc[0:299, "age"] = pd.NA
 data_with_missings.loc[0:199, "race"] = pd.NA
 data_with_missings.loc[100:299, "income"] = pd.NA
 
-# impute missing values
-argn.impute(data_with_missings)
+# impute missing values each with a random sample
+data_imputed = argn.impute(data_with_missings)
+
+# impute missing values each with their point estimates
+data_imputed = argn.impute(data_with_missings, n_draws=100)
+
 ```
 
 ### Predictions / Classification
@@ -134,10 +138,10 @@ Predict any categorical target column:
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 # predict class labels for a categorical
-predictions = argn.predict(data_test, target="income", n_draws=10, agg_fn="mode")
+predictions = argn.predict(data_test, target="income", n_draws=100, agg_fn="mode")
 
 # predict class probabilities for a categorical
-probabilities = argn.predict_proba(data_test, target="income", n_draws=10)
+probabilities = argn.predict_proba(data_test, target="income", n_draws=100)
 
 # evaluate performance
 accuracy = accuracy_score(data_test["income"], predictions)
