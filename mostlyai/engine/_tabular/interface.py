@@ -37,6 +37,7 @@ from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     FairnessConfig,
     ImputationConfig,
+    ModelEncodingType,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
@@ -446,6 +447,13 @@ class TabularARGN(BaseEstimator):
 
         return X_imputed
 
+    def _get_column_stats(self) -> dict:
+        """Get column statistics from workspace."""
+        workspace_dir = self._get_workspace_dir()
+        workspace = Workspace(workspace_dir)
+        stats = workspace.tgt_stats.read()
+        return stats.get("columns", {})
+
     def _get_target_encoding_type(self, target_column: str | None = None) -> str | None:
         """Get the encoding type of the target column from workspace stats."""
         if not self._fitted:
@@ -455,10 +463,7 @@ class TabularARGN(BaseEstimator):
         if target_col is None:
             return None
 
-        workspace_dir = self._get_workspace_dir()
-        workspace = Workspace(workspace_dir)
-        stats = workspace.tgt_stats.read()
-        columns = stats.get("columns", {})
+        columns = self._get_column_stats()
         if target_col in columns:
             return columns[target_col].get("encoding_type")
         return None
@@ -596,8 +601,9 @@ class TabularARGN(BaseEstimator):
         target: str | None = None,
         ctx_data: pd.DataFrame | None = None,
         n_draws: int = 1,
+        as_frame: bool = False,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> np.ndarray | pd.DataFrame:
         """
         Predict class probabilities for samples in X.
 
@@ -609,10 +615,12 @@ class TabularARGN(BaseEstimator):
             target: Name of the target column to predict. If None, uses the target column from fit().
             ctx_data: Context data for generation. If None, uses the context data from training.
             n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
+            as_frame: If True, returns DataFrame with columns named by class labels. Defaults to False.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
-            Predicted class probabilities as np.ndarray of shape (n_samples, n_classes).
+            If as_frame=False: np.ndarray of shape (n_samples, n_classes).
+            If as_frame=True: pd.DataFrame with columns named by class labels (e.g., "<=50K", ">50K").
             Each row sums to 1.0.
         """
         if not self._fitted:
@@ -653,5 +661,64 @@ class TabularARGN(BaseEstimator):
         for i, cls in enumerate(classes):
             proba[:, i] = np.mean(predictions_array == cls, axis=1)
 
-        self.classes_ = classes
+        # Convert to DataFrame if requested
+        if as_frame:
+            return pd.DataFrame(proba, columns=classes.tolist())
+
         return proba
+
+    @property
+    def classes_(self) -> dict[str, list]:
+        """
+        Get class labels for all columns that support probability prediction.
+
+        Returns a dictionary mapping column names to their class labels for categorical,
+        discrete numeric, and binned numeric columns.
+
+        Returns:
+            dict[str, list]: Mapping from column name to list of class labels.
+
+        Raises:
+            ValueError: If model hasn't been fitted yet.
+
+        Example:
+            >>> argn = TabularARGN()
+            >>> argn.fit(data)
+            >>> classes = argn.classes_
+            >>> print(classes["gender"])  # ['_RARE_', 'female', 'male']
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before accessing classes_. Call fit() first.")
+
+        columns = self._get_column_stats()
+        classes = {}
+        for column, stats in columns.items():
+            encoding_type_str = stats.get("encoding_type")
+            if not encoding_type_str:
+                continue
+
+            encoding_type = ModelEncodingType(encoding_type_str)
+
+            # Handle categorical and discrete numeric columns
+            if encoding_type in [
+                ModelEncodingType.tabular_categorical,
+                ModelEncodingType.tabular_numeric_discrete,
+            ]:
+                codes = stats.get("codes", {})
+                # Sort by code value to get correct order
+                classes[column] = [k for k, v in sorted(codes.items(), key=lambda x: x[1])]
+
+            # Handle binned numeric columns
+            elif encoding_type == ModelEncodingType.tabular_numeric_binned:
+                codes = stats.get("codes", {})
+                bins = stats.get("bins", [])
+
+                # Special tokens in order
+                special_tokens = [k for k, v in sorted(codes.items(), key=lambda x: x[1])]
+
+                # Bin boundaries as strings
+                bin_boundaries = [str(b) for b in bins]
+
+                classes[column] = special_tokens + bin_boundaries
+
+        return classes
