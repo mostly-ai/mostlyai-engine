@@ -42,6 +42,7 @@ def generate(
     fairness: FairnessConfig | dict | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    probs_columns: list[str] | None = None,
 ) -> None:
     """
     Generates synthetic data from a trained model.
@@ -83,6 +84,7 @@ def generate(
             device=device,
             workspace_dir=workspace_dir,
             update_progress=update_progress,
+            probs_columns=probs_columns,
         )
     else:
         from mostlyai.engine._language.generation import generate as generate_language

@@ -813,6 +813,91 @@ def decode_buffered_samples(
 ##################
 
 
+def _get_probability_column_names(target: str, stats: dict) -> list[str]:
+    """
+    Get column names for probability DataFrame from encoding stats.
+
+    Args:
+        target: Target column name (not used in output, kept for compatibility)
+        stats: Target column encoding statistics
+
+    Returns:
+        List of column names for each category/bin/value
+    """
+    encoding_type = ModelEncodingType(stats["encoding_type"])
+
+    if encoding_type == ModelEncodingType.tabular_numeric_binned:
+        # Get bin boundaries and construct labels
+        bins = stats["bins"]  # e.g., [0, 10000, 20000, 50000, inf]
+        codes = stats["codes"]  # e.g., {"<<UNK>>": 0, "<<NULL>>": 1, "<<MIN>>": 2, "<<MAX>>": 3}
+        labels = []
+
+        # Handle special codes first (trim << >> and lowercase)
+        for code_name in codes.keys():
+            if code_name.startswith("<<") and code_name.endswith(">>"):
+                labels.append(code_name[2:-2].lower())
+
+        # Add regular bin labels using upper bounds (bins are [a, b) intervals)
+        for i in range(len(bins) - 1):
+            if bins[i + 1] == float('inf') or bins[i + 1] == np.inf:
+                # Last bin with unbounded upper range
+                labels.append(f">={bins[i]}")
+            else:
+                # Regular bin with bounded upper range
+                labels.append(f"<{bins[i + 1]}")
+
+        return labels
+
+    elif encoding_type == ModelEncodingType.tabular_categorical:
+        # Get category names from codes
+        codes = stats["codes"]  # e.g., {"_RARE_": 0, "<<NULL>>": 1, "male": 2, "female": 3}
+        labels = []
+        for category in codes.keys():
+            if category == "_RARE_":
+                labels.append("rare")
+            elif category.startswith("<<") and category.endswith(">>"):
+                # Trim << >> and lowercase for special tokens
+                labels.append(category[2:-2].lower())
+            else:
+                labels.append(category)
+        return labels
+
+    elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
+        # Get discrete values from codes
+        codes = stats["codes"]  # e.g., {"_RARE_": 0, "<<NULL>>": 1, "0": 2, "1": 3, "2": 4}
+        labels = []
+        for value in codes.keys():
+            if value == "_RARE_":
+                labels.append("rare")
+            elif value.startswith("<<") and value.endswith(">>"):
+                # Trim << >> and lowercase for special tokens
+                labels.append(value[2:-2].lower())
+            else:
+                labels.append(value)
+        return labels
+
+    else:
+        raise ValueError(f"Unsupported encoding type for probabilities: {encoding_type}")
+
+
+def _probs_dict_to_dataframe(probs_dict: dict[str, np.ndarray], column_names: list[str]) -> pd.DataFrame:
+    """
+    Convert probability dictionary to DataFrame with exploded columns.
+
+    Args:
+        probs_dict: {sub_col: array of shape (batch_size, cardinality)}
+        column_names: List of column names for each category/bin/value
+
+    Returns:
+        DataFrame with shape (batch_size, cardinality) with named columns
+    """
+    # Get the first (and should be only) sub-column's probability array
+    sub_col, prob_array = next(iter(probs_dict.items()))
+
+    # Create DataFrame with one column per category/bin/value
+    return pd.DataFrame(prob_array, columns=column_names)
+
+
 @torch.no_grad()
 def generate(
     *,
@@ -829,6 +914,7 @@ def generate(
     device: torch.device | str | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    probs_columns: list[str] | None = None,
 ) -> None:
     _LOG.info("GENERATE_TABULAR started")
     t0 = time.time()
@@ -912,6 +998,57 @@ def generate(
                     "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
                     "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
                 )
+
+        # Initialize probability tracking if requested
+        probs_buffer = []
+        probs_column_names = None
+        target_sub_cols = None
+        if probs_columns:
+            _LOG.info(f"Probability tracking enabled for columns: {probs_columns}")
+            if is_sequential:
+                raise ValueError("Probability tracking is not yet supported for sequential models")
+
+            # Validate that we only have one target column
+            if len(probs_columns) != 1:
+                raise ValueError(f"Only single target column supported for probabilities, got {len(probs_columns)}")
+
+            target_column = probs_columns[0]
+
+            # Check that target column exists
+            if target_column not in tgt_stats["columns"]:
+                raise ValueError(f"Target column '{target_column}' not found in model columns")
+
+            # Validate encoding type
+            target_stats = tgt_stats["columns"][target_column]
+            encoding_type = ModelEncodingType(target_stats["encoding_type"])
+            supported_types = {
+                ModelEncodingType.tabular_categorical,
+                ModelEncodingType.tabular_numeric_discrete,
+                ModelEncodingType.tabular_numeric_binned,
+            }
+            if encoding_type not in supported_types:
+                raise ValueError(
+                    f"Column '{target_column}' has unsupported encoding type '{encoding_type}' for probabilities. "
+                    f"Supported types: {', '.join(str(t) for t in supported_types)}"
+                )
+
+            # Reset probability output directory
+            reset_dir(workspace.probability_data_path)
+
+            # Get column names for DataFrame
+            probs_column_names = _get_probability_column_names(target_column, target_stats)
+
+            # Expand target column to sub-column names
+            target_sub_cols = set(
+                get_argn_name(
+                    argn_processor=target_stats[ARGN_PROCESSOR],
+                    argn_table=target_stats[ARGN_TABLE],
+                    argn_column=target_stats[ARGN_COLUMN],
+                    argn_sub_column=sub_col,
+                )
+                for sub_col in target_stats["cardinalities"].keys()
+            )
+            _LOG.info(f"Tracking probabilities for sub-columns: {target_sub_cols}")
 
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
@@ -1392,7 +1529,7 @@ def generate(
                     seed_data=seed_batch,
                     fairness=fairness,
                 )
-                out_dct, _ = model(
+                out_dct, probs_dct = model(
                     x,
                     mode="gen",
                     batch_size=batch_size,
@@ -1402,6 +1539,7 @@ def generate(
                     top_p=sampling_top_p,
                     fairness_transforms=fairness_transforms,
                     column_order=column_order,
+                    return_probs=list(target_sub_cols) if probs_columns else None,
                 )
 
                 syn = pd.concat(
@@ -1414,6 +1552,18 @@ def generate(
                 )
                 syn.reset_index(drop=True, inplace=True)
                 buffer.add((syn, seed_batch))
+
+                # Handle probability tracking if requested
+                if probs_columns and probs_dct:
+                    # Filter to target sub-columns and convert to numpy
+                    filtered_probs = {
+                        sub_col: prob_tensor.cpu().numpy()
+                        for sub_col, prob_tensor in probs_dct.items()
+                        if sub_col in target_sub_cols
+                    }
+                    # Convert to DataFrame with labeled columns
+                    batch_probs_df = _probs_dict_to_dataframe(filtered_probs, probs_column_names)
+                    probs_buffer.append(batch_probs_df)
 
             # send number of processed batches / steps
             progress.update(completed=batch * (seq_len_max + 1) - 1)
@@ -1430,6 +1580,13 @@ def generate(
                     impute_columns=imputation.columns if imputation else None,
                 )
                 persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
+
+                # Persist probabilities if tracking is enabled
+                if probs_columns and probs_buffer:
+                    df_probs = pd.concat(probs_buffer, axis=0).reset_index(drop=True)
+                    persist_data_part(df_probs, workspace.probability_data_path, f"{buffer.n_clears:06}.{0:06}")
+                    probs_buffer.clear()
+
                 buffer.clear()
 
             progress.update(completed=batch * (seq_len_max + 1))
@@ -1446,5 +1603,12 @@ def generate(
                 impute_columns=imputation.columns if imputation else None,
             )
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
+
+            # Persist remaining probabilities if tracking is enabled
+            if probs_columns and probs_buffer:
+                df_probs = pd.concat(probs_buffer, axis=0).reset_index(drop=True)
+                persist_data_part(df_probs, workspace.probability_data_path, f"{buffer.n_clears:06}.{0:06}")
+                probs_buffer.clear()
+
             buffer.clear()
     _LOG.info(f"GENERATE_TABULAR finished in {time.time() - t0:.2f}s")

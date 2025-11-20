@@ -30,7 +30,15 @@ import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
 
-from mostlyai.engine._common import ensure_dataframe, list_fn, load_generated_data, mean_fn, median_fn, mode_fn
+from mostlyai.engine._common import (
+    ensure_dataframe,
+    list_fn,
+    load_generated_data,
+    load_probability_data,
+    mean_fn,
+    median_fn,
+    mode_fn,
+)
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
@@ -595,25 +603,41 @@ class TabularARGN(BaseEstimator):
         X,
         target: str | None = None,
         ctx_data: pd.DataFrame | None = None,
-        n_draws: int = 1,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> pd.DataFrame:
         """
-        Predict class probabilities for samples in X.
+        Predict class probabilities for target variable.
 
-        This method generates synthetic samples conditioned on the input features and computes
-        the probability of each class based on the frequency across multiple draws.
+        This method generates model probability distributions for the target variable conditioned on
+        input features. Probabilities are computed directly from the model (not via sampling) and
+        returned as an exploded DataFrame with one column per category/bin/value.
+
+        The generation is conditioned on the input features X (seed_data). Each row in X produces
+        one probability distribution for the target column.
+
+        Supported encoding types:
+        - tabular_categorical: Multi-class categorical variables
+        - tabular_numeric_discrete: Discrete numeric variables
+        - tabular_numeric_binned: Binned numeric variables
 
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
+               These features are used as seed_data to condition the probability generation.
             target: Name of the target column to predict. If None, uses the target column from fit().
             ctx_data: Context data for generation. If None, uses the context data from training.
-            n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
-            **kwargs: Additional arguments passed to sample() method.
+            **kwargs: Additional generation parameters (sampling_temperature, sampling_top_p, etc.).
 
         Returns:
-            Predicted class probabilities as np.ndarray of shape (n_samples, n_classes).
-            Each row sums to 1.0.
+            DataFrame with shape (n_samples, n_categories) containing probability distributions.
+            Column names are derived from encoding stats:
+            - Binned: "<{value}" or ">={value}" (e.g., "<10000", ">=10000")
+            - Categorical: category names (e.g., "male", "female")
+            - Discrete: discrete values (e.g., "0", "1", "2")
+            Each row contains a full probability distribution that sums to 1.0.
+
+        Raises:
+            ValueError: If model is not fitted, target is not specified, or target has unsupported
+                       encoding type for probability output.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
@@ -631,27 +655,23 @@ class TabularARGN(BaseEstimator):
         if target_column in X_df.columns:
             X_df = X_df.drop(columns=[target_column])
 
-        # Generate predictions across multiple draws
-        all_predictions = []
-        for _ in range(n_draws):
-            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if target_column in samples.columns:
-                all_predictions.append(samples[target_column].values)
-            else:
-                raise ValueError(f"Target column '{target_column}' not found in generated samples")
+        # Generate probabilities conditioned on seed_data (input features)
+        # Each row in seed_data produces one probability distribution for the target
+        generate(
+            seed_data=X_df,
+            ctx_data=ctx_data,
+            workspace_dir=self.workspace_dir,
+            probs_columns=[target_column],
+            **kwargs,
+        )
 
-        # Stack predictions
-        predictions_array = np.column_stack(all_predictions)
+        # Load probabilities from workspace
+        workspace = Workspace(self.workspace_dir)
+        proba_files = sorted(workspace.probability_data_path.glob("*.parquet"))
+        if not proba_files:
+            raise RuntimeError("No probability files found in workspace after generation")
 
-        # Get unique classes and compute probabilities
-        classes = np.unique(predictions_array)
-        n_samples = predictions_array.shape[0]
-        n_classes = len(classes)
+        # Concatenate all probability files
+        probs_df = pd.concat([pd.read_parquet(f) for f in proba_files], axis=0, ignore_index=True)
 
-        # Compute probability for each class
-        proba = np.zeros((n_samples, n_classes))
-        for i, cls in enumerate(classes):
-            proba[:, i] = np.mean(predictions_array == cls, axis=1)
-
-        self.classes_ = classes
-        return proba
+        return probs_df
