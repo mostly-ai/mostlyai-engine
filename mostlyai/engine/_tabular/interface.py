@@ -30,7 +30,15 @@ import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
 
-from mostlyai.engine._common import ensure_dataframe, list_fn, load_generated_data, mean_fn, median_fn, mode_fn
+from mostlyai.engine._common import (
+    ensure_dataframe,
+    get_class_labels_from_stats,
+    list_fn,
+    load_generated_data,
+    mean_fn,
+    median_fn,
+    mode_fn,
+)
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
@@ -601,27 +609,37 @@ class TabularARGN(BaseEstimator):
         target: str | None = None,
         ctx_data: pd.DataFrame | None = None,
         n_draws: int = 1,
-        as_frame: bool = False,
         **kwargs,
-    ) -> np.ndarray | pd.DataFrame:
+    ) -> pd.DataFrame:
         """
         Predict class probabilities for samples in X.
 
         This method generates synthetic samples conditioned on the input features and computes
         the probability of each class based on the frequency across multiple draws.
 
+        Supported encoding types:
+        - tabular_categorical: Multi-class categorical variables
+        - tabular_numeric_discrete: Discrete numeric variables
+        - tabular_numeric_binned: Binned numeric variables
+
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
             target: Name of the target column to predict. If None, uses the target column from fit().
             ctx_data: Context data for generation. If None, uses the context data from training.
             n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
-            as_frame: If True, returns DataFrame with columns named by class labels. Defaults to False.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
-            If as_frame=False: np.ndarray of shape (n_samples, n_classes).
-            If as_frame=True: pd.DataFrame with columns named by class labels (e.g., "<=50K", ">50K").
+            pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
+            Column names are derived from encoding stats:
+            - Binned: "<{value}" format (e.g., "<10000", "<20000", "<50000")
+            - Categorical: category names (e.g., "male", "female"), "_RARE_" becomes "rare"
+            - Discrete: discrete values (e.g., "0", "1", "2"), "_RARE_" becomes "rare"
+            Special tokens like "<<NULL>>" are trimmed and lowercased (e.g., "null").
             Each row sums to 1.0.
+
+        Raises:
+            ValueError: If target column has unsupported encoding type.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
@@ -632,6 +650,31 @@ class TabularARGN(BaseEstimator):
             raise ValueError(
                 "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
             )
+
+        # Get target column stats and validate encoding type
+        columns = self._get_column_stats()
+        if target_column not in columns:
+            raise ValueError(f"Target column '{target_column}' not found in model statistics")
+
+        target_stats = columns[target_column]
+        encoding_type = target_stats.get("encoding_type")
+        if not encoding_type:
+            raise ValueError(f"Target column '{target_column}' has no encoding type")
+
+        # Validate encoding type
+        supported_types = [
+            ModelEncodingType.tabular_categorical,
+            ModelEncodingType.tabular_numeric_discrete,
+            ModelEncodingType.tabular_numeric_binned,
+        ]
+        if encoding_type not in supported_types:
+            raise ValueError(
+                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
+                f"Only categorical, discrete numeric, and binned numeric columns are supported."
+            )
+
+        # Get class labels from stats
+        class_labels = get_class_labels_from_stats(target_stats)
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
@@ -651,74 +694,13 @@ class TabularARGN(BaseEstimator):
         # Stack predictions
         predictions_array = np.column_stack(all_predictions)
 
-        # Get unique classes and compute probabilities
-        classes = np.unique(predictions_array)
         n_samples = predictions_array.shape[0]
-        n_classes = len(classes)
+        n_classes = len(class_labels)
 
         # Compute probability for each class
         proba = np.zeros((n_samples, n_classes))
-        for i, cls in enumerate(classes):
+        for i, cls in enumerate(class_labels):
             proba[:, i] = np.mean(predictions_array == cls, axis=1)
 
-        # Convert to DataFrame if requested
-        if as_frame:
-            return pd.DataFrame(proba, columns=classes.tolist())
-
-        return proba
-
-    @property
-    def classes_(self) -> dict[str, list]:
-        """
-        Get class labels for all columns that support probability prediction.
-
-        Returns a dictionary mapping column names to their class labels for categorical,
-        discrete numeric, and binned numeric columns.
-
-        Returns:
-            dict[str, list]: Mapping from column name to list of class labels.
-
-        Raises:
-            ValueError: If model hasn't been fitted yet.
-
-        Example:
-            >>> argn = TabularARGN()
-            >>> argn.fit(data)
-            >>> classes = argn.classes_
-            >>> print(classes["gender"])  # ['_RARE_', 'female', 'male']
-        """
-        if not self._fitted:
-            raise ValueError("Model must be fitted before accessing classes_. Call fit() first.")
-
-        columns = self._get_column_stats()
-        classes = {}
-        for column, stats in columns.items():
-            encoding_type_str = stats.get("encoding_type")
-            if not encoding_type_str:
-                continue
-
-            encoding_type = ModelEncodingType(encoding_type_str)
-
-            # Handle categorical and discrete numeric columns
-            if encoding_type in [
-                ModelEncodingType.tabular_categorical,
-                ModelEncodingType.tabular_numeric_discrete,
-            ]:
-                codes = stats.get("codes", {})
-                # Sort by code value to get correct order
-                classes[column] = [k for k, v in sorted(codes.items(), key=lambda x: x[1])]
-
-            # Handle binned numeric columns
-            elif encoding_type == ModelEncodingType.tabular_numeric_binned:
-                codes = stats.get("codes", {})
-                bins = stats.get("bins", [])
-
-                # Special tokens in order
-                special_tokens = [k for k, v in sorted(codes.items(), key=lambda x: x[1])]
-
-                # Bin boundaries as strings
-                bin_boundaries = [str(b) for b in bins]
-
-                classes[column] = special_tokens + bin_boundaries
-
-        return classes
+        # Always return DataFrame with class labels as columns
+        return pd.DataFrame(proba, columns=class_labels)
