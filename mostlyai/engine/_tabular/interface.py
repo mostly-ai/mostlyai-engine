@@ -30,13 +30,30 @@ import pandas as pd
 import torch
 from sklearn.base import BaseEstimator
 
-from mostlyai.engine._common import ensure_dataframe, list_fn, load_generated_data, mean_fn, median_fn, mode_fn
+from mostlyai.engine._common import (
+    ensure_dataframe,
+    list_fn,
+    load_generated_data,
+    mean_fn,
+    median_fn,
+    mode_fn,
+)
+from mostlyai.engine._encoding_types.tabular.categorical import (
+    encode_categorical,
+)
+from mostlyai.engine._encoding_types.tabular.numeric import (
+    NUMERIC_BINNED_MAX_TOKEN,
+    NUMERIC_BINNED_MIN_TOKEN,
+    NUMERIC_BINNED_UNKNOWN_TOKEN,
+    encode_numeric,
+)
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     FairnessConfig,
     ImputationConfig,
+    ModelEncodingType,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
@@ -446,6 +463,13 @@ class TabularARGN(BaseEstimator):
 
         return X_imputed
 
+    def _get_column_stats(self) -> dict:
+        """Get column statistics from workspace."""
+        workspace_dir = self._get_workspace_dir()
+        workspace = Workspace(workspace_dir)
+        stats = workspace.tgt_stats.read()
+        return stats.get("columns", {})
+
     def _get_target_encoding_type(self, target_column: str | None = None) -> str | None:
         """Get the encoding type of the target column from workspace stats."""
         if not self._fitted:
@@ -455,10 +479,7 @@ class TabularARGN(BaseEstimator):
         if target_col is None:
             return None
 
-        workspace_dir = self._get_workspace_dir()
-        workspace = Workspace(workspace_dir)
-        stats = workspace.tgt_stats.read()
-        columns = stats.get("columns", {})
+        columns = self._get_column_stats()
         if target_col in columns:
             return columns[target_col].get("encoding_type")
         return None
@@ -597,12 +618,17 @@ class TabularARGN(BaseEstimator):
         ctx_data: pd.DataFrame | None = None,
         n_draws: int = 1,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> pd.DataFrame:
         """
         Predict class probabilities for samples in X.
 
         This method generates synthetic samples conditioned on the input features and computes
         the probability of each class based on the frequency across multiple draws.
+
+        Supported encoding types:
+        - tabular_categorical: Multi-class categorical variables
+        - tabular_numeric_discrete: Discrete numeric variables
+        - tabular_numeric_binned: Binned numeric variables
 
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
@@ -612,8 +638,15 @@ class TabularARGN(BaseEstimator):
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
-            Predicted class probabilities as np.ndarray of shape (n_samples, n_classes).
-            Each row sums to 1.0.
+            pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
+            Column names are derived from encoding stats:
+            - Binned: Special tokens (e.g., "<<NULL>>"), min value, bin ranges (e.g., "<10000", ">=50000"), and max value (e.g., "0", ..., "99999")
+            - Categorical: All category names including special tokens (e.g., "_RARE_", "<<NULL>>", "male", "female")
+            - Discrete: All numeric values including special tokens (e.g., "_RARE_", "<<NULL>>", "1", "2", "3")
+            Each row contains probability distribution that sums to 1.0.
+
+        Raises:
+            ValueError: If target column has unsupported encoding type.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
@@ -625,33 +658,100 @@ class TabularARGN(BaseEstimator):
                 "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
             )
 
+        # Get target column stats and validate encoding type
+        columns = self._get_column_stats()
+        if target_column not in columns:
+            raise ValueError(f"Target column '{target_column}' not found in model statistics")
+
+        target_stats = columns[target_column]
+        encoding_type = target_stats.get("encoding_type")
+        if not encoding_type:
+            raise ValueError(f"Target column '{target_column}' has no encoding type")
+
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
         if target_column in X_df.columns:
             X_df = X_df.drop(columns=[target_column])
 
-        # Generate predictions across multiple draws
-        all_predictions = []
-        for _ in range(n_draws):
-            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if target_column in samples.columns:
-                all_predictions.append(samples[target_column].values)
-            else:
-                raise ValueError(f"Target column '{target_column}' not found in generated samples")
+        # Repeat X_df n_draws times for batch sampling
+        n_samples = len(X_df)
+        X_df_repeated = pd.concat([X_df] * n_draws, ignore_index=True)
 
-        # Stack predictions
-        predictions_array = np.column_stack(all_predictions)
+        # Generate all samples in a single batch
+        samples = self.sample(seed_data=X_df_repeated, ctx_data=ctx_data, **kwargs)
+        if target_column not in samples.columns:
+            raise ValueError(f"Target column '{target_column}' not found in generated samples")
 
-        # Get unique classes and compute probabilities
-        classes = np.unique(predictions_array)
-        n_samples = predictions_array.shape[0]
-        n_classes = len(classes)
+        # Re-encode the sampled values using the same encoding logic as the generator
+        sampled_values = samples[target_column]
 
-        # Compute probability for each class
-        proba = np.zeros((n_samples, n_classes))
-        for i, cls in enumerate(classes):
-            proba[:, i] = np.mean(predictions_array == cls, axis=1)
+        if encoding_type == ModelEncodingType.tabular_numeric_binned:
+            encoded_df = encode_numeric(sampled_values, target_stats)
+            codes = encoded_df["bin"].values
+        elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
+            encoded_df = encode_numeric(sampled_values, target_stats)
+            codes = encoded_df["cat"].values
+        elif encoding_type == ModelEncodingType.tabular_categorical:
+            encoded_df = encode_categorical(sampled_values, target_stats)
+            codes = encoded_df["cat"].values
+        else:
+            raise ValueError(
+                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
+                f"Only categorical, discrete numeric, and binned numeric columns are supported."
+            )
 
-        self.classes_ = classes
-        return proba
+        # Reshape codes to (n_samples, n_draws)
+        codes_array = codes.reshape(n_samples, n_draws)
+
+        # Build class labels with their corresponding code values
+        codes = target_stats["codes"]
+        class_labels = []
+        class_code_values = []
+
+        # For binned: replace <<MIN>>/<<MAX>> tokens with actual bin values and reorder
+        if encoding_type == ModelEncodingType.tabular_numeric_binned:
+            bins = target_stats["bins"]
+            min_code_value = None
+            max_code_value = None
+
+            # First add special tokens (except <<UNK>>, <<MIN>>, <<MAX>>)
+            for code_name, code_value in codes.items():
+                if code_name == NUMERIC_BINNED_UNKNOWN_TOKEN:
+                    continue  # Skip <<UNK>>
+                elif code_name == NUMERIC_BINNED_MIN_TOKEN:
+                    min_code_value = code_value  # Save for later
+                elif code_name == NUMERIC_BINNED_MAX_TOKEN:
+                    max_code_value = code_value  # Save for later
+                else:
+                    class_labels.append(code_name)
+                    class_code_values.append(code_value)
+
+            # Add MIN value if present
+            if min_code_value is not None:
+                class_labels.append(str(bins[0]))
+                class_code_values.append(min_code_value)
+
+            # Add bin range labels
+            codes_bin_offset = len(codes)
+            for i in range(len(bins) - 1):
+                lower_bound = bins[i]
+                upper_bound = bins[i + 1]
+                label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
+                class_labels.append(label)
+                class_code_values.append(i + codes_bin_offset)
+
+            # Add MAX value at the end if present
+            if max_code_value is not None:
+                class_labels.append(str(bins[-1]))
+                class_code_values.append(max_code_value)
+        else:
+            # For discrete and categorical: use code names as-is
+            class_labels = list(codes.keys())
+            class_code_values = list(codes.values())
+
+        # Calculate probabilities for all classes at once
+        proba_list = [np.mean(codes_array == code_value, axis=1) for code_value in class_code_values]
+        proba = np.column_stack(proba_list)
+
+        return pd.DataFrame(proba, columns=class_labels)
