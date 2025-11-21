@@ -632,8 +632,8 @@ class TabularARGN(BaseEstimator):
             pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
             Column names are derived from encoding stats:
             - Binned: Bin labels only (e.g., "<10000", "<20000", ">=50000")
-            - Categorical: Category names as stored (e.g., "_RARE_", "<<NULL>>", "male", "female")
-            - Discrete: Discrete values as stored (e.g., "_RARE_", "<<NULL>>", "0", "1", "2")
+            - Categorical: All category names including special tokens (e.g., "_RARE_", "male", "female")
+            - Discrete: Numeric values only, special tokens excluded (e.g., "0", "1", "2")
             Each row contains probability distribution that sums to 1.0.
 
         Raises:
