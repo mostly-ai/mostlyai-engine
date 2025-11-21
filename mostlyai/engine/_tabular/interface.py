@@ -32,7 +32,6 @@ from sklearn.base import BaseEstimator
 
 from mostlyai.engine._common import (
     ensure_dataframe,
-    get_class_labels_from_stats,
     list_fn,
     load_generated_data,
     mean_fn,
@@ -632,11 +631,10 @@ class TabularARGN(BaseEstimator):
         Returns:
             pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
             Column names are derived from encoding stats:
-            - Binned: "<{value}" format (e.g., "<10000", "<20000", "<50000")
-            - Categorical: category names (e.g., "male", "female"), "_RARE_" becomes "rare"
-            - Discrete: discrete values (e.g., "0", "1", "2"), "_RARE_" becomes "rare"
-            Special tokens like "<<NULL>>" are trimmed and lowercased (e.g., "null").
-            Each row sums to 1.0.
+            - Binned: Special tokens + bin labels (e.g., "<<UNK>>", "<<NULL>>", "<10000", "<20000")
+            - Categorical: Category names as stored (e.g., "_RARE_", "<<NULL>>", "male", "female")
+            - Discrete: Discrete values as stored (e.g., "_RARE_", "<<NULL>>", "0", "1", "2")
+            Each row contains probability distribution that sums to 1.0.
 
         Raises:
             ValueError: If target column has unsupported encoding type.
@@ -673,9 +671,6 @@ class TabularARGN(BaseEstimator):
                 f"Only categorical, discrete numeric, and binned numeric columns are supported."
             )
 
-        # Get class labels from stats
-        class_labels = get_class_labels_from_stats(target_stats)
-
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
         # Exclude target column from seed if present
@@ -694,13 +689,35 @@ class TabularARGN(BaseEstimator):
         # Stack predictions
         predictions_array = np.column_stack(all_predictions)
 
-        n_samples = predictions_array.shape[0]
-        n_classes = len(class_labels)
+        # Build class labels and compute probabilities
+        codes = target_stats["codes"]
+        class_labels = []
+        proba_list = []
 
-        # Compute probability for each class
-        proba = np.zeros((n_samples, n_classes))
-        for i, cls in enumerate(class_labels):
-            proba[:, i] = np.mean(predictions_array == cls, axis=1)
+        if encoding_type == ModelEncodingType.tabular_numeric_binned:
+            bins = target_stats["bins"]
+
+            # Handle special tokens (codes)
+            for code_name in codes.keys():
+                class_labels.append(code_name)
+                proba_list.append(np.mean(predictions_array == code_name, axis=1))
+
+            # Handle bins
+            for i in range(len(bins) - 1):
+                class_labels.append(f"<{bins[i + 1]}")
+                lower_bound = bins[i]
+                upper_bound = bins[i + 1]
+                in_bin = (predictions_array >= lower_bound) & (predictions_array < upper_bound)
+                proba_list.append(np.mean(in_bin, axis=1))
+
+        else:
+            # For categorical and discrete
+            for code_name in codes.keys():
+                class_labels.append(code_name)
+                proba_list.append(np.mean(predictions_array == code_name, axis=1))
+
+        # Stack probabilities into array
+        proba = np.column_stack(proba_list)
 
         # Always return DataFrame with class labels as columns
         return pd.DataFrame(proba, columns=class_labels)
