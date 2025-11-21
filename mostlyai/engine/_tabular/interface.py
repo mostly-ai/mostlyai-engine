@@ -686,17 +686,12 @@ class TabularARGN(BaseEstimator):
             else:
                 raise ValueError(f"Target column '{target_column}' not found in generated samples")
 
-        # Stack predictions
         predictions_array = np.column_stack(all_predictions)
 
-        # Build class labels and compute probabilities
         class_labels = []
         proba_list = []
-
         if encoding_type == ModelEncodingType.tabular_numeric_binned:
             bins = target_stats["bins"]
-
-            # For binned data, decoder returns only numeric values, so only generate bin labels
             for i in range(len(bins) - 1):
                 lower_bound = bins[i]
                 upper_bound = bins[i + 1]
@@ -704,16 +699,12 @@ class TabularARGN(BaseEstimator):
                 class_labels.append(label)
                 in_bin = (predictions_array >= lower_bound) & (predictions_array < upper_bound)
                 proba_list.append(np.mean(in_bin, axis=1))
-
         else:
-            # For categorical and discrete
             codes = target_stats["codes"]
             for code_name in codes.keys():
                 class_labels.append(code_name)
                 proba_list.append(np.mean(predictions_array == code_name, axis=1))
 
-        # Stack probabilities into array
         proba = np.column_stack(proba_list)
 
-        # Always return DataFrame with class labels as columns
         return pd.DataFrame(proba, columns=class_labels)
