@@ -637,7 +637,7 @@ class TabularARGN(BaseEstimator):
         Returns:
             pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
             Column names are derived from encoding stats:
-            - Binned: Special tokens (e.g., "<<UNK>>", "<<NULL>>") followed by bin range labels (e.g., "<10000", ">=50000")
+            - Binned: Special tokens (e.g., "<<UNK>>", "<<NULL>>"), exact values (e.g., "=0", "=99999"), and bin ranges (e.g., "<10000", ">=50000")
             - Categorical: All category names including special tokens (e.g., "_RARE_", "<<NULL>>", "male", "female")
             - Discrete: All numeric values including special tokens (e.g., "_RARE_", "<<NULL>>", "1", "2", "3")
             Each row contains probability distribution that sums to 1.0.
@@ -703,12 +703,23 @@ class TabularARGN(BaseEstimator):
 
         # Build class labels with their corresponding code values
         codes = target_stats["codes"]
-        class_labels = list(codes.keys())
-        class_code_values = list(codes.values())
+        class_labels = []
+        class_code_values = []
 
-        # For binned: add bin range labels after special tokens
+        # For binned: replace <<MIN>>/<<MAX>> tokens with actual bin values
         if encoding_type == ModelEncodingType.tabular_numeric_binned:
             bins = target_stats["bins"]
+            for code_name, code_value in codes.items():
+                if code_name == "<<MIN>>":
+                    label = f"={bins[0]}"
+                elif code_name == "<<MAX>>":
+                    label = f"={bins[-1]}"
+                else:
+                    label = code_name
+                class_labels.append(label)
+                class_code_values.append(code_value)
+
+            # Add bin range labels
             codes_bin_offset = len(codes)
             for i in range(len(bins) - 1):
                 lower_bound = bins[i]
@@ -716,6 +727,10 @@ class TabularARGN(BaseEstimator):
                 label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
                 class_labels.append(label)
                 class_code_values.append(i + codes_bin_offset)
+        else:
+            # For discrete and categorical: use code names as-is
+            class_labels = list(codes.keys())
+            class_code_values = list(codes.values())
 
         # Calculate probabilities for all classes at once
         proba_list = [np.mean(codes_array == code_value, axis=1) for code_value in class_code_values]
