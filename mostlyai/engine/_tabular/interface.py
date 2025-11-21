@@ -43,6 +43,9 @@ from mostlyai.engine._encoding_types.tabular.categorical import (
 )
 from mostlyai.engine._encoding_types.tabular.numeric import (
     encode_numeric,
+    NUMERIC_BINNED_UNKNOWN_TOKEN,
+    NUMERIC_BINNED_MIN_TOKEN,
+    NUMERIC_BINNED_MAX_TOKEN,
 )
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
@@ -714,11 +717,11 @@ class TabularARGN(BaseEstimator):
 
             # First add special tokens (except <<UNK>>, <<MIN>>, <<MAX>>)
             for code_name, code_value in codes.items():
-                if code_name == "<<UNK>>":
+                if code_name == NUMERIC_BINNED_UNKNOWN_TOKEN:
                     continue  # Skip <<UNK>>
-                elif code_name == "<<MIN>>":
+                elif code_name == NUMERIC_BINNED_MIN_TOKEN:
                     min_code_value = code_value  # Save for later
-                elif code_name == "<<MAX>>":
+                elif code_name == NUMERIC_BINNED_MAX_TOKEN:
                     max_code_value = code_value  # Save for later
                 else:
                     class_labels.append(code_name)
