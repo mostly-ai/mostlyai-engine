@@ -690,28 +690,24 @@ class TabularARGN(BaseEstimator):
         predictions_array = np.column_stack(all_predictions)
 
         # Build class labels and compute probabilities
-        codes = target_stats["codes"]
         class_labels = []
         proba_list = []
 
         if encoding_type == ModelEncodingType.tabular_numeric_binned:
             bins = target_stats["bins"]
 
-            # Handle special tokens (codes)
-            for code_name in codes.keys():
-                class_labels.append(code_name)
-                proba_list.append(np.mean(predictions_array == code_name, axis=1))
-
-            # Handle bins
+            # For binned data, decoder returns only numeric values, so only generate bin labels
             for i in range(len(bins) - 1):
-                class_labels.append(f"<{bins[i + 1]}")
                 lower_bound = bins[i]
                 upper_bound = bins[i + 1]
+                label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
+                class_labels.append(label)
                 in_bin = (predictions_array >= lower_bound) & (predictions_array < upper_bound)
                 proba_list.append(np.mean(in_bin, axis=1))
 
         else:
             # For categorical and discrete
+            codes = target_stats["codes"]
             for code_name in codes.keys():
                 class_labels.append(code_name)
                 proba_list.append(np.mean(predictions_array == code_name, axis=1))
