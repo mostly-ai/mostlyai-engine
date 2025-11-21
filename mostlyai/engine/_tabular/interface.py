@@ -637,7 +637,7 @@ class TabularARGN(BaseEstimator):
         Returns:
             pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
             Column names are derived from encoding stats:
-            - Binned: Special tokens (e.g., "<<UNK>>", "<<NULL>>"), exact values (e.g., "=0", "=99999"), and bin ranges (e.g., "<10000", ">=50000")
+            - Binned: Special tokens (e.g., "<<NULL>>"), min value, bin ranges (e.g., "<10000", ">=50000"), and max value (e.g., "0", ..., "99999")
             - Categorical: All category names including special tokens (e.g., "_RARE_", "<<NULL>>", "male", "female")
             - Discrete: All numeric values including special tokens (e.g., "_RARE_", "<<NULL>>", "1", "2", "3")
             Each row contains probability distribution that sums to 1.0.
@@ -671,53 +671,63 @@ class TabularARGN(BaseEstimator):
         if target_column in X_df.columns:
             X_df = X_df.drop(columns=[target_column])
 
-        # Generate predictions across multiple draws and re-encode them
-        all_encoded_codes = []
-        for _ in range(n_draws):
-            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if target_column not in samples.columns:
-                raise ValueError(f"Target column '{target_column}' not found in generated samples")
+        # Repeat X_df n_draws times for batch sampling
+        n_samples = len(X_df)
+        X_df_repeated = pd.concat([X_df] * n_draws, ignore_index=True)
 
-            # Re-encode the sampled values using the same encoding logic as the generator
-            sampled_values = samples[target_column]
+        # Generate all samples in a single batch
+        samples = self.sample(seed_data=X_df_repeated, ctx_data=ctx_data, **kwargs)
+        if target_column not in samples.columns:
+            raise ValueError(f"Target column '{target_column}' not found in generated samples")
 
-            if encoding_type == ModelEncodingType.tabular_numeric_binned:
-                encoded_df = encode_numeric(sampled_values, target_stats)
-                codes = encoded_df["bin"].values
-            elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
-                encoded_df = encode_numeric(sampled_values, target_stats)
-                codes = encoded_df["cat"].values
-            elif encoding_type == ModelEncodingType.tabular_categorical:
-                encoded_df = encode_categorical(sampled_values, target_stats)
-                codes = encoded_df["cat"].values
-            else:
-                raise ValueError(
-                    f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
-                    f"Only categorical, discrete numeric, and binned numeric columns are supported."
-                )
+        # Re-encode the sampled values using the same encoding logic as the generator
+        sampled_values = samples[target_column]
 
-            all_encoded_codes.append(codes)
+        if encoding_type == ModelEncodingType.tabular_numeric_binned:
+            encoded_df = encode_numeric(sampled_values, target_stats)
+            codes = encoded_df["bin"].values
+        elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
+            encoded_df = encode_numeric(sampled_values, target_stats)
+            codes = encoded_df["cat"].values
+        elif encoding_type == ModelEncodingType.tabular_categorical:
+            encoded_df = encode_categorical(sampled_values, target_stats)
+            codes = encoded_df["cat"].values
+        else:
+            raise ValueError(
+                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
+                f"Only categorical, discrete numeric, and binned numeric columns are supported."
+            )
 
-        # Stack all encoded codes (shape: n_samples x n_draws)
-        codes_array = np.column_stack(all_encoded_codes)
+        # Reshape codes to (n_samples, n_draws)
+        codes_array = codes.reshape(n_samples, n_draws)
 
         # Build class labels with their corresponding code values
         codes = target_stats["codes"]
         class_labels = []
         class_code_values = []
 
-        # For binned: replace <<MIN>>/<<MAX>> tokens with actual bin values
+        # For binned: replace <<MIN>>/<<MAX>> tokens with actual bin values and reorder
         if encoding_type == ModelEncodingType.tabular_numeric_binned:
             bins = target_stats["bins"]
+            min_code_value = None
+            max_code_value = None
+
+            # First add special tokens (except <<UNK>>, <<MIN>>, <<MAX>>)
             for code_name, code_value in codes.items():
-                if code_name == "<<MIN>>":
-                    label = f"={bins[0]}"
+                if code_name == "<<UNK>>":
+                    continue  # Skip <<UNK>>
+                elif code_name == "<<MIN>>":
+                    min_code_value = code_value  # Save for later
                 elif code_name == "<<MAX>>":
-                    label = f"={bins[-1]}"
+                    max_code_value = code_value  # Save for later
                 else:
-                    label = code_name
-                class_labels.append(label)
-                class_code_values.append(code_value)
+                    class_labels.append(code_name)
+                    class_code_values.append(code_value)
+
+            # Add MIN value if present
+            if min_code_value is not None:
+                class_labels.append(str(bins[0]))
+                class_code_values.append(min_code_value)
 
             # Add bin range labels
             codes_bin_offset = len(codes)
@@ -727,6 +737,11 @@ class TabularARGN(BaseEstimator):
                 label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
                 class_labels.append(label)
                 class_code_values.append(i + codes_bin_offset)
+
+            # Add MAX value at the end if present
+            if max_code_value is not None:
+                class_labels.append(str(bins[-1]))
+                class_code_values.append(max_code_value)
         else:
             # For discrete and categorical: use code names as-is
             class_labels = list(codes.keys())
