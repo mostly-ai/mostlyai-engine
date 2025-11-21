@@ -631,7 +631,7 @@ class TabularARGN(BaseEstimator):
         Returns:
             pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
             Column names are derived from encoding stats:
-            - Binned: Special tokens + bin labels (e.g., "<<UNK>>", "<<NULL>>", "<10000", "<20000")
+            - Binned: Bin labels only (e.g., "<10000", "<20000", ">=50000")
             - Categorical: Category names as stored (e.g., "_RARE_", "<<NULL>>", "male", "female")
             - Discrete: Discrete values as stored (e.g., "_RARE_", "<<NULL>>", "0", "1", "2")
             Each row contains probability distribution that sums to 1.0.
@@ -658,18 +658,6 @@ class TabularARGN(BaseEstimator):
         encoding_type = target_stats.get("encoding_type")
         if not encoding_type:
             raise ValueError(f"Target column '{target_column}' has no encoding type")
-
-        # Validate encoding type
-        supported_types = [
-            ModelEncodingType.tabular_categorical,
-            ModelEncodingType.tabular_numeric_discrete,
-            ModelEncodingType.tabular_numeric_binned,
-        ]
-        if encoding_type not in supported_types:
-            raise ValueError(
-                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
-                f"Only categorical, discrete numeric, and binned numeric columns are supported."
-            )
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
@@ -699,11 +687,21 @@ class TabularARGN(BaseEstimator):
                 class_labels.append(label)
                 in_bin = (predictions_array >= lower_bound) & (predictions_array < upper_bound)
                 proba_list.append(np.mean(in_bin, axis=1))
-        else:
+        elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
+            codes = target_stats["codes"]
+            for code_name in [k for k in codes.keys() if not k.startswith(("_", "<<"))]:
+                class_labels.append(code_name)
+                proba_list.append(np.mean(predictions_array == pd.to_numeric(code_name), axis=1))
+        elif encoding_type == ModelEncodingType.tabular_categorical:
             codes = target_stats["codes"]
             for code_name in codes.keys():
                 class_labels.append(code_name)
                 proba_list.append(np.mean(predictions_array == code_name, axis=1))
+        else:
+            raise ValueError(
+                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
+                f"Only categorical, discrete numeric, and binned numeric columns are supported."
+            )
 
         proba = np.column_stack(proba_list)
 
