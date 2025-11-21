@@ -38,6 +38,12 @@ from mostlyai.engine._common import (
     median_fn,
     mode_fn,
 )
+from mostlyai.engine._encoding_types.tabular.categorical import (
+    encode_categorical,
+)
+from mostlyai.engine._encoding_types.tabular.numeric import (
+    encode_numeric,
+)
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
@@ -631,9 +637,9 @@ class TabularARGN(BaseEstimator):
         Returns:
             pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
             Column names are derived from encoding stats:
-            - Binned: Bin labels only (e.g., "<10000", "<20000", ">=50000")
-            - Categorical: All category names including special tokens (e.g., "_RARE_", "male", "female")
-            - Discrete: Numeric values only, special tokens excluded (e.g., "0", "1", "2")
+            - Binned: Special tokens (e.g., "<<UNK>>", "<<NULL>>") followed by bin range labels (e.g., "<10000", ">=50000")
+            - Categorical: All category names including special tokens (e.g., "_RARE_", "<<NULL>>", "male", "female")
+            - Discrete: All numeric values including special tokens (e.g., "_RARE_", "<<NULL>>", "1", "2", "3")
             Each row contains probability distribution that sums to 1.0.
 
         Raises:
@@ -665,44 +671,54 @@ class TabularARGN(BaseEstimator):
         if target_column in X_df.columns:
             X_df = X_df.drop(columns=[target_column])
 
-        # Generate predictions across multiple draws
-        all_predictions = []
+        # Generate predictions across multiple draws and re-encode them
+        all_encoded_codes = []
         for _ in range(n_draws):
             samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if target_column in samples.columns:
-                all_predictions.append(samples[target_column].values)
-            else:
+            if target_column not in samples.columns:
                 raise ValueError(f"Target column '{target_column}' not found in generated samples")
 
-        predictions_array = np.column_stack(all_predictions)
+            # Re-encode the sampled values using the same encoding logic as the generator
+            sampled_values = samples[target_column]
 
-        class_labels = []
-        proba_list = []
+            if encoding_type == ModelEncodingType.tabular_numeric_binned:
+                encoded_df = encode_numeric(sampled_values, target_stats)
+                codes = encoded_df["bin"].values
+            elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
+                encoded_df = encode_numeric(sampled_values, target_stats)
+                codes = encoded_df["cat"].values
+            elif encoding_type == ModelEncodingType.tabular_categorical:
+                encoded_df = encode_categorical(sampled_values, target_stats)
+                codes = encoded_df["cat"].values
+            else:
+                raise ValueError(
+                    f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
+                    f"Only categorical, discrete numeric, and binned numeric columns are supported."
+                )
+
+            all_encoded_codes.append(codes)
+
+        # Stack all encoded codes (shape: n_samples x n_draws)
+        codes_array = np.column_stack(all_encoded_codes)
+
+        # Build class labels with their corresponding code values
+        codes = target_stats["codes"]
+        class_labels = list(codes.keys())
+        class_code_values = list(codes.values())
+
+        # For binned: add bin range labels after special tokens
         if encoding_type == ModelEncodingType.tabular_numeric_binned:
             bins = target_stats["bins"]
+            codes_bin_offset = len(codes)
             for i in range(len(bins) - 1):
                 lower_bound = bins[i]
                 upper_bound = bins[i + 1]
                 label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
                 class_labels.append(label)
-                in_bin = (predictions_array >= lower_bound) & (predictions_array < upper_bound)
-                proba_list.append(np.mean(in_bin, axis=1))
-        elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
-            codes = target_stats["codes"]
-            for code_name in [k for k in codes.keys() if not k.startswith(("_", "<<"))]:
-                class_labels.append(code_name)
-                proba_list.append(np.mean(predictions_array == pd.to_numeric(code_name), axis=1))
-        elif encoding_type == ModelEncodingType.tabular_categorical:
-            codes = target_stats["codes"]
-            for code_name in codes.keys():
-                class_labels.append(code_name)
-                proba_list.append(np.mean(predictions_array == code_name, axis=1))
-        else:
-            raise ValueError(
-                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
-                f"Only categorical, discrete numeric, and binned numeric columns are supported."
-            )
+                class_code_values.append(i + codes_bin_offset)
 
+        # Calculate probabilities for all classes at once
+        proba_list = [np.mean(codes_array == code_value, axis=1) for code_value in class_code_values]
         proba = np.column_stack(proba_list)
 
         return pd.DataFrame(proba, columns=class_labels)
