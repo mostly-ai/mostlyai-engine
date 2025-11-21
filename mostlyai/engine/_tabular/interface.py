@@ -34,7 +34,6 @@ from mostlyai.engine._common import (
     ensure_dataframe,
     list_fn,
     load_generated_data,
-    load_probability_data,
     mean_fn,
     median_fn,
     mode_fn,
@@ -655,23 +654,22 @@ class TabularARGN(BaseEstimator):
         if target_column in X_df.columns:
             X_df = X_df.drop(columns=[target_column])
 
-        # Generate probabilities conditioned on seed_data (input features)
-        # Each row in seed_data produces one probability distribution for the target
-        generate(
-            seed_data=X_df,
-            ctx_data=ctx_data,
-            workspace_dir=self.workspace_dir,
-            probs_columns=[target_column],
-            **kwargs,
-        )
+        # Call new predict_proba utility that returns probabilities in-memory
+        from mostlyai.engine._tabular.generation import predict_proba as _predict_proba
 
-        # Load probabilities from workspace
         workspace = Workspace(self.workspace_dir)
-        proba_files = sorted(workspace.probability_data_path.glob("*.parquet"))
-        if not proba_files:
-            raise RuntimeError("No probability files found in workspace after generation")
 
-        # Concatenate all probability files
-        probs_df = pd.concat([pd.read_parquet(f) for f in proba_files], axis=0, ignore_index=True)
+        # Extract device and seed from kwargs if provided
+        device = kwargs.get('device', self.device)
+        seed = kwargs.get('seed')
+
+        probs_df = _predict_proba(
+            workspace=workspace,
+            seed_data=X_df,  # Features to condition on (without target)
+            target_columns=[target_column],
+            ctx_data=ctx_data,  # Optional separate context data
+            seed=seed,
+            device=device,
+        )
 
         return probs_df

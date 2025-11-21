@@ -168,11 +168,6 @@ class Workspace:
         self.generated_data_path = Path(self._ws_path) / Path(*generated_data)
         self.generated_data = make_path_desc(parts=generated_data, fetch_multiple=fetch_part_parquets)
 
-        # Probability data
-        probability_data = ["ProbabilityData"]
-        self.probability_data_path = Path(self._ws_path) / Path(*probability_data)
-        self.probability_data = make_path_desc(parts=probability_data, fetch_multiple=fetch_part_parquets)
-
 
 def ensure_workspace_dir(workspace_dir: str | Path) -> Path:
     workspace_dir = Path(workspace_dir)

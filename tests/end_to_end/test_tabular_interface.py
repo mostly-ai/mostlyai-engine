@@ -200,7 +200,7 @@ class TestTabularARGNClassification:
 
         # Predict probabilities on test data
         test_X = X.head(10)
-        proba = argn.predict_proba(test_X, target="target", n_draws=5)
+        proba = argn.predict_proba(test_X, target="target")
 
         # Verify probabilities
         assert proba.shape[0] == 10
