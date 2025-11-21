@@ -42,10 +42,10 @@ from mostlyai.engine._encoding_types.tabular.categorical import (
     encode_categorical,
 )
 from mostlyai.engine._encoding_types.tabular.numeric import (
-    encode_numeric,
-    NUMERIC_BINNED_UNKNOWN_TOKEN,
-    NUMERIC_BINNED_MIN_TOKEN,
     NUMERIC_BINNED_MAX_TOKEN,
+    NUMERIC_BINNED_MIN_TOKEN,
+    NUMERIC_BINNED_UNKNOWN_TOKEN,
+    encode_numeric,
 )
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
