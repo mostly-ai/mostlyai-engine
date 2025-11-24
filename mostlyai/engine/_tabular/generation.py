@@ -1858,19 +1858,6 @@ def predict_proba(
         target_col = target_columns[target_idx]
         _LOG.info(f"Processing target {target_idx + 1}/{len(target_columns)}: {target_col}")
 
-        # Add columns for the just-completed target (target_idx - 1)
-        just_completed_target = target_columns[target_idx - 1]
-        just_completed_stats = tgt_stats["columns"][just_completed_target]
-        for sub_col_key in just_completed_stats["cardinalities"].keys():
-            full_sub_col_name = get_argn_name(
-                argn_processor=just_completed_stats[ARGN_PROCESSOR],
-                argn_table=just_completed_stats[ARGN_TABLE],
-                argn_column=just_completed_stats[ARGN_COLUMN],
-                argn_sub_column=sub_col_key,
-            )
-            # Pre-allocate column with dummy value (will be updated in combo loop)
-            extended_seed[full_sub_col_name] = 0
-
         # Get possible values for current target
         current_possible_values = _get_possible_values(target_col, tgt_stats)
         current_card = len(current_possible_values)
@@ -1888,16 +1875,13 @@ def predict_proba(
         # Allocate array for new joint probabilities
         new_joint_probs = np.zeros((n_samples, num_prev_combos * current_card))
 
-        # Batch all combinations into a single forward pass
-        # Replicate extended_seed for all combinations
-        batched_seed = pd.concat([extended_seed] * num_prev_combos, ignore_index=True)
-        # batched_seed shape: (n_samples * num_combos, features)
-
-        # Set previous target values for each combo block
+        # Build DataFrames for each combo with actual values, then concatenate
+        combo_dfs = []
         for combo_idx, prev_combo in enumerate(prev_combos):
-            start_idx = combo_idx * n_samples
-            end_idx = start_idx + n_samples
+            # Copy extended_seed for this combo
+            df = extended_seed.copy()
 
+            # Add previous target columns with actual values (no dummy values)
             for i in range(target_idx):
                 prev_target_col = target_columns[i]
                 encoded_val = prev_combo[i]
@@ -1909,8 +1893,13 @@ def predict_proba(
                         argn_column=prev_target_stats[ARGN_COLUMN],
                         argn_sub_column=sub_col_key,
                     )
-                    # Set value for this combo's samples
-                    batched_seed.loc[start_idx:end_idx - 1, full_sub_col_name] = encoded_val
+                    df[full_sub_col_name] = encoded_val
+
+            combo_dfs.append(df)
+
+        # Concatenate all combo DataFrames into single batch
+        batched_seed = pd.concat(combo_dfs, ignore_index=True)
+        # batched_seed shape: (n_samples * num_combos, features)
 
         # Single batched forward pass for all combinations
         all_conditional_probs = _generate_marginal_probs(
