@@ -600,19 +600,23 @@ class TabularARGN(BaseEstimator):
     def predict_proba(
         self,
         X,
-        target: str | None = None,
+        target: str | list[str] | None = None,
         ctx_data: pd.DataFrame | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         """
-        Predict class probabilities for target variable.
+        Predict class probabilities for target variable(s).
 
-        This method generates model probability distributions for the target variable conditioned on
-        input features. Probabilities are computed directly from the model (not via sampling) and
-        returned as an exploded DataFrame with one column per category/bin/value.
+        This method generates model probability distributions for one or more target variables
+        conditioned on input features. Probabilities are computed directly from the model
+        (not via sampling).
 
         The generation is conditioned on the input features X (seed_data). Each row in X produces
-        one probability distribution for the target column.
+        one probability distribution (single target) or joint probability distribution (multiple targets).
+
+        Single target returns an exploded DataFrame with one column per category/bin/value.
+        Multiple targets return a MultiIndex DataFrame with joint probabilities:
+        P(col1, col2, ...) = P(col1) * P(col2|col1) * P(col3|col1,col2) * ...
 
         Supported encoding types:
         - tabular_categorical: Multi-class categorical variables
@@ -622,37 +626,60 @@ class TabularARGN(BaseEstimator):
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
                These features are used as seed_data to condition the probability generation.
-            target: Name of the target column to predict. If None, uses the target column from fit().
+            target: Name of the target column(s) to predict. Can be:
+                - str: Single target column name
+                - list[str]: Multiple target columns for joint probabilities (supports arbitrary number of targets)
+                - None: Uses the target column from fit()
             ctx_data: Context data for generation. If None, uses the context data from training.
-            **kwargs: Additional generation parameters (sampling_temperature, sampling_top_p, etc.).
+            **kwargs: Additional generation parameters (device, seed, etc.).
 
         Returns:
-            DataFrame with shape (n_samples, n_categories) containing probability distributions.
-            Column names are derived from encoding stats:
-            - Binned: "<{value}" or ">={value}" (e.g., "<10000", ">=10000")
-            - Categorical: category names (e.g., "male", "female")
-            - Discrete: discrete values (e.g., "0", "1", "2")
-            Each row contains a full probability distribution that sums to 1.0.
+            Single target: DataFrame with shape (n_samples, n_categories) containing probability distributions.
+                Column names are derived from encoding stats:
+                - Binned: "<{value}" or ">={value}" (e.g., "<10000", ">=10000")
+                - Categorical: category names (e.g., "male", "female")
+                - Discrete: discrete values (e.g., "0", "1", "2")
+                Each row contains a full probability distribution that sums to 1.0.
+
+            Multiple targets: MultiIndex DataFrame with joint probabilities.
+                Columns: MultiIndex.from_product of all category combinations.
+                Example for target=["gender", "income"]:
+                    gender  income
+                    male    <10000     0.15
+                            >=10000    0.35
+                    female  <10000     0.25
+                            >=10000    0.25
 
         Raises:
             ValueError: If model is not fitted, target is not specified, or target has unsupported
                        encoding type for probability output.
+
+        Notes:
+            Performance: Joint probability complexity is O(card1 × card2 × ... × cardN),
+            exponential in the number of targets.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        # Determine target column
-        target_column = target or self._target_column
-        if target_column is None:
+        # Determine target column(s)
+        if target is None:
+            target_columns = [self._target_column] if self._target_column else None
+        elif isinstance(target, str):
+            target_columns = [target]
+        else:
+            target_columns = target
+
+        if target_columns is None or not target_columns:
             raise ValueError(
                 "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
             )
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
-        # Exclude target column from seed if present
-        if target_column in X_df.columns:
-            X_df = X_df.drop(columns=[target_column])
+        # Exclude target columns from seed if present
+        target_cols_in_X = [col for col in target_columns if col in X_df.columns]
+        if target_cols_in_X:
+            X_df = X_df.drop(columns=target_cols_in_X)
 
         # Call new predict_proba utility that returns probabilities in-memory
         from mostlyai.engine._tabular.generation import predict_proba as _predict_proba
@@ -665,8 +692,8 @@ class TabularARGN(BaseEstimator):
 
         probs_df = _predict_proba(
             workspace=workspace,
-            seed_data=X_df,  # Features to condition on (without target)
-            target_columns=[target_column],
+            seed_data=X_df,  # Features to condition on (without targets)
+            target_columns=target_columns,
             ctx_data=ctx_data,  # Optional separate context data
             seed=seed,
             device=device,

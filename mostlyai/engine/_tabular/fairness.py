@@ -84,12 +84,11 @@ def _estimate_target_distribution(
         _LOG.info(f"fairness: sample {sample_size:,} for sensitive group {seed_values}")
 
     # fetch probs for target column
-    _, probs = forward_fn(
+    probs = forward_fn(
         x={},
-        mode="gen",
+        mode="probs",
         batch_size=sample_size,
         fixed_values=fixed_values,
-        return_probs=[target_sub_col],
     )
     # convert to numpy
     probs = probs[target_sub_col].detach().cpu().numpy()

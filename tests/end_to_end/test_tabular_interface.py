@@ -208,6 +208,135 @@ class TestTabularARGNClassification:
         # Verify probabilities sum to 1.0 for each sample
         np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
 
+    def test_predict_proba_multi_target(self, tmp_path_factory):
+        """Test predict_proba() with multiple targets for joint probabilities."""
+        # Create dataset with multiple categorical columns
+        np.random.seed(42)
+        n_samples = 200
+
+        # Create correlated categorical features
+        gender = np.random.choice(["male", "female"], n_samples)
+        # Make income correlated with gender
+        income = []
+        for g in gender:
+            if g == "male":
+                income.append(np.random.choice(["low", "high"], p=[0.3, 0.7]))
+            else:
+                income.append(np.random.choice(["low", "high"], p=[0.6, 0.4]))
+
+        data = pd.DataFrame(
+            {
+                "feature1": np.random.randn(n_samples),
+                "feature2": np.random.randn(n_samples),
+                "gender": gender,
+                "income": income,
+            }
+        )
+
+        # Train model on all columns
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(data)
+
+        # Test multi-target predict_proba
+        test_X = data[["feature1", "feature2"]].head(5)
+        proba = argn.predict_proba(test_X, target=["gender", "income"])
+
+        # Verify MultiIndex DataFrame structure
+        assert isinstance(proba.columns, pd.MultiIndex)
+        assert proba.columns.names == ["gender", "income"]
+        assert proba.shape[0] == 5
+
+        # Verify we have combinations (at least 4: 2 genders x 2 income levels)
+        # May have more due to _RARE_ or other encoded categories
+        assert proba.shape[1] >= 4
+
+        # Verify joint probabilities sum to 1.0 for each sample
+        np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
+
+        # Verify all probabilities are non-negative
+        assert (proba >= 0).all().all()
+
+        # Check MultiIndex structure
+        assert len(proba.columns.levels) == 2
+        # At least the main categories should be present
+        gender_levels = set(proba.columns.get_level_values(0).unique())
+        income_levels = set(proba.columns.get_level_values(1).unique())
+        assert {"male", "female"}.issubset(gender_levels) or {"female", "male"}.issubset(gender_levels)
+        assert {"low", "high"}.issubset(income_levels) or {"high", "low"}.issubset(income_levels)
+
+    def test_predict_proba_three_targets(self, tmp_path_factory):
+        """Test predict_proba() with three targets for joint probabilities."""
+        # Create dataset with three categorical columns
+        np.random.seed(42)
+        n_samples = 200
+
+        # Create three correlated categorical features
+        size = np.random.choice(["small", "large"], n_samples)
+        color = []
+        material = []
+        for s in size:
+            if s == "small":
+                color.append(np.random.choice(["red", "blue"], p=[0.7, 0.3]))
+            else:
+                color.append(np.random.choice(["red", "blue"], p=[0.3, 0.7]))
+
+        for c in color:
+            if c == "red":
+                material.append(np.random.choice(["wood", "metal"], p=[0.6, 0.4]))
+            else:
+                material.append(np.random.choice(["wood", "metal"], p=[0.4, 0.6]))
+
+        data = pd.DataFrame(
+            {
+                "feature1": np.random.randn(n_samples),
+                "feature2": np.random.randn(n_samples),
+                "size": size,
+                "color": color,
+                "material": material,
+            }
+        )
+
+        # Train model on all columns
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(data)
+
+        # Test three-target predict_proba
+        test_X = data[["feature1", "feature2"]].head(3)
+        proba = argn.predict_proba(test_X, target=["size", "color", "material"])
+
+        # Verify MultiIndex DataFrame structure
+        assert isinstance(proba.columns, pd.MultiIndex)
+        assert proba.columns.names == ["size", "color", "material"]
+        assert proba.shape[0] == 3
+
+        # Verify we have at least the core combinations (2 sizes × 2 colors × 2 materials = 8)
+        assert proba.shape[1] >= 8
+
+        # Verify joint probabilities sum to 1.0 for each sample
+        np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
+
+        # Verify all probabilities are non-negative
+        assert (proba >= 0).all().all()
+
+        # Check MultiIndex structure has 3 levels
+        assert len(proba.columns.levels) == 3
+        size_levels = set(proba.columns.get_level_values(0).unique())
+        color_levels = set(proba.columns.get_level_values(1).unique())
+        material_levels = set(proba.columns.get_level_values(2).unique())
+        assert {"small", "large"}.issubset(size_levels)
+        assert {"red", "blue"}.issubset(color_levels)
+        assert {"wood", "metal"}.issubset(material_levels)
+
 
 class TestTabularARGNRegression:
     """Test regression: predict numeric target."""
