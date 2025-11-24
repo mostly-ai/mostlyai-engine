@@ -1564,55 +1564,17 @@ def _get_probability_column_names(target: str, stats: dict) -> list[str]:
         stats: Target column encoding statistics
 
     Returns:
-        List of column names for each category/bin/value
+        List of column names (code keys) in order
     """
     encoding_type = ModelEncodingType(stats["encoding_type"])
 
-    if encoding_type == ModelEncodingType.tabular_numeric_binned:
-        # Get bin boundaries and construct labels
-        bins = stats["bins"]
-        codes = stats["codes"]
-        labels = []
-
-        # Handle special codes first (trim << >> and lowercase)
-        for code_name in codes.keys():
-            if code_name.startswith("<<") and code_name.endswith(">>"):
-                labels.append(code_name[2:-2].lower())
-
-        # Add regular bin labels using upper bounds (bins are [a, b) intervals)
-        for i in range(len(bins) - 1):
-            if bins[i + 1] == float('inf') or bins[i + 1] == np.inf:
-                labels.append(f">={bins[i]}")
-            else:
-                labels.append(f"<{bins[i + 1]}")
-
-        return labels
-
-    elif encoding_type == ModelEncodingType.tabular_categorical:
-        # Get category names from codes
-        codes = stats["codes"]
-        labels = []
-        for category in codes.keys():
-            if category == "_RARE_":
-                labels.append("rare")
-            elif category.startswith("<<") and category.endswith(">>"):
-                labels.append(category[2:-2].lower())
-            else:
-                labels.append(category)
-        return labels
-
-    elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
-        # Get discrete values from codes
-        codes = stats["codes"]
-        labels = []
-        for value in codes.keys():
-            if value == "_RARE_":
-                labels.append("rare")
-            elif value.startswith("<<") and value.endswith(">>"):
-                labels.append(value[2:-2].lower())
-            else:
-                labels.append(value)
-        return labels
+    if encoding_type in (
+        ModelEncodingType.tabular_categorical,
+        ModelEncodingType.tabular_numeric_discrete,
+        ModelEncodingType.tabular_numeric_binned,
+    ):
+        # Return code keys directly as they appear in encoding stats
+        return list(stats["codes"].keys())
 
     else:
         raise ValueError(f"Unsupported encoding type for probabilities: {encoding_type}")
