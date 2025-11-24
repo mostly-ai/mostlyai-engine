@@ -1850,10 +1850,26 @@ def predict_proba(
     all_possible_values = [_get_possible_values(target_columns[0], tgt_stats)]
     all_column_names = [_get_probability_column_names(target_columns[0], tgt_stats["columns"][target_columns[0]])]
 
+    # Create extended_seed once - will grow incrementally as we process each target
+    extended_seed = seed_encoded.copy()
+
     # Iteratively add each subsequent target
     for target_idx in range(1, len(target_columns)):
         target_col = target_columns[target_idx]
         _LOG.info(f"Processing target {target_idx + 1}/{len(target_columns)}: {target_col}")
+
+        # Add columns for the just-completed target (target_idx - 1)
+        just_completed_target = target_columns[target_idx - 1]
+        just_completed_stats = tgt_stats["columns"][just_completed_target]
+        for sub_col_key in just_completed_stats["cardinalities"].keys():
+            full_sub_col_name = get_argn_name(
+                argn_processor=just_completed_stats[ARGN_PROCESSOR],
+                argn_table=just_completed_stats[ARGN_TABLE],
+                argn_column=just_completed_stats[ARGN_COLUMN],
+                argn_sub_column=sub_col_key,
+            )
+            # Pre-allocate column with dummy value (will be updated in combo loop)
+            extended_seed[full_sub_col_name] = 0
 
         # Get possible values for current target
         current_possible_values = _get_possible_values(target_col, tgt_stats)
@@ -1872,14 +1888,19 @@ def predict_proba(
         # Allocate array for new joint probabilities
         new_joint_probs = np.zeros((n_samples, num_prev_combos * current_card))
 
-        # For each combination of previous target values
+        # Batch all combinations into a single forward pass
+        # Replicate extended_seed for all combinations
+        batched_seed = pd.concat([extended_seed] * num_prev_combos, ignore_index=True)
+        # batched_seed shape: (n_samples * num_combos, features)
+
+        # Set previous target values for each combo block
         for combo_idx, prev_combo in enumerate(prev_combos):
-            # Extend seed_encoded with previous target values
-            extended_seed = seed_encoded.copy()
+            start_idx = combo_idx * n_samples
+            end_idx = start_idx + n_samples
+
             for i in range(target_idx):
                 prev_target_col = target_columns[i]
                 encoded_val = prev_combo[i]
-                # Add sub-columns for this previous target with fixed value
                 prev_target_stats = tgt_stats["columns"][prev_target_col]
                 for sub_col_key in prev_target_stats["cardinalities"].keys():
                     full_sub_col_name = get_argn_name(
@@ -1888,22 +1909,27 @@ def predict_proba(
                         argn_column=prev_target_stats[ARGN_COLUMN],
                         argn_sub_column=sub_col_key,
                     )
-                    extended_seed[full_sub_col_name] = encoded_val
+                    # Set value for this combo's samples
+                    batched_seed.loc[start_idx:end_idx - 1, full_sub_col_name] = encoded_val
 
-            # Generate P(current_target | seed, previous_targets=prev_combo)
-            conditional_probs = _generate_marginal_probs(
-                model=model,
-                seed_encoded=extended_seed,  # Now includes previous targets
-                target_column=target_col,
-                tgt_stats=tgt_stats,
-                tgt_cardinalities=tgt_cardinalities,
-                all_columns=all_columns,
-                device=device,
-            )  # shape: (n_samples, current_card)
+        # Single batched forward pass for all combinations
+        all_conditional_probs = _generate_marginal_probs(
+            model=model,
+            seed_encoded=batched_seed,
+            target_column=target_col,
+            tgt_stats=tgt_stats,
+            tgt_cardinalities=tgt_cardinalities,
+            all_columns=all_columns,
+            device=device,
+        )  # shape: (n_samples * num_combos, current_card)
+
+        # Extract probabilities for each combo and compute joint probabilities
+        for combo_idx in range(num_prev_combos):
+            start_idx = combo_idx * n_samples
+            end_idx = start_idx + n_samples
+            conditional_probs = all_conditional_probs[start_idx:end_idx, :]  # (n_samples, current_card)
 
             # Multiply: P(prev_combo) * P(current | prev_combo)
-            # joint_probs[:, combo_idx] has P(prev_combo)
-            # conditional_probs has P(current | prev_combo) for all values of current
             for val_idx in range(current_card):
                 new_col_idx = combo_idx * current_card + val_idx
                 new_joint_probs[:, new_col_idx] = joint_probs[:, combo_idx] * conditional_probs[:, val_idx]
