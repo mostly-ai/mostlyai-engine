@@ -687,8 +687,8 @@ class TabularARGN(BaseEstimator):
         workspace = Workspace(self.workspace_dir)
 
         # Extract device and seed from kwargs if provided
-        device = kwargs.get('device', self.device)
-        seed = kwargs.get('seed')
+        device = kwargs.get("device", self.device)
+        seed = kwargs.get("seed")
 
         probs_df = _predict_proba(
             workspace=workspace,

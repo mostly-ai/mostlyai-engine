@@ -1061,4 +1061,3 @@ def load_generated_data(workspace_dir: str | Path) -> pd.DataFrame:
     # Read and concatenate all parquet files
     dfs = [pd.read_parquet(f) for f in parquet_files]
     return pd.concat(dfs, ignore_index=True)
-

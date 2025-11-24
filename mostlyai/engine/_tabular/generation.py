@@ -66,6 +66,8 @@ from mostlyai.engine._encoding_types.tabular.datetime import decode_datetime
 from mostlyai.engine._encoding_types.tabular.itt import decode_itt
 from mostlyai.engine._encoding_types.tabular.lat_long import decode_latlong
 from mostlyai.engine._encoding_types.tabular.numeric import (
+    NUMERIC_BINNED_MAX_TOKEN,
+    NUMERIC_BINNED_MIN_TOKEN,
     NUMERIC_BINNED_NULL_TOKEN,
     NUMERIC_BINNED_SUB_COL_SUFFIX,
     NUMERIC_BINNED_UNKNOWN_TOKEN,
@@ -992,9 +994,7 @@ def generate(
             else:
                 has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
 
-        tgt_cardinalities, ctx_cardinalities = _get_cardinalities(
-            tgt_stats, ctx_stats, has_slen, has_ridx, has_sdec
-        )
+        tgt_cardinalities, ctx_cardinalities = _get_cardinalities(tgt_stats, ctx_stats, has_slen, has_ridx, has_sdec)
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
         _LOG.info(f"{len(tgt_sub_columns)=}")
@@ -1555,68 +1555,113 @@ def generate(
 ##########################
 
 
-def _get_probability_column_names(target: str, stats: dict) -> list[str]:
+def _get_column_metadata(target_column: str, target_stats: dict) -> list[dict]:
     """
-    Get column names for probability DataFrame from encoding stats.
+    Get metadata for each column (code value and label) in display order.
+
+    For binned columns: filters <<UNK>>, reorders MIN/MAX, creates bin labels.
 
     Args:
-        target: Target column name (not used in output, kept for compatibility)
-        stats: Target column encoding statistics
+        target_column: Name of target column
+        target_stats: Target column statistics
 
     Returns:
-        List of column names (code keys) in order
+        List of dicts with 'code_value' and 'label' keys, in display order
     """
-    encoding_type = ModelEncodingType(stats["encoding_type"])
+    encoding_type = ModelEncodingType(target_stats["encoding_type"])
+    codes = target_stats["codes"]
 
     if encoding_type in (
         ModelEncodingType.tabular_categorical,
         ModelEncodingType.tabular_numeric_discrete,
-        ModelEncodingType.tabular_numeric_binned,
     ):
-        # Return code keys directly as they appear in encoding stats
-        return list(stats["codes"].keys())
+        # Keep all codes as-is
+        return [{"code_value": code_value, "label": code_name} for code_name, code_value in codes.items()]
+
+    elif encoding_type == ModelEncodingType.tabular_numeric_binned:
+        bins = target_stats["bins"]
+        metadata = []
+
+        min_code_value = None
+        max_code_value = None
+
+        # First: special tokens (except <<UNK>>, <<MIN>>, <<MAX>>)
+        for code_name, code_value in codes.items():
+            if code_name == NUMERIC_BINNED_UNKNOWN_TOKEN:
+                continue  # Skip <<UNK>>
+            elif code_name == NUMERIC_BINNED_MIN_TOKEN:
+                min_code_value = code_value  # Save for later
+            elif code_name == NUMERIC_BINNED_MAX_TOKEN:
+                max_code_value = code_value  # Save for later
+            else:
+                metadata.append({"code_value": code_value, "label": code_name})
+
+        # Add MIN value if present
+        if min_code_value is not None:
+            metadata.append({"code_value": min_code_value, "label": str(bins[0])})
+
+        # Add bin range labels
+        codes_bin_offset = len(codes)
+        for i in range(len(bins) - 1):
+            lower_bound = bins[i]
+            upper_bound = bins[i + 1]
+            label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
+            metadata.append({"code_value": i + codes_bin_offset, "label": label})
+
+        # Add MAX value at the end if present
+        if max_code_value is not None:
+            metadata.append({"code_value": max_code_value, "label": str(bins[-1])})
+
+        return metadata
 
     else:
-        raise ValueError(f"Unsupported encoding type for probabilities: {encoding_type}")
+        raise ValueError(f"Unsupported encoding type: {encoding_type}")
+
+
+def _create_probability_dataframe(
+    probs_array: np.ndarray,
+    target_column: str,
+    target_stats: dict,
+) -> pd.DataFrame:
+    """
+    Create probability DataFrame from numpy array with filtered and formatted columns.
+
+    For binned columns:
+    - Filters out <<UNK>> token
+    - Replaces <<MIN>>/<<MAX>> tokens with actual bin boundary values
+    - Reorders columns: special tokens, MIN, bins, MAX
+
+    Args:
+        probs_array: Probability array of shape (n_samples, cardinality)
+        target_column: Name of target column
+        target_stats: Target column statistics
+
+    Returns:
+        DataFrame with filtered and labeled probability columns
+    """
+    metadata = _get_column_metadata(target_column, target_stats)
+    selected_cols = [item["code_value"] for item in metadata]
+    labels = [item["label"] for item in metadata]
+    selected_probs = probs_array[:, selected_cols]
+    return pd.DataFrame(selected_probs, columns=labels)
 
 
 def _get_possible_values(target_column: str, tgt_stats: dict) -> list[int]:
     """
     Get all possible encoded values for a target column.
 
-    Since we only support categorical, numeric discrete, and numeric binned,
-    all possible values are deterministic from the encoding statistics.
+    Returns values in the same order as DataFrame columns (filters out <<UNK>> for binned).
 
     Args:
         target_column: Name of the target column
         tgt_stats: Target statistics dictionary
 
     Returns:
-        List of integer codes for all possible values (sorted)
-
-    Raises:
-        ValueError: If encoding type is unsupported
+        List of integer codes matching DataFrame column order
     """
     target_stats = tgt_stats["columns"][target_column]
-    encoding_type = ModelEncodingType(target_stats["encoding_type"])
-
-    if encoding_type == ModelEncodingType.tabular_categorical:
-        # e.g., {"_RARE_": 0, "male": 1, "female": 2}
-        codes = target_stats["codes"]
-        return sorted(codes.values())
-
-    elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
-        # e.g., {"_RARE_": 0, "1": 1, "2": 2, "3": 3}
-        codes = target_stats["codes"]
-        return sorted(codes.values())
-
-    elif encoding_type == ModelEncodingType.tabular_numeric_binned:
-        # Return all bin indices
-        cardinalities = target_stats["cardinalities"]
-        return list(range(sum(cardinalities.values())))
-
-    else:
-        raise ValueError(f"Unsupported encoding type for multi-target: {encoding_type}")
+    metadata = _get_column_metadata(target_column, target_stats)
+    return [item["code_value"] for item in metadata]
 
 
 def _generate_marginal_probs(
@@ -1641,7 +1686,7 @@ def _generate_marginal_probs(
         device: Device for computation
 
     Returns:
-        Array of shape (n_samples, cardinality) with probabilities
+        DataFrame of shape (n_samples, cardinality) with probabilities and column names
     """
     n_samples = len(seed_encoded)
     target_stats = tgt_stats["columns"][target_column]
@@ -1653,9 +1698,7 @@ def _generate_marginal_probs(
     # Add all columns from seed_encoded
     for sub_col in get_sub_columns_from_cardinalities(tgt_cardinalities):
         if sub_col in seed_encoded.columns:
-            seed_batch_dict[sub_col] = torch.tensor(
-                seed_encoded[sub_col].values, dtype=torch.long, device=device
-            )
+            seed_batch_dict[sub_col] = torch.tensor(seed_encoded[sub_col].values, dtype=torch.long, device=device)
             parts = sub_col.split("/")
             if len(parts) >= 2:
                 col_name = parts[-2]
@@ -1673,9 +1716,7 @@ def _generate_marginal_probs(
     ]
 
     # Determine column order: seed columns + target (in training order)
-    gen_column_order = [
-        col for col in all_columns if col in seed_columns or col == target_column
-    ]
+    gen_column_order = [col for col in all_columns if col in seed_columns or col == target_column]
 
     # Forward pass
     x = torch.zeros((n_samples, 0), dtype=torch.long, device=device)
@@ -1690,12 +1731,12 @@ def _generate_marginal_probs(
     # Extract probabilities (assuming single sub-column for simplicity)
     # For multi-sub-column cases, we'd need to handle differently
     if len(target_sub_cols) != 1:
-        raise NotImplementedError(
-            "Multi-target joint probabilities currently only support single sub-column targets"
-        )
+        raise NotImplementedError("Multi-target joint probabilities currently only support single sub-column targets")
 
     probs_array = probs_dct[target_sub_cols[0]].cpu().numpy()
-    return probs_array
+
+    # Create DataFrame with filtered and formatted columns
+    return _create_probability_dataframe(probs_array, target_column, target_stats)
 
 
 @torch.no_grad()
@@ -1705,7 +1746,6 @@ def predict_proba(
     seed_data: pd.DataFrame,
     target_columns: list[str],
     ctx_data: pd.DataFrame | None = None,
-    seed: int | None = None,
     device: torch.device | str | None = None,
 ) -> pd.DataFrame:
     """
@@ -1734,9 +1774,6 @@ def predict_proba(
         ValueError: If target column not found, unsupported encoding type, or sequential model
     """
     _LOG.info(f"PREDICT_PROBA started for targets: {target_columns}")
-
-    if seed is not None:
-        set_random_state(seed)
 
     # Load model artifacts
     model_config, tgt_stats, ctx_stats, is_sequential = _load_model_artifacts(workspace)
@@ -1781,7 +1818,7 @@ def predict_proba(
     _LOG.info(f"Computing joint probabilities for {len(target_columns)} targets")
 
     # Initialize with first target: P(col1)
-    joint_probs = _generate_marginal_probs(
+    first_target_df = _generate_marginal_probs(
         model=model,
         seed_encoded=seed_encoded,
         target_column=target_columns[0],
@@ -1790,11 +1827,17 @@ def predict_proba(
         all_columns=all_columns,
         device=device,
     )
-    _LOG.info(f"Generated P({target_columns[0]}) with shape {joint_probs.shape}")
+    _LOG.info(f"Generated P({target_columns[0]}) with shape {first_target_df.shape}")
 
-    # Track possible values and column names for all targets
+    # For single target, return the DataFrame directly
+    if len(target_columns) == 1:
+        _LOG.info(f"PREDICT_PROBA finished: returned probabilities for {len(first_target_df)} samples")
+        return first_target_df
+
+    # For multi-target: extract values and column names for joint probability computation
+    joint_probs = first_target_df.values
     all_possible_values = [_get_possible_values(target_columns[0], tgt_stats)]
-    all_column_names = [_get_probability_column_names(target_columns[0], tgt_stats["columns"][target_columns[0]])]
+    all_column_names = [list(first_target_df.columns)]
 
     # Create extended_seed once - will grow incrementally as we process each target
     extended_seed = seed_encoded.copy()
@@ -1848,7 +1891,7 @@ def predict_proba(
         # batched_seed shape: (n_samples * num_combos, features)
 
         # Single batched forward pass for all combinations
-        all_conditional_probs = _generate_marginal_probs(
+        all_conditional_df = _generate_marginal_probs(
             model=model,
             seed_encoded=batched_seed,
             target_column=target_col,
@@ -1856,9 +1899,10 @@ def predict_proba(
             tgt_cardinalities=tgt_cardinalities,
             all_columns=all_columns,
             device=device,
-        )  # shape: (n_samples * num_combos, current_card)
+        )  # DataFrame: (n_samples * num_combos, current_card)
 
         # Extract probabilities for each combo and compute joint probabilities
+        all_conditional_probs = all_conditional_df.values
         for combo_idx in range(num_prev_combos):
             start_idx = combo_idx * n_samples
             end_idx = start_idx + n_samples
@@ -1872,17 +1916,13 @@ def predict_proba(
         # Update for next iteration
         joint_probs = new_joint_probs
         all_possible_values.append(current_possible_values)
-        all_column_names.append(_get_probability_column_names(target_col, tgt_stats["columns"][target_col]))
+        all_column_names.append(list(all_conditional_df.columns))
 
         _LOG.info(f"Joint probabilities now have shape {joint_probs.shape}")
 
-    # Create MultiIndex DataFrame
+    # Create MultiIndex DataFrame for multi-target results
     multi_index = pd.MultiIndex.from_product(all_column_names, names=target_columns)
     probs_df = pd.DataFrame(joint_probs, columns=multi_index)
-
-    # For single target, flatten MultiIndex to simple columns
-    if len(target_columns) == 1:
-        probs_df.columns = probs_df.columns.get_level_values(0)
 
     _LOG.info(f"PREDICT_PROBA finished: returned probabilities for {len(probs_df)} samples")
     return probs_df
