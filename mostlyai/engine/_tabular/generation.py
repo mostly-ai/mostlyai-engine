@@ -1618,22 +1618,6 @@ def _get_probability_column_names(target: str, stats: dict) -> list[str]:
         raise ValueError(f"Unsupported encoding type for probabilities: {encoding_type}")
 
 
-def _probs_dict_to_dataframe(probs_dict: dict[str, np.ndarray], column_names: list[str]) -> pd.DataFrame:
-    """
-    Convert probability dictionary to DataFrame with exploded columns.
-
-    Args:
-        probs_dict: {sub_col: array of shape (batch_size, cardinality)}
-        column_names: List of column names for each category/bin/value
-
-    Returns:
-        DataFrame with shape (batch_size, cardinality) with named columns
-    """
-    # Get the first (and should be only) sub-column's probability array
-    sub_col, prob_array = next(iter(probs_dict.items()))
-    return pd.DataFrame(prob_array, columns=column_names)
-
-
 def _get_possible_values(target_column: str, tgt_stats: dict) -> list[int]:
     """
     Get all possible encoded values for a target column.
