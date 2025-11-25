@@ -584,6 +584,7 @@ class TabularARGN(BaseEstimator):
         # Exclude target columns from seed if present
         target_cols_in_X = [col for col in target_columns if col in X_df.columns]
         if target_cols_in_X:
+            _LOG.info(f"Dropping target columns from seed data: {target_cols_in_X}")
             X_df = X_df.drop(columns=target_cols_in_X)
 
         # Check if we should return all draws (list aggregation)
@@ -701,6 +702,7 @@ class TabularARGN(BaseEstimator):
         # Exclude target columns from seed if present
         target_cols_in_X = [col for col in target_columns if col in X_df.columns]
         if target_cols_in_X:
+            _LOG.info(f"Dropping target columns from seed data: {target_cols_in_X}")
             X_df = X_df.drop(columns=target_cols_in_X)
 
         # Call new predict_proba utility that returns probabilities in-memory
