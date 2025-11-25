@@ -1221,13 +1221,11 @@ def generate(
             ctx_batch = ctx_batch.sort_values(ctx_primary_key).reset_index(drop=True)
             seed_batch = seed_batch.sort_values(tgt_context_key).reset_index(drop=True)
 
-            # encode ctx_batch
+            # encode ctx_batch and prepare tensor inputs
             _LOG.info(f"encode context {ctx_batch.shape}")
-            ctx_batch_encoded, ctx_primary_key_encoded, _ = encode_df(
-                df=ctx_batch, stats=ctx_stats, ctx_primary_key=ctx_primary_key
+            ctx_inputs, ctx_batch_encoded, ctx_primary_key_encoded = _prepare_context_inputs(
+                ctx_data=ctx_batch, ctx_stats=ctx_stats, device=model.device, ctx_primary_key=ctx_primary_key
             )
-            # pad left context sequences to ensure non-empty sequences
-            ctx_batch_encoded = pad_ctx_sequences(ctx_batch_encoded)
             ctx_keys = ctx_batch_encoded[ctx_primary_key_encoded]
             ctx_keys.rename(tgt_context_key, inplace=True)
 
@@ -1249,30 +1247,12 @@ def generate(
                 syn = ctx_keys.to_frame().reset_index(drop=True)
                 buffer.add((syn, seed_batch))
             elif isinstance(model, SequentialModel):
-                ctxflt_inputs = {
-                    col: torch.unsqueeze(
-                        torch.as_tensor(ctx_batch_encoded[col].to_numpy(), device=model.device).type(torch.int),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXFLT)
-                }
-                ctxseq_inputs = {
-                    col: torch.unsqueeze(
-                        torch.nested.as_nested_tensor(
-                            [torch.as_tensor(t, device=model.device).type(torch.int) for t in ctx_batch_encoded[col]],
-                            device=model.device,
-                        ),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXSEQ)
-                }
+                # Use context inputs prepared earlier
                 seq_steps = model.tgt_seq_len_max
                 history = None
                 history_state = None
                 # process context just once for all sequence steps
-                context = model.context_compressor(ctxflt_inputs | ctxseq_inputs)
+                context = model.context_compressor(ctx_inputs)
                 # loop over sequence steps, and pass forward history to keep model state-less
                 out_df: pd.DataFrame | None = None
                 decode_prev_steps = {}
@@ -1458,26 +1438,8 @@ def generate(
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
             else:  # isinstance(model, FlatModel)
-                ctxflt_inputs = {
-                    col: torch.unsqueeze(
-                        torch.as_tensor(ctx_batch_encoded[col].to_numpy(), device=model.device).type(torch.int),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXFLT)
-                }
-                ctxseq_inputs = {
-                    col: torch.unsqueeze(
-                        torch.nested.as_nested_tensor(
-                            [torch.as_tensor(t, device=model.device).type(torch.int) for t in ctx_batch_encoded[col]],
-                            device=model.device,
-                        ),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXSEQ)
-                }
-                x = ctxflt_inputs | ctxseq_inputs
+                # Use context inputs prepared earlier
+                x = ctx_inputs
                 fixed_values = {
                     col: torch.as_tensor(seed_batch_encoded[col].to_numpy(), device=model.device).type(torch.int)
                     for col in seed_batch_encoded.columns
@@ -1548,6 +1510,67 @@ def generate(
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
     _LOG.info(f"GENERATE_TABULAR finished in {time.time() - t0:.2f}s")
+
+
+##########################
+### CONTEXT UTILS ###
+##########################
+
+
+def _prepare_context_inputs(
+    ctx_data: pd.DataFrame,
+    ctx_stats: dict,
+    device: torch.device | str,
+    ctx_primary_key: str | None = None,
+) -> tuple[dict[str, torch.Tensor], pd.DataFrame, str | None]:
+    """
+    Encode context data and prepare tensor inputs for model forward pass.
+
+    Handles both flat context (CTXFLT) and sequential context (CTXSEQ).
+
+    Args:
+        ctx_data: Context DataFrame to encode
+        ctx_stats: Context statistics from training
+        device: Device for tensor placement
+        ctx_primary_key: Optional primary key column for context
+
+    Returns:
+        Tuple of (context_tensors, encoded_dataframe, encoded_primary_key):
+        - context_tensors: Dict of CTXFLT/* and CTXSEQ/* tensors for model.context_compressor()
+        - encoded_dataframe: Encoded context DataFrame (for extracting keys if needed)
+        - encoded_primary_key: Name of encoded primary key column (None if not provided)
+    """
+    # Encode context data
+    ctx_encoded, ctx_primary_key_encoded, _ = encode_df(df=ctx_data, stats=ctx_stats, ctx_primary_key=ctx_primary_key)
+
+    # Pad empty sequences (required for model)
+    ctx_encoded = pad_ctx_sequences(ctx_encoded)
+
+    # Build flat context inputs (CTXFLT/*)
+    ctxflt_inputs = {
+        col: torch.unsqueeze(
+            torch.as_tensor(ctx_encoded[col].to_numpy(), device=device).type(torch.int),
+            dim=-1,
+        )
+        for col in ctx_encoded.columns
+        if col.startswith(CTXFLT)
+    }
+
+    # Build sequential context inputs (CTXSEQ/*)
+    ctxseq_inputs = {
+        col: torch.unsqueeze(
+            torch.nested.as_nested_tensor(
+                [torch.as_tensor(t, device=device).type(torch.int) for t in ctx_encoded[col]],
+                device=device,
+            ),
+            dim=-1,
+        )
+        for col in ctx_encoded.columns
+        if col.startswith(CTXSEQ)
+    }
+
+    # Merge and return with encoded dataframe
+    return (ctxflt_inputs | ctxseq_inputs), ctx_encoded, ctx_primary_key_encoded
 
 
 ##########################
@@ -1672,9 +1695,11 @@ def _generate_marginal_probs(
     tgt_cardinalities: dict,
     all_columns: list[str],
     device: torch.device,
+    ctx_data: pd.DataFrame | None = None,
+    ctx_stats: dict | None = None,
 ) -> np.ndarray:
     """
-    Generate P(target | seed_features).
+    Generate P(target | seed_features, context).
 
     Args:
         model: The generative model
@@ -1684,6 +1709,8 @@ def _generate_marginal_probs(
         tgt_cardinalities: Target cardinalities dict
         all_columns: All columns in training order
         device: Device for computation
+        ctx_data: Optional context data
+        ctx_stats: Optional context statistics (required if ctx_data provided)
 
     Returns:
         DataFrame of shape (n_samples, cardinality) with probabilities and column names
@@ -1718,8 +1745,13 @@ def _generate_marginal_probs(
     # Determine column order: seed columns + target (in training order)
     gen_column_order = [col for col in all_columns if col in seed_columns or col == target_column]
 
+    # Prepare context inputs if provided
+    if ctx_data is not None and ctx_stats is not None:
+        x, _, _ = _prepare_context_inputs(ctx_data=ctx_data, ctx_stats=ctx_stats, device=device)
+    else:
+        x = torch.zeros((n_samples, 0), dtype=torch.long, device=device)
+
     # Forward pass
-    x = torch.zeros((n_samples, 0), dtype=torch.long, device=device)
     probs_dct = model(
         x,
         mode="probs",
@@ -1760,7 +1792,6 @@ def predict_proba(
         seed_data: Feature columns to condition on (fixed_values) - should NOT include target
         target_columns: List of target column names (single or multiple) to predict probabilities for
         ctx_data: Optional separate context data (for models with context)
-        seed: Random seed for reproducibility
         device: Device to run inference on ('cuda' or 'cpu'). Defaults to 'cuda' if available.
 
     Returns:
@@ -1826,6 +1857,8 @@ def predict_proba(
         tgt_cardinalities=tgt_cardinalities,
         all_columns=all_columns,
         device=device,
+        ctx_data=ctx_data,
+        ctx_stats=ctx_stats,
     )
     _LOG.info(f"Generated P({target_columns[0]}) with shape {first_target_df.shape}")
 
@@ -1890,6 +1923,11 @@ def predict_proba(
         batched_seed = pd.concat(combo_dfs, ignore_index=True)
         # batched_seed shape: (n_samples * num_combos, features)
 
+        # Replicate ctx_data to match batch size if provided
+        batched_ctx_data = None
+        if ctx_data is not None:
+            batched_ctx_data = pd.concat([ctx_data] * num_prev_combos, ignore_index=True)
+
         # Single batched forward pass for all combinations
         all_conditional_df = _generate_marginal_probs(
             model=model,
@@ -1899,6 +1937,8 @@ def predict_proba(
             tgt_cardinalities=tgt_cardinalities,
             all_columns=all_columns,
             device=device,
+            ctx_data=batched_ctx_data,
+            ctx_stats=ctx_stats,
         )  # DataFrame: (n_samples * num_combos, current_card)
 
         # Extract probabilities for each combo and compute joint probabilities
