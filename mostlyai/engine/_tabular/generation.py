@@ -1454,7 +1454,7 @@ def generate(
                     seed_data=seed_batch,
                     fairness=fairness,
                 )
-                out_dct = model(
+                out_dct, _ = model(
                     x,
                     mode="gen",
                     batch_size=batch_size,
@@ -1752,7 +1752,7 @@ def _generate_marginal_probs(
         x = torch.zeros((n_samples, 0), dtype=torch.long, device=device)
 
     # Forward pass
-    probs_dct = model(
+    _, probs_dct = model(
         x,
         mode="probs",
         batch_size=n_samples,

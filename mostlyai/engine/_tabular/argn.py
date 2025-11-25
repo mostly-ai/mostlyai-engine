@@ -984,7 +984,7 @@ class FlatModel(nn.Module):
         return_probs: list[str] | None = None,
         fairness_transforms: dict[str, Any] | None = None,
         column_order: list[str] | None = None,
-    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         return_probs = return_probs or []
@@ -1033,7 +1033,7 @@ class FlatModel(nn.Module):
                 # update output
                 outputs[sub_col] = xs
 
-            return outputs
+            return outputs, {}
 
         elif mode == "gen":
             # forward pass through context compressor
@@ -1112,10 +1112,8 @@ class FlatModel(nn.Module):
             # order outputs according to tgt_sub_columns
             outputs = {sub_col: outputs[sub_col] for sub_col in self.tgt_sub_columns}
 
-            # return tuple if probs were requested
-            if return_probs:
-                return outputs, probs
-            return outputs
+            # return tuple with probs (empty if not requested)
+            return outputs, probs
 
         elif mode == "probs":
             # forward pass through context compressor
@@ -1172,7 +1170,7 @@ class FlatModel(nn.Module):
                     # store probabilities (no sampling, no embedding updates)
                     probs[sub_col] = xs
 
-            return probs
+            return {}, probs
 
 
 class AttentionModule(nn.Module):
