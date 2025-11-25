@@ -38,6 +38,7 @@ from mostlyai.engine._common import (
     median_fn,
     mode_fn,
 )
+from mostlyai.engine._tabular.generation import predict_proba as _predict_proba
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
@@ -48,7 +49,6 @@ from mostlyai.engine.domain import (
     RareCategoryReplacementMethod,
     RebalancingConfig,
 )
-from mostlyai.engine._tabular.generation import predict_proba as _predict_proba
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
 from mostlyai.engine.logging import disable_logging, init_logging
