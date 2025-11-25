@@ -45,6 +45,7 @@ from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     FairnessConfig,
     ImputationConfig,
+    ModelEncodingType,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
@@ -454,6 +455,13 @@ class TabularARGN(BaseEstimator):
 
         return X_imputed
 
+    def _get_column_stats(self) -> dict:
+        """Get column statistics from workspace."""
+        workspace_dir = self._get_workspace_dir()
+        workspace = Workspace(workspace_dir)
+        stats = workspace.tgt_stats.read()
+        return stats.get("columns", {})
+
     def _get_target_encoding_type(self, target_column: str | None = None) -> str | None:
         """Get the encoding type of the target column from workspace stats."""
         if not self._fitted:
@@ -463,10 +471,7 @@ class TabularARGN(BaseEstimator):
         if target_col is None:
             return None
 
-        workspace_dir = self._get_workspace_dir()
-        workspace = Workspace(workspace_dir)
-        stats = workspace.tgt_stats.read()
-        columns = stats.get("columns", {})
+        columns = self._get_column_stats()
         if target_col in columns:
             return columns[target_col].get("encoding_type")
         return None
