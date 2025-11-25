@@ -983,76 +983,11 @@ class FlatModel(nn.Module):
         top_p: float | None = None,
         fairness_transforms: dict[str, Any] | None = None,
         column_order: list[str] | None = None,
-    ) -> dict[str, torch.Tensor]:
-        """
-        Forward pass through the autoregressive model with three operational modes.
-
-        Args:
-            x: Input tensor or dict of tensors containing context features.
-            mode: Operational mode determining behavior:
-                - "trn": Training mode with parallel processing and teacher forcing.
-                        Processes all columns simultaneously using ground truth values.
-                        Returns logits for each sub-column.
-                - "gen": Generation mode with sequential autoregressive sampling.
-                        Processes columns one-by-one, sampling values from probability
-                        distributions. Returns sampled integer codes for each sub-column.
-                - "probs": Probability computation mode without sampling.
-                        Processes columns sequentially up to target columns, computing
-                        probability distributions without sampling. Returns raw probabilities
-                        for target sub-columns specified by fixed_values/column_order.
-            batch_size: Number of samples to generate (required for "gen" and "probs" modes).
-            fixed_probs: Dict mapping sub-column names to probability distributions to use
-                        instead of model predictions. Used for conditional generation.
-            fixed_values: Dict mapping sub-column names to fixed integer values. These
-                         columns will use the provided values instead of sampling. In "probs"
-                         mode, these are typically seed/conditioning features.
-            temperature: Sampling temperature for generation (>1.0 = more random, <1.0 = more
-                        deterministic). Only used in "gen" mode.
-            top_p: Nucleus sampling parameter (0.0-1.0). Samples from smallest set of tokens
-                  whose cumulative probability exceeds p. Only used in "gen" mode.
-            fairness_transforms: Dict of fairness adjustment functions to apply during
-                               generation. Only used in "gen" mode.
-            column_order: Custom ordering of columns to process. If None, uses default
-                         training order. In "probs" mode, typically [seed_cols, target_col]
-                         to only process necessary columns.
-
-        Returns:
-            Dict mapping sub-column names to tensors:
-            - "trn" mode: Returns logits (pre-softmax values) for loss computation.
-            - "gen" mode: Returns sampled integer codes.
-            - "probs" mode: Returns probability distributions (post-softmax) for target columns.
-
-        Notes:
-            - In "trn" mode, all columns are processed in parallel with teacher forcing.
-            - In "gen" mode, columns are processed sequentially with sampling and embedding updates.
-            - In "probs" mode, fixed columns update embeddings but target columns only compute
-              probabilities without sampling (since no subsequent columns depend on them).
-            - Use column_order to optimize "probs" mode by only processing seed + target columns.
-
-        Examples:
-            >>> # Training mode
-            >>> outputs = model(batch_data, mode="trn")
-            >>>
-            >>> # Generation mode
-            >>> samples = model(
-            ...     x=context,
-            ...     mode="gen",
-            ...     batch_size=100,
-            ...     temperature=0.8,
-            ...     fixed_values={"seed_col": seed_values}
-            ... )
-            >>>
-            >>> # Probability computation mode
-            >>> probs = model(
-            ...     x=torch.zeros((5, 0)),
-            ...     mode="probs",
-            ...     batch_size=5,
-            ...     fixed_values={"feature1": features, "feature2": features},
-            ...     column_order=["feature1", "feature2", "target"]
-            ... )
-        """
+        return_probs: list[str] | None = None,
+    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
+        return_probs = return_probs or []
         outputs = {}
         probs = {}
         fairness_transforms = fairness_transforms or {}
@@ -1142,6 +1077,10 @@ class FlatModel(nn.Module):
                     # softmax to probs
                     xs = nn.Softmax(dim=-1)(xs)
 
+                    # store probabilities if requested
+                    if sub_col in return_probs:
+                        probs[sub_col] = xs
+
                     # apply fairness transform when generating the target sub column
                     if fairness_transforms:
                         xs = apply_fairness_transforms(sub_col, xs, outputs, fairness_transforms)
@@ -1171,7 +1110,12 @@ class FlatModel(nn.Module):
                     col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
 
             # order outputs according to tgt_sub_columns
-            return {sub_col: outputs[sub_col] for sub_col in self.tgt_sub_columns}
+            outputs = {sub_col: outputs[sub_col] for sub_col in self.tgt_sub_columns}
+
+            # return tuple if probs were requested
+            if return_probs:
+                return outputs, probs
+            return outputs
 
         elif mode == "probs":
             # forward pass through context compressor
@@ -1388,9 +1332,11 @@ class SequentialModel(nn.Module):
         history_state=None,
         context=None,
         column_order: list[str] | None = None,
-    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+        return_probs: list[str] | None = None,
+    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor] | tuple[tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
+        return_probs = return_probs or []
         if context is None:
             context = self.context_compressor(x)
 
@@ -1476,6 +1422,7 @@ class SequentialModel(nn.Module):
             return outputs
 
         else:  # mode == "gen"
+            probs = {}
             is_0th_step = False
             if history is None or history_state is None:
                 is_0th_step = True
@@ -1544,6 +1491,11 @@ class SequentialModel(nn.Module):
                     # sample
                     xs = nn.Softmax(dim=-1)(xs)
                     xs = torch.squeeze(xs[:, -1:, :], -2)  # take only last element
+
+                    # store probabilities if requested
+                    if sub_col in return_probs:
+                        probs[sub_col] = xs
+
                     out = _sample(
                         probs=xs,
                         temperature=temperature,
@@ -1583,5 +1535,7 @@ class SequentialModel(nn.Module):
             # order outputs according to tgt_sub_columns
             outputs = {sub_col: outputs[sub_col] for sub_col in self.tgt_cardinalities}
 
-            # gather output
+            # gather output - return tuple with probs if requested
+            if return_probs:
+                return (outputs, probs), history, history_state
             return outputs, history, history_state
