@@ -45,7 +45,6 @@ from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     FairnessConfig,
     ImputationConfig,
-    ModelEncodingType,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
