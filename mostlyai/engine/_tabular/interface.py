@@ -603,6 +603,7 @@ class TabularARGN(BaseEstimator):
         X,
         target: str | list[str] | None = None,
         ctx_data: pd.DataFrame | None = None,
+        rare_category_replacement_method: str = "constant",
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -632,7 +633,10 @@ class TabularARGN(BaseEstimator):
                 - list[str]: Multiple target columns for joint probabilities (supports arbitrary number of targets)
                 - None: Uses the target column from fit()
             ctx_data: Context data for generation. If None, uses the context data from training.
-            **kwargs: Additional generation parameters (device, seed, etc.).
+            rare_category_replacement_method: How to handle rare categories:
+                - "constant" (default): Suppress rare tokens in probability outputs
+                - "sample": Always suppress rare tokens for categorical columns
+            **kwargs: Additional generation parameters (device, etc.).
 
         Returns:
             Single target: DataFrame with shape (n_samples, n_categories) containing probability distributions.
@@ -702,6 +706,7 @@ class TabularARGN(BaseEstimator):
             seed_data=X_df,  # Features to condition on (without targets)
             target_columns=target_columns,
             ctx_data=ctx_data_df,  # Optional separate context data
+            rare_category_replacement_method=rare_category_replacement_method,
             device=device,
         )
 

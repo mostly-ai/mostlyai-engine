@@ -1167,6 +1167,10 @@ class FlatModel(nn.Module):
                     # softmax to probs
                     xs = nn.Softmax(dim=-1)(xs)
 
+                    # apply fixed_probs mask if provided
+                    if sub_col in fixed_probs:
+                        xs = _sampling_fixed_probs(xs, fixed_probs[sub_col])
+
                     # store probabilities (no sampling, no embedding updates)
                     probs[sub_col] = xs
 

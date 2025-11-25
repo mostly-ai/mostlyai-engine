@@ -1697,6 +1697,7 @@ def _generate_marginal_probs(
     device: torch.device,
     ctx_data: pd.DataFrame | None = None,
     ctx_stats: dict | None = None,
+    fixed_probs: dict | None = None,
 ) -> np.ndarray:
     """
     Generate P(target | seed_features, context).
@@ -1756,6 +1757,7 @@ def _generate_marginal_probs(
         x,
         mode="probs",
         batch_size=n_samples,
+        fixed_probs=fixed_probs or {},
         fixed_values=seed_batch_dict,
         column_order=gen_column_order,
     )
@@ -1778,6 +1780,7 @@ def predict_proba(
     seed_data: pd.DataFrame,
     target_columns: list[str],
     ctx_data: pd.DataFrame | None = None,
+    rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
     device: torch.device | str | None = None,
 ) -> pd.DataFrame:
     """
@@ -1838,6 +1841,14 @@ def predict_proba(
         device=device,
     )
 
+    # Prepare fixed_probs to suppress rare tokens
+    _LOG.info(f"{rare_category_replacement_method=}")
+    rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
+    fixed_probs = _translate_fixed_probs(
+        fixed_probs=rare_token_fixed_probs,
+        stats=tgt_stats,
+    )
+
     # Encode seed data (features to condition on) - common for both single and multi-target
     # seed_data should NOT include any target columns
     seed_encoded, _, _ = encode_df(
@@ -1859,6 +1870,7 @@ def predict_proba(
         device=device,
         ctx_data=ctx_data,
         ctx_stats=ctx_stats,
+        fixed_probs=fixed_probs,
     )
     _LOG.info(f"Generated P({target_columns[0]}) with shape {first_target_df.shape}")
 
@@ -1939,6 +1951,7 @@ def predict_proba(
             device=device,
             ctx_data=batched_ctx_data,
             ctx_stats=ctx_stats,
+            fixed_probs=fixed_probs,
         )  # DataFrame: (n_samples * num_combos, current_card)
 
         # Extract probabilities for each combo and compute joint probabilities
