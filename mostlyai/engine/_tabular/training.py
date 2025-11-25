@@ -257,7 +257,7 @@ def _calculate_sample_losses(
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
-        output = model(data, mode="trn")
+        output, _ = model(data, mode="trn")
     criterion = nn.CrossEntropyLoss(reduction="none")
 
     tgt_cols = (
