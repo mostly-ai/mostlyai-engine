@@ -1077,7 +1077,7 @@ class FlatModel(nn.Module):
                     # softmax to probs
                     xs = nn.Softmax(dim=-1)(xs)
 
-                    # store probabilities if requested
+                    # keep probabilities (used e.g. for fairness)
                     if sub_col in return_probs:
                         probs[sub_col] = xs
 
@@ -1332,15 +1332,9 @@ class SequentialModel(nn.Module):
         history_state=None,
         context=None,
         column_order: list[str] | None = None,
-        return_probs: list[str] | None = None,
-    ) -> (
-        dict[str, torch.Tensor]
-        | tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]
-        | tuple[tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]], torch.Tensor, torch.Tensor]
-    ):
+    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
-        return_probs = return_probs or []
         if context is None:
             context = self.context_compressor(x)
 
@@ -1426,7 +1420,6 @@ class SequentialModel(nn.Module):
             return outputs
 
         else:  # mode == "gen"
-            probs = {}
             is_0th_step = False
             if history is None or history_state is None:
                 is_0th_step = True
@@ -1495,11 +1488,6 @@ class SequentialModel(nn.Module):
                     # sample
                     xs = nn.Softmax(dim=-1)(xs)
                     xs = torch.squeeze(xs[:, -1:, :], -2)  # take only last element
-
-                    # store probabilities if requested
-                    if sub_col in return_probs:
-                        probs[sub_col] = xs
-
                     out = _sample(
                         probs=xs,
                         temperature=temperature,
@@ -1539,7 +1527,5 @@ class SequentialModel(nn.Module):
             # order outputs according to tgt_sub_columns
             outputs = {sub_col: outputs[sub_col] for sub_col in self.tgt_cardinalities}
 
-            # gather output - return tuple with probs if requested
-            if return_probs:
-                return (outputs, probs), history, history_state
+            # gather output
             return outputs, history, history_state
