@@ -981,9 +981,9 @@ class FlatModel(nn.Module):
         fixed_values=None,
         temperature: float | None = None,
         top_p: float | None = None,
+        return_probs: list[str] | None = None,
         fairness_transforms: dict[str, Any] | None = None,
         column_order: list[str] | None = None,
-        return_probs: list[str] | None = None,
     ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -1333,7 +1333,11 @@ class SequentialModel(nn.Module):
         context=None,
         column_order: list[str] | None = None,
         return_probs: list[str] | None = None,
-    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor] | tuple[tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]], torch.Tensor, torch.Tensor]:
+    ) -> (
+        dict[str, torch.Tensor]
+        | tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]
+        | tuple[tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]], torch.Tensor, torch.Tensor]
+    ):
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         return_probs = return_probs or []
