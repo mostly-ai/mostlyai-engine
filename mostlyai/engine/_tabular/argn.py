@@ -1332,7 +1332,7 @@ class SequentialModel(nn.Module):
         history_state=None,
         context=None,
         column_order: list[str] | None = None,
-    ) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
         if context is None:
