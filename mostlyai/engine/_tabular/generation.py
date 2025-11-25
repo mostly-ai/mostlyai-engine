@@ -835,31 +835,6 @@ def _load_model_artifacts(workspace: Workspace) -> tuple[dict, dict, dict, bool]
     return model_config, tgt_stats, ctx_stats, is_sequential
 
 
-def _get_cardinalities(
-    tgt_stats: dict,
-    ctx_stats: dict,
-    has_slen: bool | None = None,
-    has_ridx: bool | None = None,
-    has_sdec: bool | None = None,
-) -> tuple[dict, dict]:
-    """
-    Get target and context cardinalities from stats.
-
-    Args:
-        tgt_stats: Target statistics
-        ctx_stats: Context statistics
-        has_slen: Include sequence length (for sequential models)
-        has_ridx: Include row index (for sequential models)
-        has_sdec: Include sequence decoder (for sequential models)
-
-    Returns:
-        Tuple of (tgt_cardinalities, ctx_cardinalities)
-    """
-    tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
-    ctx_cardinalities = get_cardinalities(ctx_stats)
-    return tgt_cardinalities, ctx_cardinalities
-
-
 def _resolve_device(device: torch.device | str | None) -> torch.device:
     """
     Resolve device to use for inference.
@@ -994,7 +969,8 @@ def generate(
             else:
                 has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
 
-        tgt_cardinalities, ctx_cardinalities = _get_cardinalities(tgt_stats, ctx_stats, has_slen, has_ridx, has_sdec)
+        tgt_cardinalities = get_cardinalities(tgt_stats, has_slen, has_ridx, has_sdec)
+        ctx_cardinalities = get_cardinalities(ctx_stats)
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_sub_columns = get_sub_columns_from_cardinalities(ctx_cardinalities)
         _LOG.info(f"{len(tgt_sub_columns)=}")
@@ -1817,7 +1793,8 @@ def predict_proba(
         raise ValueError("predict_proba is not yet supported for sequential models")
 
     # Get cardinalities
-    tgt_cardinalities, ctx_cardinalities = _get_cardinalities(tgt_stats, ctx_stats)
+    tgt_cardinalities = get_cardinalities(tgt_stats)
+    ctx_cardinalities = get_cardinalities(ctx_stats)
 
     # Resolve device
     device = _resolve_device(device)
