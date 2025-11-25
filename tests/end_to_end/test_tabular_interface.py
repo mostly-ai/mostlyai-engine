@@ -222,7 +222,6 @@ class TestTabularARGNClassification:
     ):
         """Test predict_proba() with multiple targets for joint probabilities."""
         # Create dataset with correlated categorical columns
-        np.random.seed(42)
         n_samples = 200
 
         # Create correlated categorical features
@@ -294,7 +293,6 @@ class TestTabularARGNClassification:
     def test_predict_proba_numeric_target(self, tmp_path_factory):
         """Test predict_proba() with numeric (binned/discrete) target."""
         # Create dataset with numeric target
-        np.random.seed(42)
         n_samples = 200
 
         # Create features and binned numeric target
