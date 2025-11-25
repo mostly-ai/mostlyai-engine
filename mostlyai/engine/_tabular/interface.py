@@ -531,12 +531,12 @@ class TabularARGN(BaseEstimator):
     def predict(
         self,
         X,
-        target: str | None = None,
+        target: str | list[str] | None = None,
         ctx_data: pd.DataFrame | None = None,
         n_draws: int = 1,
         agg_fn: Literal["auto", "mode", "mean", "median", "list"] | Callable[[np.ndarray], Any] = "auto",
         **kwargs,
-    ) -> np.ndarray:
+    ) -> pd.DataFrame:
         """
         Predict target values for samples in X.
 
@@ -545,7 +545,10 @@ class TabularARGN(BaseEstimator):
 
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
-            target: Name of the target column to predict. If None, uses the target column from fit().
+            target: Name of the target column(s) to predict. Can be:
+                - str: Single target column name
+                - list[str]: Multiple target columns for multi-output prediction
+                - None: Uses the target column from fit()
             ctx_data: Context data for generation. If None, uses the context data from training.
             n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
             agg_fn: Aggregation method to combine predictions across draws. Options:
@@ -554,53 +557,63 @@ class TabularARGN(BaseEstimator):
                 - "mean": Average across draws (suitable for numeric/datetime targets).
                 - "median": Median across draws (suitable for numeric/datetime targets).
                 - "mode": Most common value across draws (suitable for categorical targets).
-                - "list": Return all draws as arrays (returns shape (n_samples, n_draws) instead of (n_samples,)).
+                - "list": Return all draws as arrays in DataFrame cells.
                 - Callable: A function that takes a 1D numpy array and returns a scalar or array.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
-            Predicted target values as np.ndarray of shape (n_samples,) or (n_samples, n_draws) if agg_fn="list".
+            pd.DataFrame with predicted target values:
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        # Determine target column
-        target_column = target or self._target_column
-        if target_column is None:
-            raise ValueError(
-                "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
-            )
-
-        # Resolve aggregation function
-        agg_fn_func = self._resolve_agg_fn(agg_fn, target_column)
+        # Normalize target to list
+        if target is None:
+            if self._target_column is None:
+                raise ValueError(
+                    "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
+                )
+            target_columns = [self._target_column]
+        elif isinstance(target, str):
+            target_columns = [target]
+        else:
+            target_columns = target
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
-        # Exclude target column from seed if present
-        if target_column in X_df.columns:
-            X_df = X_df.drop(columns=[target_column])
-
-        # Generate predictions across multiple draws
-        all_predictions = []
-        for _ in range(n_draws):
-            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if target_column in samples.columns:
-                all_predictions.append(samples[target_column].values)
-            else:
-                raise ValueError(f"Target column '{target_column}' not found in generated samples")
-
-        # Stack predictions and aggregate
-        predictions_array = np.column_stack(all_predictions)
+        # Exclude target columns from seed if present
+        target_cols_in_X = [col for col in target_columns if col in X_df.columns]
+        if target_cols_in_X:
+            X_df = X_df.drop(columns=target_cols_in_X)
 
         # Check if we should return all draws (list aggregation)
         is_list_agg = (agg_fn == "list") if not callable(agg_fn) else False
 
-        if is_list_agg:
-            # For list aggregation, return all draws as a 2D array
-            return predictions_array
-        else:
-            y_pred = np.apply_along_axis(agg_fn_func, 1, predictions_array)
-            return y_pred
+        # Generate samples across multiple draws
+        all_samples = []
+        for _ in range(n_draws):
+            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
+            all_samples.append(samples)
+
+        # Extract and aggregate predictions for each target column
+        result_dict = {}
+        for target_col in target_columns:
+            if target_col not in all_samples[0].columns:
+                raise ValueError(f"Target column '{target_col}' not found in generated samples")
+
+            # Resolve aggregation function for this target
+            agg_fn_func = self._resolve_agg_fn(agg_fn, target_col)
+
+            # Collect predictions for this target across all draws
+            predictions_array = np.column_stack([samples[target_col].values for samples in all_samples])
+
+            if is_list_agg:
+                # For list aggregation, store all draws as arrays
+                result_dict[target_col] = [predictions_array[i] for i in range(len(predictions_array))]
+            else:
+                result_dict[target_col] = np.apply_along_axis(agg_fn_func, 1, predictions_array)
+
+        return pd.DataFrame(result_dict)
 
     def predict_proba(
         self,

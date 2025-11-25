@@ -180,9 +180,11 @@ class TestTabularARGNClassification:
         test_X = X.head(10)
         predictions = argn.predict(test_X, target="target", n_draws=5, agg_fn="mode")
 
-        # Verify predictions
+        # Verify predictions - now returns DataFrame
+        assert isinstance(predictions, pd.DataFrame)
         assert len(predictions) == 10
-        assert all(pred in ["class1", "class2"] for pred in predictions)
+        assert "target" in predictions.columns
+        assert all(pred in ["class1", "class2"] for pred in predictions["target"])
 
     def test_predict_proba(self, classification_data, tmp_path_factory):
         """Test predict_proba() for classification."""
@@ -376,10 +378,12 @@ class TestTabularARGNRegression:
         test_X = X.head(10)
         predictions = argn.predict(test_X, target="target", n_draws=5, agg_fn="mean")
 
-        # Verify predictions are numeric
+        # Verify predictions - now returns DataFrame
+        assert isinstance(predictions, pd.DataFrame)
         assert len(predictions) == 10
-        assert all(isinstance(pred, (int, float, np.number)) for pred in predictions)
-        assert all(not np.isnan(pred) for pred in predictions)
+        assert "target" in predictions.columns
+        assert all(isinstance(pred, (int, float, np.number)) for pred in predictions["target"])
+        assert all(not np.isnan(pred) for pred in predictions["target"])
 
 
 class TestTabularARGNSequentialWithContext:
