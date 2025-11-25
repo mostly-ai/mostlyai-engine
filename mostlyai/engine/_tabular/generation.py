@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
 import logging
 import random
 import time
@@ -66,8 +65,6 @@ from mostlyai.engine._encoding_types.tabular.datetime import decode_datetime
 from mostlyai.engine._encoding_types.tabular.itt import decode_itt
 from mostlyai.engine._encoding_types.tabular.lat_long import decode_latlong
 from mostlyai.engine._encoding_types.tabular.numeric import (
-    NUMERIC_BINNED_MAX_TOKEN,
-    NUMERIC_BINNED_MIN_TOKEN,
     NUMERIC_BINNED_NULL_TOKEN,
     NUMERIC_BINNED_SUB_COL_SUFFIX,
     NUMERIC_BINNED_UNKNOWN_TOKEN,
@@ -81,10 +78,14 @@ from mostlyai.engine._tabular.argn import (
     FlatModel,
     ModelSize,
     SequentialModel,
-    get_no_of_model_parameters,
 )
-from mostlyai.engine._tabular.common import load_model_weights
-from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
+from mostlyai.engine._tabular.common import (
+    create_and_load_model,
+    load_model_artifacts,
+    prepare_context_inputs,
+    resolve_device,
+)
+from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 from mostlyai.engine.domain import (
@@ -816,112 +817,6 @@ def decode_buffered_samples(
 ##################
 
 
-###########################
-### SHARED UTILITIES ###
-###########################
-
-
-def _load_model_artifacts(workspace: Workspace) -> tuple[dict, dict, dict, bool]:
-    """
-    Load model configurations and statistics from workspace.
-
-    Returns:
-        Tuple of (model_config, tgt_stats, ctx_stats, is_sequential)
-    """
-    model_config = workspace.model_configs.read()
-    tgt_stats = workspace.tgt_stats.read()
-    ctx_stats = workspace.ctx_stats.read()
-    is_sequential = tgt_stats["is_sequential"]
-    return model_config, tgt_stats, ctx_stats, is_sequential
-
-
-def _resolve_device(device: torch.device | str | None) -> torch.device:
-    """
-    Resolve device to use for inference.
-
-    Args:
-        device: Device specification ('cuda', 'cpu', or None for auto-detect)
-
-    Returns:
-        torch.device instance
-    """
-    if device is None:
-        return torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    return torch.device(device)
-
-
-def _create_and_load_model(
-    workspace: Workspace,
-    is_sequential: bool,
-    tgt_cardinalities: dict,
-    ctx_cardinalities: dict,
-    model_units: ModelSize | dict,
-    ctx_seq_len_median: int | None,
-    column_order: list[str],
-    device: torch.device,
-    seq_len_median: int | None = None,
-    seq_len_max: int | None = None,
-) -> FlatModel | SequentialModel:
-    """
-    Create model, load weights, and prepare for inference.
-
-    Args:
-        workspace: Workspace containing model weights
-        is_sequential: Whether to create SequentialModel or FlatModel
-        tgt_cardinalities: Target column cardinalities
-        ctx_cardinalities: Context column cardinalities
-        model_units: Model size configuration
-        ctx_seq_len_median: Median context sequence length
-        column_order: Order of columns for generation
-        device: Device to load model on
-        seq_len_median: Median sequence length (for sequential models)
-        seq_len_max: Maximum sequence length (for sequential models)
-
-    Returns:
-        Initialized model ready for inference
-    """
-    _LOG.info("Creating generative model")
-
-    model: FlatModel | SequentialModel
-    if is_sequential:
-        model = SequentialModel(
-            tgt_cardinalities=tgt_cardinalities,
-            tgt_seq_len_median=seq_len_median,
-            tgt_seq_len_max=seq_len_max,
-            ctx_cardinalities=ctx_cardinalities,
-            ctxseq_len_median=ctx_seq_len_median,
-            model_size=model_units,
-            column_order=column_order,
-            device=device,
-        )
-    else:
-        model = FlatModel(
-            tgt_cardinalities=tgt_cardinalities,
-            ctx_cardinalities=ctx_cardinalities,
-            ctxseq_len_median=ctx_seq_len_median,
-            model_size=model_units,
-            column_order=column_order,
-            device=device,
-        )
-
-    no_of_model_params = get_no_of_model_parameters(model)
-    _LOG.info(f"{no_of_model_params=}")
-
-    if workspace.model_tabular_weights_path.exists():
-        load_model_weights(
-            model=model,
-            path=workspace.model_tabular_weights_path,
-            device=device,
-        )
-    else:
-        _LOG.warning("Model weights not found; using untrained model")
-
-    model.to(device)
-    model.eval()
-
-    return model
-
-
 @torch.no_grad()
 def generate(
     *,
@@ -948,7 +843,7 @@ def generate(
         output_path = workspace.generated_data_path
         reset_dir(output_path)
 
-        model_configs, tgt_stats, ctx_stats, is_sequential = _load_model_artifacts(workspace)
+        model_configs, tgt_stats, ctx_stats, is_sequential = load_model_artifacts(workspace)
         _LOG.info(f"{is_sequential=}")
         has_context = workspace.ctx_stats.path.exists()
         _LOG.info(f"{has_context=}")
@@ -977,7 +872,7 @@ def generate(
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
         # resolve device
-        device = _resolve_device(device)
+        device = resolve_device(device)
         _LOG.info(f"{device=}")
 
         tgt_primary_key = tgt_stats.get("keys", {}).get("primary_key")
@@ -1117,7 +1012,7 @@ def generate(
         # init progress with total_count; +1 for the final decoding step
         progress.update(completed=0, total=no_of_batches * (seq_len_max + 1))
 
-        model = _create_and_load_model(
+        model = create_and_load_model(
             workspace=workspace,
             is_sequential=is_sequential,
             tgt_cardinalities=tgt_cardinalities,
@@ -1199,7 +1094,7 @@ def generate(
 
             # encode ctx_batch and prepare tensor inputs
             _LOG.info(f"encode context {ctx_batch.shape}")
-            ctx_inputs, ctx_batch_encoded, ctx_primary_key_encoded = _prepare_context_inputs(
+            ctx_inputs, ctx_batch_encoded, ctx_primary_key_encoded = prepare_context_inputs(
                 ctx_data=ctx_batch, ctx_stats=ctx_stats, device=model.device, ctx_primary_key=ctx_primary_key
             )
             ctx_keys = ctx_batch_encoded[ctx_primary_key_encoded]
@@ -1486,489 +1381,3 @@ def generate(
             persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
             buffer.clear()
     _LOG.info(f"GENERATE_TABULAR finished in {time.time() - t0:.2f}s")
-
-
-##########################
-### CONTEXT UTILS ###
-##########################
-
-
-def _prepare_context_inputs(
-    ctx_data: pd.DataFrame,
-    ctx_stats: dict,
-    device: torch.device | str,
-    ctx_primary_key: str | None = None,
-) -> tuple[dict[str, torch.Tensor], pd.DataFrame, str | None]:
-    """
-    Encode context data and prepare tensor inputs for model forward pass.
-
-    Handles both flat context (CTXFLT) and sequential context (CTXSEQ).
-
-    Args:
-        ctx_data: Context DataFrame to encode
-        ctx_stats: Context statistics from training
-        device: Device for tensor placement
-        ctx_primary_key: Optional primary key column for context
-
-    Returns:
-        Tuple of (context_tensors, encoded_dataframe, encoded_primary_key):
-        - context_tensors: Dict of CTXFLT/* and CTXSEQ/* tensors for model.context_compressor()
-        - encoded_dataframe: Encoded context DataFrame (for extracting keys if needed)
-        - encoded_primary_key: Name of encoded primary key column (None if not provided)
-    """
-    # Encode context data
-    ctx_encoded, ctx_primary_key_encoded, _ = encode_df(df=ctx_data, stats=ctx_stats, ctx_primary_key=ctx_primary_key)
-
-    # Pad empty sequences (required for model)
-    ctx_encoded = pad_ctx_sequences(ctx_encoded)
-
-    # Build flat context inputs (CTXFLT/*)
-    ctxflt_inputs = {
-        col: torch.unsqueeze(
-            torch.as_tensor(ctx_encoded[col].to_numpy(), device=device).type(torch.int),
-            dim=-1,
-        )
-        for col in ctx_encoded.columns
-        if col.startswith(CTXFLT)
-    }
-
-    # Build sequential context inputs (CTXSEQ/*)
-    ctxseq_inputs = {
-        col: torch.unsqueeze(
-            torch.nested.as_nested_tensor(
-                [torch.as_tensor(t, device=device).type(torch.int) for t in ctx_encoded[col]],
-                device=device,
-            ),
-            dim=-1,
-        )
-        for col in ctx_encoded.columns
-        if col.startswith(CTXSEQ)
-    }
-
-    # Merge and return with encoded dataframe
-    return (ctxflt_inputs | ctxseq_inputs), ctx_encoded, ctx_primary_key_encoded
-
-
-##########################
-### PROBABILITY UTILS ###
-##########################
-
-
-def _get_column_metadata(target_column: str, target_stats: dict) -> list[dict]:
-    """
-    Get metadata for each column (code value and label) in display order.
-
-    For binned columns: filters <<UNK>>, reorders MIN/MAX, creates bin labels.
-
-    Args:
-        target_column: Name of target column
-        target_stats: Target column statistics
-
-    Returns:
-        List of dicts with 'code_value' and 'label' keys, in display order
-    """
-    encoding_type = ModelEncodingType(target_stats["encoding_type"])
-    codes = target_stats["codes"]
-
-    if encoding_type in (
-        ModelEncodingType.tabular_categorical,
-        ModelEncodingType.tabular_numeric_discrete,
-    ):
-        # Keep all codes as-is
-        return [{"code_value": code_value, "label": code_name} for code_name, code_value in codes.items()]
-
-    elif encoding_type == ModelEncodingType.tabular_numeric_binned:
-        bins = target_stats["bins"]
-        metadata = []
-
-        min_code_value = None
-        max_code_value = None
-
-        # First: special tokens (except <<UNK>>, <<MIN>>, <<MAX>>)
-        for code_name, code_value in codes.items():
-            if code_name == NUMERIC_BINNED_UNKNOWN_TOKEN:
-                continue  # Skip <<UNK>>
-            elif code_name == NUMERIC_BINNED_MIN_TOKEN:
-                min_code_value = code_value  # Save for later
-            elif code_name == NUMERIC_BINNED_MAX_TOKEN:
-                max_code_value = code_value  # Save for later
-            else:
-                metadata.append({"code_value": code_value, "label": code_name})
-
-        # Add MIN value if present
-        if min_code_value is not None:
-            metadata.append({"code_value": min_code_value, "label": str(bins[0])})
-
-        # Add bin range labels
-        codes_bin_offset = len(codes)
-        for i in range(len(bins) - 1):
-            lower_bound = bins[i]
-            upper_bound = bins[i + 1]
-            label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
-            metadata.append({"code_value": i + codes_bin_offset, "label": label})
-
-        # Add MAX value at the end if present
-        if max_code_value is not None:
-            metadata.append({"code_value": max_code_value, "label": str(bins[-1])})
-
-        return metadata
-
-    else:
-        raise ValueError(f"Unsupported encoding type: {encoding_type}")
-
-
-def _create_probability_dataframe(
-    probs_array: np.ndarray,
-    target_column: str,
-    target_stats: dict,
-) -> pd.DataFrame:
-    """
-    Create probability DataFrame from numpy array with filtered and formatted columns.
-
-    For binned columns:
-    - Filters out <<UNK>> token
-    - Replaces <<MIN>>/<<MAX>> tokens with actual bin boundary values
-    - Reorders columns: special tokens, MIN, bins, MAX
-
-    Args:
-        probs_array: Probability array of shape (n_samples, cardinality)
-        target_column: Name of target column
-        target_stats: Target column statistics
-
-    Returns:
-        DataFrame with filtered and labeled probability columns
-    """
-    metadata = _get_column_metadata(target_column, target_stats)
-    selected_cols = [item["code_value"] for item in metadata]
-    labels = [item["label"] for item in metadata]
-    selected_probs = probs_array[:, selected_cols]
-    return pd.DataFrame(selected_probs, columns=labels)
-
-
-def _get_possible_values(target_column: str, tgt_stats: dict) -> list[int]:
-    """
-    Get all possible encoded values for a target column.
-
-    Returns values in the same order as DataFrame columns (filters out <<UNK>> for binned).
-
-    Args:
-        target_column: Name of the target column
-        tgt_stats: Target statistics dictionary
-
-    Returns:
-        List of integer codes matching DataFrame column order
-    """
-    target_stats = tgt_stats["columns"][target_column]
-    metadata = _get_column_metadata(target_column, target_stats)
-    return [item["code_value"] for item in metadata]
-
-
-def _generate_marginal_probs(
-    model,
-    seed_encoded: pd.DataFrame,
-    target_column: str,
-    tgt_stats: dict,
-    tgt_cardinalities: dict,
-    all_columns: list[str],
-    device: torch.device,
-    ctx_data: pd.DataFrame | None = None,
-    ctx_stats: dict | None = None,
-    fixed_probs: dict | None = None,
-) -> np.ndarray:
-    """
-    Generate P(target | seed_features, context).
-
-    Args:
-        model: The generative model
-        seed_encoded: Encoded seed features (may include previous targets)
-        target_column: Target column to predict
-        tgt_stats: Target statistics
-        tgt_cardinalities: Target cardinalities dict
-        all_columns: All columns in training order
-        device: Device for computation
-        ctx_data: Optional context data
-        ctx_stats: Optional context statistics (required if ctx_data provided)
-
-    Returns:
-        DataFrame of shape (n_samples, cardinality) with probabilities and column names
-    """
-    n_samples = len(seed_encoded)
-    target_stats = tgt_stats["columns"][target_column]
-
-    # Build fixed_values dict from seed_encoded
-    seed_batch_dict = {}
-    seed_columns = set()
-
-    # Add all columns from seed_encoded
-    for sub_col in get_sub_columns_from_cardinalities(tgt_cardinalities):
-        if sub_col in seed_encoded.columns:
-            seed_batch_dict[sub_col] = torch.tensor(seed_encoded[sub_col].values, dtype=torch.long, device=device)
-            parts = sub_col.split("/")
-            if len(parts) >= 2:
-                col_name = parts[-2]
-                seed_columns.add(col_name)
-
-    # Get target sub-columns
-    target_sub_cols = [
-        get_argn_name(
-            argn_processor=target_stats[ARGN_PROCESSOR],
-            argn_table=target_stats[ARGN_TABLE],
-            argn_column=target_stats[ARGN_COLUMN],
-            argn_sub_column=sub_col,
-        )
-        for sub_col in target_stats["cardinalities"].keys()
-    ]
-
-    # Determine column order: seed columns + target (in training order)
-    gen_column_order = [col for col in all_columns if col in seed_columns or col == target_column]
-
-    # Prepare context inputs if provided
-    if ctx_data is not None and ctx_stats is not None:
-        x, _, _ = _prepare_context_inputs(ctx_data=ctx_data, ctx_stats=ctx_stats, device=device)
-    else:
-        x = torch.zeros((n_samples, 0), dtype=torch.long, device=device)
-
-    # Forward pass
-    _, probs_dct = model(
-        x,
-        mode="probs",
-        batch_size=n_samples,
-        fixed_probs=fixed_probs or {},
-        fixed_values=seed_batch_dict,
-        column_order=gen_column_order,
-    )
-
-    # Extract probabilities (assuming single sub-column for simplicity)
-    # For multi-sub-column cases, we'd need to handle differently
-    if len(target_sub_cols) != 1:
-        raise NotImplementedError("Multi-target joint probabilities currently only support single sub-column targets")
-
-    probs_array = probs_dct[target_sub_cols[0]].cpu().numpy()
-
-    # Create DataFrame with filtered and formatted columns
-    return _create_probability_dataframe(probs_array, target_column, target_stats)
-
-
-@torch.no_grad()
-def predict_proba(
-    *,
-    workspace: Workspace,
-    seed_data: pd.DataFrame,
-    target_columns: list[str],
-    ctx_data: pd.DataFrame | None = None,
-    rare_category_replacement_method: RareCategoryReplacementMethod | str = RareCategoryReplacementMethod.constant,
-    device: torch.device | str | None = None,
-) -> pd.DataFrame:
-    """
-    Compute probability distributions for target column(s).
-
-    This function generates raw model probabilities (no temperature/top_p transformations)
-    for one or more target columns conditioned on seed_data (and optionally ctx_data).
-    Returns results in-memory without workspace I/O.
-
-    Args:
-        workspace: Workspace object containing model and stats
-        seed_data: Feature columns to condition on (fixed_values) - should NOT include target
-        target_columns: List of target column names (single or multiple) to predict probabilities for
-        ctx_data: Optional separate context data (for models with context)
-        device: Device to run inference on ('cuda' or 'cpu'). Defaults to 'cuda' if available.
-
-    Returns:
-        - Single target: DataFrame with shape (n_samples, n_categories) with exploded columns
-          Column names: category/bin/value labels (e.g., "male", "female" or "<10000", ">=10000")
-        - Multiple targets: MultiIndex DataFrame with joint probabilities
-          P(col1, col2, ...) = P(col1) * P(col2|col1) * P(col3|col1,col2) * ...
-          Columns: MultiIndex.from_product of all category combinations
-
-    Raises:
-        ValueError: If target column not found, unsupported encoding type, or sequential model
-    """
-    _LOG.info(f"PREDICT_PROBA started for targets: {target_columns}")
-
-    # Load model artifacts
-    model_config, tgt_stats, ctx_stats, is_sequential = _load_model_artifacts(workspace)
-
-    # Check model type
-    if is_sequential:
-        raise ValueError("predict_proba is not yet supported for sequential models")
-
-    # Get cardinalities
-    tgt_cardinalities = get_cardinalities(tgt_stats)
-    ctx_cardinalities = get_cardinalities(ctx_stats)
-
-    # Resolve device
-    device = _resolve_device(device)
-    _LOG.info(f"Using device: {device}")
-
-    # Get all columns in training order
-    all_columns = get_columns_from_cardinalities(tgt_cardinalities)
-
-    # Create model (will override column_order in forward pass for optimization)
-    model_units = model_config.get("model_units") or ModelSize.M
-    ctx_seq_len_median = ctx_stats.get("sequence_len_median")
-
-    model = _create_and_load_model(
-        workspace=workspace,
-        is_sequential=is_sequential,
-        tgt_cardinalities=tgt_cardinalities,
-        ctx_cardinalities=ctx_cardinalities,
-        model_units=model_units,
-        ctx_seq_len_median=ctx_seq_len_median,
-        column_order=all_columns,  # Will override in forward pass
-        device=device,
-    )
-
-    # Prepare fixed_probs to suppress rare tokens
-    _LOG.info(f"{rare_category_replacement_method=}")
-    rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
-    fixed_probs = _translate_fixed_probs(
-        fixed_probs=rare_token_fixed_probs,
-        stats=tgt_stats,
-    )
-
-    # Encode seed data (features to condition on) - common for both single and multi-target
-    # seed_data should NOT include any target columns
-    seed_encoded, _, _ = encode_df(
-        df=seed_data,
-        stats=tgt_stats,
-    )
-    n_samples = len(seed_data)
-
-    _LOG.info(f"Computing joint probabilities for {len(target_columns)} targets")
-
-    # Warn about exponential complexity for multiple targets
-    if len(target_columns) > 1:
-        # Compute total number of probability values
-        total_cardinality = 1
-        for target_col in target_columns:
-            col_stats = tgt_stats["columns"][target_col]
-            target_cardinality = sum(col_stats["cardinalities"].values())
-            total_cardinality *= target_cardinality
-
-        _LOG.warning(
-            f"Computing joint probabilities for {len(target_columns)} targets "
-            f"results in {total_cardinality:,} total probability values per sample. "
-            f"Computation complexity grows exponentially with the number of targets. "
-            f"Consider computing probabilities for targets separately if this takes too long."
-        )
-
-    # Initialize with first target: P(col1)
-    first_target_df = _generate_marginal_probs(
-        model=model,
-        seed_encoded=seed_encoded,
-        target_column=target_columns[0],
-        tgt_stats=tgt_stats,
-        tgt_cardinalities=tgt_cardinalities,
-        all_columns=all_columns,
-        device=device,
-        ctx_data=ctx_data,
-        ctx_stats=ctx_stats,
-        fixed_probs=fixed_probs,
-    )
-    _LOG.info(f"Generated P({target_columns[0]}) with shape {first_target_df.shape}")
-
-    # For single target, return the DataFrame directly
-    if len(target_columns) == 1:
-        _LOG.info(f"PREDICT_PROBA finished: returned probabilities for {len(first_target_df)} samples")
-        return first_target_df
-
-    # For multi-target: extract values and column names for joint probability computation
-    joint_probs = first_target_df.values
-    all_possible_values = [_get_possible_values(target_columns[0], tgt_stats)]
-    all_column_names = [list(first_target_df.columns)]
-
-    # Create extended_seed once - will grow incrementally as we process each target
-    extended_seed = seed_encoded.copy()
-
-    # Iteratively add each subsequent target
-    for target_idx in range(1, len(target_columns)):
-        target_col = target_columns[target_idx]
-        _LOG.info(f"Processing target {target_idx + 1}/{len(target_columns)}: {target_col}")
-
-        # Get possible values for current target
-        current_possible_values = _get_possible_values(target_col, tgt_stats)
-        current_card = len(current_possible_values)
-
-        # Get all combinations of previous targets
-        # prev_combos has shape matching the columns in joint_probs
-        prev_combos = list(itertools.product(*all_possible_values))
-        num_prev_combos = len(prev_combos)
-
-        _LOG.info(
-            f"Computing P({target_col}|previous) for {num_prev_combos} combinations "
-            f"× {current_card} values = {num_prev_combos * current_card} total"
-        )
-
-        # Allocate array for new joint probabilities
-        new_joint_probs = np.zeros((n_samples, num_prev_combos * current_card))
-
-        # Build DataFrames for each combo with actual values, then concatenate
-        combo_dfs = []
-        for combo_idx, prev_combo in enumerate(prev_combos):
-            # Copy extended_seed for this combo
-            df = extended_seed.copy()
-
-            # Add previous target columns with actual values (no dummy values)
-            for i in range(target_idx):
-                prev_target_col = target_columns[i]
-                encoded_val = prev_combo[i]
-                prev_target_stats = tgt_stats["columns"][prev_target_col]
-                for sub_col_key in prev_target_stats["cardinalities"].keys():
-                    full_sub_col_name = get_argn_name(
-                        argn_processor=prev_target_stats[ARGN_PROCESSOR],
-                        argn_table=prev_target_stats[ARGN_TABLE],
-                        argn_column=prev_target_stats[ARGN_COLUMN],
-                        argn_sub_column=sub_col_key,
-                    )
-                    df[full_sub_col_name] = encoded_val
-
-            combo_dfs.append(df)
-
-        # Concatenate all combo DataFrames into single batch
-        batched_seed = pd.concat(combo_dfs, ignore_index=True)
-        # batched_seed shape: (n_samples * num_combos, features)
-
-        # Replicate ctx_data to match batch size if provided
-        batched_ctx_data = None
-        if ctx_data is not None:
-            batched_ctx_data = pd.concat([ctx_data] * num_prev_combos, ignore_index=True)
-
-        # Single batched forward pass for all combinations
-        all_conditional_df = _generate_marginal_probs(
-            model=model,
-            seed_encoded=batched_seed,
-            target_column=target_col,
-            tgt_stats=tgt_stats,
-            tgt_cardinalities=tgt_cardinalities,
-            all_columns=all_columns,
-            device=device,
-            ctx_data=batched_ctx_data,
-            ctx_stats=ctx_stats,
-            fixed_probs=fixed_probs,
-        )  # DataFrame: (n_samples * num_combos, current_card)
-
-        # Extract probabilities for each combo and compute joint probabilities
-        all_conditional_probs = all_conditional_df.values
-        for combo_idx in range(num_prev_combos):
-            start_idx = combo_idx * n_samples
-            end_idx = start_idx + n_samples
-            conditional_probs = all_conditional_probs[start_idx:end_idx, :]  # (n_samples, current_card)
-
-            # Multiply: P(prev_combo) * P(current | prev_combo)
-            for val_idx in range(current_card):
-                new_col_idx = combo_idx * current_card + val_idx
-                new_joint_probs[:, new_col_idx] = joint_probs[:, combo_idx] * conditional_probs[:, val_idx]
-
-        # Update for next iteration
-        joint_probs = new_joint_probs
-        all_possible_values.append(current_possible_values)
-        all_column_names.append(list(all_conditional_df.columns))
-
-        _LOG.info(f"Joint probabilities now have shape {joint_probs.shape}")
-
-    # Create MultiIndex DataFrame for multi-target results
-    multi_index = pd.MultiIndex.from_product(all_column_names, names=target_columns)
-    probs_df = pd.DataFrame(joint_probs, columns=multi_index)
-
-    _LOG.info(f"PREDICT_PROBA finished: returned probabilities for {len(probs_df)} samples")
-    return probs_df

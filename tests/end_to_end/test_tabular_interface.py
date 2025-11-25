@@ -217,9 +217,7 @@ class TestTabularARGNClassification:
             (["size", "color", "material"], 8, 3),  # 2 sizes × 2 colors × 2 materials = 8
         ],
     )
-    def test_predict_proba_multi_target(
-        self, tmp_path_factory, target_columns, expected_min_columns, test_n_samples
-    ):
+    def test_predict_proba_multi_target(self, tmp_path_factory, target_columns, expected_min_columns, test_n_samples):
         """Test predict_proba() with multiple targets for joint probabilities."""
         # Create dataset with correlated categorical columns
         n_samples = 200

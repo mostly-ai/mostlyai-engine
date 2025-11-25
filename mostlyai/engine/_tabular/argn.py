@@ -1063,8 +1063,7 @@ class FlatModel(nn.Module):
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
                     prev_sub_col_embeds = [
-                        tgt_embeds[sc]
-                        for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     ]
 
                     # regressor
@@ -1153,8 +1152,7 @@ class FlatModel(nn.Module):
                 else:  # compute probabilities without sampling
                     # collect previous sub column embeddings for current column
                     prev_sub_col_embeds = [
-                        tgt_embeds[sc]
-                        for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     ]
 
                     # regressor
@@ -1398,8 +1396,7 @@ class SequentialModel(nn.Module):
 
                 # collect previous sub column embeddings for current column
                 prev_sub_col_embeds = {
-                    sc: tgt_embeds[sc]
-                    for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                    sc: tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                 }
                 if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                     # RIDX sub-columns should not see SLEN sub-columns
@@ -1469,8 +1466,7 @@ class SequentialModel(nn.Module):
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
                     prev_sub_col_embeds = {
-                        sc: tgt_embeds[sc]
-                        for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        sc: tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     }
                     if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                         # RIDX sub-columns should not see SLEN sub-columns
