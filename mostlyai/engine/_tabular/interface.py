@@ -48,6 +48,7 @@ from mostlyai.engine.domain import (
     RareCategoryReplacementMethod,
     RebalancingConfig,
 )
+from mostlyai.engine._tabular.generation import predict_proba as _predict_proba
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
 from mostlyai.engine.logging import disable_logging, init_logging
@@ -682,20 +683,25 @@ class TabularARGN(BaseEstimator):
             X_df = X_df.drop(columns=target_cols_in_X)
 
         # Call new predict_proba utility that returns probabilities in-memory
-        from mostlyai.engine._tabular.generation import predict_proba as _predict_proba
-
         workspace = Workspace(self.workspace_dir)
 
-        # Extract device and seed from kwargs if provided
+        # Extract device from kwargs if provided
         device = kwargs.get("device", self.device)
-        seed = kwargs.get("seed")
+
+        # Prepare ctx_data similar to sample method
+        if ctx_data is None:
+            ctx_data = self.ctx_data  # Fallback to training context
+
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if ctx_data is not None:
+            ctx_data_df = ensure_dataframe(ctx_data)
 
         probs_df = _predict_proba(
             workspace=workspace,
             seed_data=X_df,  # Features to condition on (without targets)
             target_columns=target_columns,
-            ctx_data=ctx_data,  # Optional separate context data
-            seed=seed,
+            ctx_data=ctx_data_df,  # Optional separate context data
             device=device,
         )
 
