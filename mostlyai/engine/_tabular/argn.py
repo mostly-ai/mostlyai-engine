@@ -1473,7 +1473,7 @@ class SequentialModel(nn.Module):
                 # update output
                 outputs[sub_col] = xs
 
-            return outputs, {}
+            return outputs
 
         else:  # mode == "gen"
             is_0th_step = False
