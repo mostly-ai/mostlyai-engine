@@ -169,19 +169,19 @@ Assess any marginal conditional probability, for one or more target columns:
 # extract class probabilities for a categorical
 argn.predict_proba(
     X=pd.DataFrame({
-        "age": [25, 30, 35], 
+        "age": [25, 30, 35],
         "sex": ["Male", "Female", "Male"],
-    }), 
+    }),
     target="income"
 )
 
 # extract bin probabilities for a numerical
 argn.predict_proba(
     X=pd.DataFrame({
-        # "age": [25, 30, 35], 
+        # "age": [25, 30, 35],
         "sex": ["Male", "Female", "Male"],
         "occupation": ["Craft-repair", "Craft-repair", "Craft-repair"]
-    }), 
+    }),
     target="capital_gain"
 )
 
