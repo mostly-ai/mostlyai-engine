@@ -210,16 +210,14 @@ class TestTabularARGNClassification:
         # Verify probabilities sum to 1.0 for each sample
         np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
 
-    @pytest.mark.parametrize(
-        "target_columns,expected_min_columns,test_n_samples",
-        [
-            (["size", "color"], 4, 5),  # 2 sizes × 2 colors = 4
-            (["size", "color", "material"], 8, 3),  # 2 sizes × 2 colors × 2 materials = 8
-        ],
-    )
-    def test_predict_proba_multi_target(self, tmp_path_factory, target_columns, expected_min_columns, test_n_samples):
-        """Test predict_proba() with multiple targets for joint probabilities."""
-        # Create dataset with correlated categorical columns
+    @pytest.fixture
+    def multi_target_data(self):
+        """
+        Create comprehensive dataset with multiple categorical and numeric targets.
+
+        This fixture is reused across multiple test scenarios to avoid data duplication.
+        Includes both categorical (size, color, material) and numeric (count, age) targets.
+        """
         n_samples = 200
 
         # Create correlated categorical features
@@ -238,93 +236,73 @@ class TestTabularARGNClassification:
             else:
                 material.append(np.random.choice(["wood", "metal"], p=[0.4, 0.6]))
 
-        data = pd.DataFrame(
-            {
-                "feature1": np.random.randn(n_samples),
-                "feature2": np.random.randn(n_samples),
-                "size": size,
-                "color": color,
-                "material": material,
-            }
-        )
+        # Create numeric targets
+        count = np.random.choice([1, 2, 3, 4, 5], n_samples)  # Discrete numeric (few values)
+        # Create continuous-like age data that will be binned (many distinct values)
+        age = np.random.uniform(18, 65, n_samples)  # Continuous values → will be binned
 
-        # Train model on all columns
+        return pd.DataFrame({
+            "feature1": np.random.randn(n_samples),
+            "feature2": np.random.choice(["A", "B"], n_samples),
+            "size": size,
+            "color": color,
+            "material": material,
+            "count": count,
+            "age": age,
+        })
+
+    @pytest.mark.parametrize(
+        "target_columns,expected_min_columns,test_n_samples",
+        [
+            (["size", "color"], 4, 5),  # 2 categorical: 2 sizes × 2 colors = 4
+            (["size", "color", "material"], 8, 3),  # 3 categorical: 2×2×2 = 8
+            (["count"], 5, 5),  # Single numeric discrete (5 possible values)
+            (["age"], 3, 5),  # Single numeric binned (continuous → bins)
+            (["size", "count"], 10, 3),  # Mixed: categorical + numeric discrete
+            (["size", "count", "age"], 30, 3),  # All 3 types: categorical + discrete + binned
+        ],
+    )
+    def test_predict_proba_multi_target(
+        self, multi_target_data, tmp_path_factory, target_columns, expected_min_columns, test_n_samples
+    ):
+        """Test predict_proba() with various target combinations (categorical, numeric discrete, binned, mixed)."""
+        # Train model with explicit encoding types to ensure proper testing
         argn = TabularARGN(
             model="MOSTLY_AI/Small",
             max_epochs=1,
             verbose=0,
             workspace_dir=tmp_path_factory.mktemp("workspace"),
+            tgt_encoding_types={
+                "feature1": "TABULAR_NUMERIC_AUTO",
+                "feature2": "TABULAR_CATEGORICAL",
+                "size": "TABULAR_CATEGORICAL",
+                "color": "TABULAR_CATEGORICAL",
+                "material": "TABULAR_CATEGORICAL",
+                "count": "TABULAR_NUMERIC_DISCRETE",  # Force discrete
+                "age": "TABULAR_NUMERIC_BINNED",  # Force binned
+            },
         )
-        argn.fit(data)
+        argn.fit(multi_target_data)
 
         # Test multi-target predict_proba
-        test_X = data[["feature1", "feature2"]].head(test_n_samples)
+        test_X = multi_target_data[["feature1", "feature2"]].head(test_n_samples)
         proba = argn.predict_proba(test_X, target=target_columns)
 
-        # Verify MultiIndex DataFrame structure
-        assert isinstance(proba.columns, pd.MultiIndex)
-        assert proba.columns.names == target_columns
-        assert proba.shape[0] == test_n_samples
+        # Verify DataFrame structure (single or multi-target)
+        if len(target_columns) == 1:
+            # Single target: regular DataFrame
+            assert isinstance(proba, pd.DataFrame)
+            assert proba.shape[0] == test_n_samples
+        else:
+            # Multi-target: MultiIndex DataFrame
+            assert isinstance(proba.columns, pd.MultiIndex)
+            assert proba.columns.names == target_columns
+            assert proba.shape[0] == test_n_samples
+            assert len(proba.columns.levels) == len(target_columns)
 
         # Verify we have at least the expected minimum combinations
         # May have more due to _RARE_ or other encoded categories
         assert proba.shape[1] >= expected_min_columns
-
-        # Verify joint probabilities sum to 1.0 for each sample
-        np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
-
-        # Verify all probabilities are non-negative
-        assert (proba >= 0).all().all()
-
-        # Check MultiIndex structure
-        assert len(proba.columns.levels) == len(target_columns)
-        # Verify main categories are present
-        for level_idx, col_name in enumerate(target_columns):
-            level_values = set(proba.columns.get_level_values(level_idx).unique())
-            if col_name == "size":
-                assert {"small", "large"}.issubset(level_values)
-            elif col_name == "color":
-                assert {"red", "blue"}.issubset(level_values)
-            elif col_name == "material":
-                assert {"wood", "metal"}.issubset(level_values)
-
-    def test_predict_proba_numeric_target(self, tmp_path_factory):
-        """Test predict_proba() with numeric (binned/discrete) target."""
-        # Create dataset with numeric target
-        n_samples = 200
-
-        # Create features and binned numeric target
-        feature1 = np.random.randn(n_samples)
-        feature2 = np.random.choice(["A", "B"], n_samples)
-        # Create age as discrete values that will be binned
-        age = np.random.choice([20, 25, 30, 35, 40, 45, 50], n_samples)
-
-        data = pd.DataFrame(
-            {
-                "feature1": feature1,
-                "feature2": feature2,
-                "age": age,
-            }
-        )
-
-        # Train model
-        argn = TabularARGN(
-            model="MOSTLY_AI/Small",
-            max_epochs=1,
-            verbose=0,
-            workspace_dir=tmp_path_factory.mktemp("workspace"),
-        )
-        argn.fit(data)
-
-        # Test predict_proba on numeric target
-        test_X = data[["feature1", "feature2"]].head(5)
-        proba = argn.predict_proba(test_X, target="age")
-
-        # Verify DataFrame structure
-        assert isinstance(proba, pd.DataFrame)
-        assert proba.shape[0] == 5
-        # Should have multiple bins/values as columns
-        assert proba.shape[1] >= 2
 
         # Verify probabilities sum to 1.0 for each sample
         np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
@@ -332,9 +310,29 @@ class TestTabularARGNClassification:
         # Verify all probabilities are non-negative
         assert (proba >= 0).all().all()
 
-        # Verify column names are numeric-like (bin ranges or discrete values)
-        # Columns should be either bin labels like "<30", ">=30" or discrete values
-        assert len(proba.columns) > 0
+        # Verify expected values are present
+        for col_name in target_columns:
+            if len(target_columns) == 1:
+                # Single target: check column names directly
+                col_values = set(proba.columns)
+            else:
+                # Multi-target: check level values
+                level_idx = target_columns.index(col_name)
+                col_values = set(proba.columns.get_level_values(level_idx).unique())
+
+            # Verify main categories/values are present
+            if col_name == "size":
+                assert {"small", "large"}.issubset(col_values)
+            elif col_name == "color":
+                assert {"red", "blue"}.issubset(col_values)
+            elif col_name == "material":
+                assert {"wood", "metal"}.issubset(col_values)
+            elif col_name == "count":
+                # Numeric discrete values (may include bins or exact values)
+                assert len(col_values) >= 3  # At least some discrete values present
+            elif col_name == "age":
+                # Numeric binned values (may be bin labels or ranges)
+                assert len(col_values) >= 3  # At least some bins present
 
 
 class TestTabularARGNRegression:
