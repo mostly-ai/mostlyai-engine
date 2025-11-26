@@ -187,7 +187,7 @@ argn.predict_proba(
 
 # extract two-way marginals
 argn.predict_proba(
-    X=df[["age", "race"]],
+    X=data_test[["age", "race"]],
     target=["sex", "income"]
 )
 ```
