@@ -176,7 +176,7 @@ class TestTabularARGNClassification:
         )
         argn.fit(X=X, y=y)
 
-        # Predict on test data
+        # Test single target prediction
         test_X = X.head(10)
         predictions = argn.predict(test_X, target="target", n_draws=5, agg_fn="mode")
 
@@ -185,6 +185,17 @@ class TestTabularARGNClassification:
         assert len(predictions) == 10
         assert "target" in predictions.columns
         assert all(pred in ["class1", "class2"] for pred in predictions["target"])
+
+        # Test multi-target prediction
+        multi_predictions = argn.predict(test_X, target=["target", "feature2"], n_draws=5, agg_fn="mode")
+
+        # Verify multi-target predictions
+        assert isinstance(multi_predictions, pd.DataFrame)
+        assert len(multi_predictions) == 10
+        assert "target" in multi_predictions.columns
+        assert "feature2" in multi_predictions.columns
+        assert all(pred in ["class1", "class2"] for pred in multi_predictions["target"])
+        assert all(pred in ["X", "Y"] for pred in multi_predictions["feature2"])
 
     def test_predict_proba(self, classification_data, tmp_path_factory):
         """Test predict_proba() for classification."""
@@ -371,7 +382,7 @@ class TestTabularARGNRegression:
         )
         argn.fit(X=X, y=y)
 
-        # Predict on test data
+        # Test single target prediction
         test_X = X.head(10)
         predictions = argn.predict(test_X, target="target", n_draws=5, agg_fn="mean")
 
@@ -381,6 +392,19 @@ class TestTabularARGNRegression:
         assert "target" in predictions.columns
         assert all(isinstance(pred, (int, float, np.number)) for pred in predictions["target"])
         assert all(not np.isnan(pred) for pred in predictions["target"])
+
+        # Test multi-target prediction (numeric + categorical)
+        multi_predictions = argn.predict(test_X, target=["target", "feature1"], n_draws=5, agg_fn="mean")
+
+        # Verify multi-target predictions
+        assert isinstance(multi_predictions, pd.DataFrame)
+        assert len(multi_predictions) == 10
+        assert "target" in multi_predictions.columns
+        assert "feature1" in multi_predictions.columns
+        assert all(isinstance(pred, (int, float, np.number)) for pred in multi_predictions["target"])
+        assert all(not np.isnan(pred) for pred in multi_predictions["target"])
+        assert all(isinstance(pred, (int, float, np.number)) for pred in multi_predictions["feature1"])
+        assert all(not np.isnan(pred) for pred in multi_predictions["feature1"])
 
 
 class TestTabularARGNSequentialWithContext:
