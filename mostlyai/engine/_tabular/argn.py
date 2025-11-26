@@ -989,8 +989,12 @@ class FlatModel(nn.Module):
 
         return context, tgt_embeds, tgt_col_embeds, col_embeddings, sub_column_order
 
-    def _update_embeddings(self, sub_col, out, tgt_embeds, tgt_col_embeds):
-        """Update sub-column and column embeddings after setting a value."""
+    def _update_embeddings(self, sub_col, out, tgt_embeds, tgt_col_embeds, col_embeddings):
+        """Update sub-column and column embeddings after setting a value.
+
+        Returns updated col_embeddings if this sub-column completes a column,
+        otherwise returns the unchanged col_embeddings.
+        """
         lookup = self.tgt_sub_columns_lookup[sub_col]
 
         # update current sub column embedding
@@ -1002,8 +1006,8 @@ class FlatModel(nn.Module):
             col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
             tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
             col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
-            return col_embeddings
-        return None
+
+        return col_embeddings
 
     def _compute_logits(self, sub_col, context, col_embeddings, tgt_embeds):
         """Compute logits for a sub-column given context and previous embeddings."""
@@ -1114,9 +1118,7 @@ class FlatModel(nn.Module):
 
                 # update output and embeddings
                 outputs[sub_col] = out
-                new_col_embeddings = self._update_embeddings(sub_col, out, tgt_embeds, tgt_col_embeds)
-                if new_col_embeddings is not None:
-                    col_embeddings = new_col_embeddings
+                col_embeddings = self._update_embeddings(sub_col, out, tgt_embeds, tgt_col_embeds, col_embeddings)
 
             # order outputs and return
             outputs = {sub_col: outputs[sub_col] for sub_col in self.tgt_sub_columns}
@@ -1132,9 +1134,7 @@ class FlatModel(nn.Module):
                 if sub_col in fixed_values:
                     out = fixed_values[sub_col]
                     # update embeddings to maintain correct autoregressive context
-                    new_col_embeddings = self._update_embeddings(sub_col, out, tgt_embeds, tgt_col_embeds)
-                    if new_col_embeddings is not None:
-                        col_embeddings = new_col_embeddings
+                    col_embeddings = self._update_embeddings(sub_col, out, tgt_embeds, tgt_col_embeds, col_embeddings)
                 else:
                     # compute probabilities without sampling
                     logits = self._compute_logits(sub_col, context, col_embeddings, tgt_embeds)
