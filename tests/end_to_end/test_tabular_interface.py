@@ -241,15 +241,17 @@ class TestTabularARGNClassification:
         # Create continuous-like age data that will be binned (many distinct values)
         age = np.random.uniform(18, 65, n_samples)  # Continuous values → will be binned
 
-        return pd.DataFrame({
-            "feature1": np.random.randn(n_samples),
-            "feature2": np.random.choice(["A", "B"], n_samples),
-            "size": size,
-            "color": color,
-            "material": material,
-            "count": count,
-            "age": age,
-        })
+        return pd.DataFrame(
+            {
+                "feature1": np.random.randn(n_samples),
+                "feature2": np.random.choice(["A", "B"], n_samples),
+                "size": size,
+                "color": color,
+                "material": material,
+                "count": count,
+                "age": age,
+            }
+        )
 
     @pytest.mark.parametrize(
         "target_columns,expected_min_columns,test_n_samples",
