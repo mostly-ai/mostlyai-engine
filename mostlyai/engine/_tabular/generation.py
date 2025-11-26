@@ -78,10 +78,14 @@ from mostlyai.engine._tabular.argn import (
     FlatModel,
     ModelSize,
     SequentialModel,
-    get_no_of_model_parameters,
 )
-from mostlyai.engine._tabular.common import load_model_weights
-from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
+from mostlyai.engine._tabular.common import (
+    create_and_load_model,
+    load_model_artifacts,
+    prepare_context_inputs,
+    resolve_device,
+)
+from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir, reset_dir
 from mostlyai.engine.domain import (
@@ -839,13 +843,10 @@ def generate(
         output_path = workspace.generated_data_path
         reset_dir(output_path)
 
-        model_configs = workspace.model_configs.read()
-        tgt_stats = workspace.tgt_stats.read()
-        is_sequential = tgt_stats["is_sequential"]
+        model_configs, tgt_stats, ctx_stats, is_sequential = load_model_artifacts(workspace)
         _LOG.info(f"{is_sequential=}")
         has_context = workspace.ctx_stats.path.exists()
         _LOG.info(f"{has_context=}")
-        ctx_stats = workspace.ctx_stats.read()
 
         # read model config
         model_units = model_configs.get("model_units") or ModelSize.M
@@ -871,11 +872,7 @@ def generate(
         _LOG.info(f"{len(ctx_sub_columns)=}")
 
         # resolve device
-        device = (
-            torch.device(device)
-            if device is not None
-            else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        )
+        device = resolve_device(device)
         _LOG.info(f"{device=}")
 
         tgt_primary_key = tgt_stats.get("keys", {}).get("primary_key")
@@ -912,7 +909,6 @@ def generate(
                     "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
                     "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
                 )
-
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
         imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation)
@@ -1016,43 +1012,18 @@ def generate(
         # init progress with total_count; +1 for the final decoding step
         progress.update(completed=0, total=no_of_batches * (seq_len_max + 1))
 
-        _LOG.info("create generative model")
-        model: FlatModel | SequentialModel
-        if is_sequential:
-            model = SequentialModel(
-                tgt_cardinalities=tgt_cardinalities,
-                tgt_seq_len_median=seq_len_median,
-                tgt_seq_len_max=seq_len_max,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_units,
-                column_order=gen_column_order,
-                device=device,
-            )
-        else:
-            model = FlatModel(
-                tgt_cardinalities=tgt_cardinalities,
-                ctx_cardinalities=ctx_cardinalities,
-                ctxseq_len_median=ctx_seq_len_median,
-                model_size=model_units,
-                column_order=gen_column_order,
-                device=device,
-            )
-
-        no_of_model_params = get_no_of_model_parameters(model)
-        _LOG.info(f"{no_of_model_params=}")
-
-        if workspace.model_tabular_weights_path.exists():
-            load_model_weights(
-                model=model,
-                path=workspace.model_tabular_weights_path,
-                device=device,
-            )
-        else:
-            _LOG.warning("model weights not found; generating data with an untrained model")
-
-        model.to(device)
-        model.eval()
+        model = create_and_load_model(
+            workspace=workspace,
+            is_sequential=is_sequential,
+            tgt_cardinalities=tgt_cardinalities,
+            ctx_cardinalities=ctx_cardinalities,
+            model_units=model_units,
+            ctx_seq_len_median=ctx_seq_len_median,
+            column_order=gen_column_order,
+            device=device,
+            seq_len_median=seq_len_median,
+            seq_len_max=seq_len_max,
+        )
 
         # calculate fairness transforms only once before batch generation
         fairness_transforms: FairnessTransforms | None = None
@@ -1121,13 +1092,11 @@ def generate(
             ctx_batch = ctx_batch.sort_values(ctx_primary_key).reset_index(drop=True)
             seed_batch = seed_batch.sort_values(tgt_context_key).reset_index(drop=True)
 
-            # encode ctx_batch
+            # encode ctx_batch and prepare tensor inputs
             _LOG.info(f"encode context {ctx_batch.shape}")
-            ctx_batch_encoded, ctx_primary_key_encoded, _ = encode_df(
-                df=ctx_batch, stats=ctx_stats, ctx_primary_key=ctx_primary_key
+            ctx_inputs, ctx_batch_encoded, ctx_primary_key_encoded = prepare_context_inputs(
+                ctx_data=ctx_batch, ctx_stats=ctx_stats, device=model.device, ctx_primary_key=ctx_primary_key
             )
-            # pad left context sequences to ensure non-empty sequences
-            ctx_batch_encoded = pad_ctx_sequences(ctx_batch_encoded)
             ctx_keys = ctx_batch_encoded[ctx_primary_key_encoded]
             ctx_keys.rename(tgt_context_key, inplace=True)
 
@@ -1149,30 +1118,12 @@ def generate(
                 syn = ctx_keys.to_frame().reset_index(drop=True)
                 buffer.add((syn, seed_batch))
             elif isinstance(model, SequentialModel):
-                ctxflt_inputs = {
-                    col: torch.unsqueeze(
-                        torch.as_tensor(ctx_batch_encoded[col].to_numpy(), device=model.device).type(torch.int),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXFLT)
-                }
-                ctxseq_inputs = {
-                    col: torch.unsqueeze(
-                        torch.nested.as_nested_tensor(
-                            [torch.as_tensor(t, device=model.device).type(torch.int) for t in ctx_batch_encoded[col]],
-                            device=model.device,
-                        ),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXSEQ)
-                }
+                # Use context inputs prepared earlier
                 seq_steps = model.tgt_seq_len_max
                 history = None
                 history_state = None
                 # process context just once for all sequence steps
-                context = model.context_compressor(ctxflt_inputs | ctxseq_inputs)
+                context = model.context_compressor(ctx_inputs)
                 # loop over sequence steps, and pass forward history to keep model state-less
                 out_df: pd.DataFrame | None = None
                 decode_prev_steps = {}
@@ -1358,26 +1309,8 @@ def generate(
                         persist_data_part(syn, output_path, f"{buffer.n_clears:06}.{0:06}")
                         buffer.clear()
             else:  # isinstance(model, FlatModel)
-                ctxflt_inputs = {
-                    col: torch.unsqueeze(
-                        torch.as_tensor(ctx_batch_encoded[col].to_numpy(), device=model.device).type(torch.int),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXFLT)
-                }
-                ctxseq_inputs = {
-                    col: torch.unsqueeze(
-                        torch.nested.as_nested_tensor(
-                            [torch.as_tensor(t, device=model.device).type(torch.int) for t in ctx_batch_encoded[col]],
-                            device=model.device,
-                        ),
-                        dim=-1,
-                    )
-                    for col in ctx_batch_encoded.columns
-                    if col.startswith(CTXSEQ)
-                }
-                x = ctxflt_inputs | ctxseq_inputs
+                # Use context inputs prepared earlier
+                x = ctx_inputs
                 fixed_values = {
                     col: torch.as_tensor(seed_batch_encoded[col].to_numpy(), device=model.device).type(torch.int)
                     for col in seed_batch_encoded.columns

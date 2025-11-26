@@ -972,10 +972,63 @@ class FlatModel(nn.Module):
 
         return context
 
+    def _initialize_generation(self, x, batch_size, effective_column_order):
+        """Initialize context, embeddings, and sub-column order for generation/probs mode."""
+        # forward pass through context compressor
+        context = self.context_compressor(x)
+        context = self._handle_context(context)
+
+        # initialize embeddings
+        tgt_embeds = self.embedders.zero_mask(batch_size)
+        tgt_col_embeds = self.column_embedders.zero_mask(batch_size)
+        col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
+
+        # determine sub-column order
+        column_order = effective_column_order or self.tgt_columns
+        sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
+
+        return context, tgt_embeds, tgt_col_embeds, col_embeddings, sub_column_order
+
+    def _update_embeddings(self, sub_col, out, tgt_embeds, tgt_col_embeds, col_embeddings):
+        """Update sub-column and column embeddings after setting a value.
+
+        Returns updated col_embeddings if this sub-column completes a column,
+        otherwise returns the unchanged col_embeddings.
+        """
+        lookup = self.tgt_sub_columns_lookup[sub_col]
+
+        # update current sub column embedding
+        tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
+
+        # update current column embedding if this is the last sub-column
+        if sub_col in self.last_sub_cols:
+            col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
+            col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
+            tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
+            col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
+
+        return col_embeddings
+
+    def _compute_logits(self, sub_col, context, col_embeddings, tgt_embeds):
+        """Compute logits for a sub-column given context and previous embeddings."""
+        lookup = self.tgt_sub_columns_lookup[sub_col]
+
+        # collect previous sub column embeddings for current column
+        prev_sub_col_embeds = [
+            tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+        ]
+
+        # regressor + predictor
+        regressor_in = context + [col_embeddings] + prev_sub_col_embeds
+        xs = self.regressors(regressor_in, sub_col)
+        xs = self.predictors(xs, sub_col)
+
+        return xs
+
     def forward(
         self,
         x,
-        mode: Literal["trn", "gen"],
+        mode: Literal["trn", "gen", "probs"],
         batch_size: int | None = None,
         fixed_probs=None,
         fixed_values=None,
@@ -1020,7 +1073,7 @@ class FlatModel(nn.Module):
 
                 # collect previous sub column embeddings for current column
                 prev_sub_col_embeds = [
-                    tgt_embeds[sub_col] for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                    tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                 ]
 
                 # regressor
@@ -1033,84 +1086,68 @@ class FlatModel(nn.Module):
                 # update output
                 outputs[sub_col] = xs
 
-        else:  # mode == "gen"
-            # forward pass through context compressor
-            context = self.context_compressor(x)
-            context = self._handle_context(context)
+            return outputs, {}
 
-            # initialize sub column embeddings
-            tgt_embeds = self.embedders.zero_mask(batch_size)
-
-            # initialize column embeddings
-            tgt_col_embeds = self.column_embedders.zero_mask(batch_size)
-
-            # concatenate column embeddings
-            col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
-
-            # take sub columns in the specified generation order
-            column_order = effective_column_order or self.tgt_columns
-            sub_column_order = [sub_col for col in column_order for sub_col in self.tgt_column_sub_columns[col]]
+        elif mode == "gen":
+            context, tgt_embeds, tgt_col_embeds, col_embeddings, sub_column_order = self._initialize_generation(
+                x, batch_size, effective_column_order
+            )
 
             for sub_col in sub_column_order:
-                lookup = self.tgt_sub_columns_lookup[sub_col]
-
-                # if sub column is fixed, skip sampling and use that value
+                # handle fixed values
                 if sub_col in fixed_values:
                     out = fixed_values[sub_col]
+                else:
+                    # compute probabilities and sample
+                    logits = self._compute_logits(sub_col, context, col_embeddings, tgt_embeds)
+                    probs_tensor = nn.Softmax(dim=-1)(logits)
 
-                else:  # sample from distribution
-                    # collect previous sub column embeddings for current column
-                    prev_sub_col_embeds = [
-                        tgt_embeds[sub_col]
-                        for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
-                    ]
-
-                    # regressor
-                    regressor_in = context + [col_embeddings] + prev_sub_col_embeds
-                    xs = self.regressors(regressor_in, sub_col)
-
-                    # predictor
-                    xs = self.predictors(xs, sub_col)
-
-                    # softmax to probs
-                    xs = nn.Softmax(dim=-1)(xs)
-
-                    # keep probabilities (used e.g. for fairness)
+                    # optionally keep probabilities
                     if sub_col in return_probs:
-                        probs[sub_col] = xs
+                        probs[sub_col] = probs_tensor
 
-                    # apply fairness transform when generating the target sub column
+                    # apply fairness transforms
                     if fairness_transforms:
-                        xs = apply_fairness_transforms(sub_col, xs, outputs, fairness_transforms)
+                        probs_tensor = apply_fairness_transforms(sub_col, probs_tensor, outputs, fairness_transforms)
 
                     # sample
                     out = torch.squeeze(
-                        _sample(
-                            probs=xs,
-                            temperature=temperature,
-                            top_p=top_p,
-                            fixed_probs=fixed_probs.get(sub_col),
-                        ),
+                        _sample(probs_tensor, temperature, top_p, fixed_probs.get(sub_col)),
                         dim=-1,
                     )
 
-                # update output
+                # update output and embeddings
                 outputs[sub_col] = out
+                col_embeddings = self._update_embeddings(sub_col, out, tgt_embeds, tgt_col_embeds, col_embeddings)
 
-                # update current sub column embedding
-                tgt_embeds[sub_col] = self.embedders.get(sub_col)(out)
-
-                # update current column embedding
-                if sub_col in self.last_sub_cols:
-                    col_sub_cols = self.tgt_column_sub_columns[lookup.col_name]
-                    col_embed_in = torch.cat([tgt_embeds[sc] for sc in col_sub_cols], dim=-1)
-                    tgt_col_embeds[lookup.col_name] = self.column_embedders.get(lookup.col_name)(col_embed_in)
-                    col_embeddings = torch.cat(list(tgt_col_embeds.values()), dim=-1)
-
-            # order outputs according to tgt_sub_columns
+            # order outputs and return
             outputs = {sub_col: outputs[sub_col] for sub_col in self.tgt_sub_columns}
+            return outputs, probs
 
-        return outputs, probs
+        elif mode == "probs":
+            context, tgt_embeds, tgt_col_embeds, col_embeddings, sub_column_order = self._initialize_generation(
+                x, batch_size, effective_column_order
+            )
+
+            for sub_col in sub_column_order:
+                # handle fixed values
+                if sub_col in fixed_values:
+                    out = fixed_values[sub_col]
+                    # update embeddings to maintain correct autoregressive context
+                    col_embeddings = self._update_embeddings(sub_col, out, tgt_embeds, tgt_col_embeds, col_embeddings)
+                else:
+                    # compute probabilities without sampling
+                    logits = self._compute_logits(sub_col, context, col_embeddings, tgt_embeds)
+                    probs_tensor = nn.Softmax(dim=-1)(logits)
+
+                    # apply fixed_probs mask if provided
+                    if sub_col in fixed_probs:
+                        probs_tensor = _sampling_fixed_probs(probs_tensor, fixed_probs[sub_col])
+
+                    # store probabilities (no sampling, no embedding updates)
+                    probs[sub_col] = probs_tensor
+
+            return {}, probs
 
 
 class AttentionModule(nn.Module):
@@ -1334,8 +1371,7 @@ class SequentialModel(nn.Module):
 
                 # collect previous sub column embeddings for current column
                 prev_sub_col_embeds = {
-                    sub_col: tgt_embeds[sub_col]
-                    for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                    sc: tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                 }
                 if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                     # RIDX sub-columns should not see SLEN sub-columns
@@ -1405,8 +1441,7 @@ class SequentialModel(nn.Module):
                 else:  # sample from distribution
                     # collect previous sub column embeddings for current column
                     prev_sub_col_embeds = {
-                        sub_col: tgt_embeds[sub_col]
-                        for sub_col in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
+                        sc: tgt_embeds[sc] for sc in self.tgt_sub_columns[lookup.sub_col_offset : lookup.sub_col_cum]
                     }
                     if sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                         # RIDX sub-columns should not see SLEN sub-columns

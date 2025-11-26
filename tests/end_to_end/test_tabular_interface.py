@@ -176,13 +176,26 @@ class TestTabularARGNClassification:
         )
         argn.fit(X=X, y=y)
 
-        # Predict on test data
+        # Test single target prediction
         test_X = X.head(10)
         predictions = argn.predict(test_X, target="target", n_draws=5, agg_fn="mode")
 
-        # Verify predictions
+        # Verify predictions - now returns DataFrame
+        assert isinstance(predictions, pd.DataFrame)
         assert len(predictions) == 10
-        assert all(pred in ["class1", "class2"] for pred in predictions)
+        assert "target" in predictions.columns
+        assert all(pred in ["class1", "class2"] for pred in predictions["target"])
+
+        # Test multi-target prediction
+        multi_predictions = argn.predict(test_X, target=["target", "feature2"], n_draws=5, agg_fn="mode")
+
+        # Verify multi-target predictions
+        assert isinstance(multi_predictions, pd.DataFrame)
+        assert len(multi_predictions) == 10
+        assert "target" in multi_predictions.columns
+        assert "feature2" in multi_predictions.columns
+        assert all(pred in ["class1", "class2"] for pred in multi_predictions["target"])
+        assert all(pred in ["X", "Y"] for pred in multi_predictions["feature2"])
 
     def test_predict_proba(self, classification_data, tmp_path_factory):
         """Test predict_proba() for classification."""
@@ -200,13 +213,139 @@ class TestTabularARGNClassification:
 
         # Predict probabilities on test data
         test_X = X.head(10)
-        proba = argn.predict_proba(test_X, target="target", n_draws=5)
+        proba = argn.predict_proba(test_X, target="target")
 
         # Verify probabilities
         assert proba.shape[0] == 10
         assert proba.shape[1] >= 2  # At least 2 classes
         # Verify probabilities sum to 1.0 for each sample
         np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
+
+    @pytest.fixture
+    def multi_target_data(self):
+        """
+        Create comprehensive dataset with multiple categorical and numeric targets.
+
+        This fixture is reused across multiple test scenarios to avoid data duplication.
+        Includes both categorical (size, color, material) and numeric (count, age) targets.
+        """
+        n_samples = 200
+
+        # Create correlated categorical features
+        size = np.random.choice(["small", "large"], n_samples)
+        color = []
+        material = []
+        for s in size:
+            if s == "small":
+                color.append(np.random.choice(["red", "blue"], p=[0.7, 0.3]))
+            else:
+                color.append(np.random.choice(["red", "blue"], p=[0.3, 0.7]))
+
+        for c in color:
+            if c == "red":
+                material.append(np.random.choice(["wood", "metal"], p=[0.6, 0.4]))
+            else:
+                material.append(np.random.choice(["wood", "metal"], p=[0.4, 0.6]))
+
+        # Create numeric targets
+        count = np.random.choice([1, 2, 3, 4, 5], n_samples)  # Discrete numeric (few values)
+        # Create continuous-like age data that will be binned (many distinct values)
+        age = np.random.uniform(18, 65, n_samples)  # Continuous values → will be binned
+
+        return pd.DataFrame(
+            {
+                "feature1": np.random.randn(n_samples),
+                "feature2": np.random.choice(["A", "B"], n_samples),
+                "size": size,
+                "color": color,
+                "material": material,
+                "count": count,
+                "age": age,
+            }
+        )
+
+    @pytest.mark.parametrize(
+        "target_columns,expected_min_columns,test_n_samples",
+        [
+            (["size", "color"], 4, 5),  # 2 categorical: 2 sizes × 2 colors = 4
+            (["size", "color", "material"], 8, 3),  # 3 categorical: 2×2×2 = 8
+            (["count"], 5, 5),  # Single numeric discrete (5 possible values)
+            (["age"], 3, 5),  # Single numeric binned (continuous → bins)
+            (["size", "count"], 10, 3),  # Mixed: categorical + numeric discrete
+            (["size", "count", "age"], 30, 3),  # All 3 types: categorical + discrete + binned
+        ],
+    )
+    def test_predict_proba_multi_target(
+        self, multi_target_data, tmp_path_factory, target_columns, expected_min_columns, test_n_samples
+    ):
+        """Test predict_proba() with various target combinations (categorical, numeric discrete, binned, mixed)."""
+        # Train model with explicit encoding types to ensure proper testing
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+            tgt_encoding_types={
+                "feature1": "TABULAR_NUMERIC_AUTO",
+                "feature2": "TABULAR_CATEGORICAL",
+                "size": "TABULAR_CATEGORICAL",
+                "color": "TABULAR_CATEGORICAL",
+                "material": "TABULAR_CATEGORICAL",
+                "count": "TABULAR_NUMERIC_DISCRETE",  # Force discrete
+                "age": "TABULAR_NUMERIC_BINNED",  # Force binned
+            },
+        )
+        argn.fit(multi_target_data)
+
+        # Test multi-target predict_proba
+        test_X = multi_target_data[["feature1", "feature2"]].head(test_n_samples)
+        proba = argn.predict_proba(test_X, target=target_columns)
+
+        # Verify DataFrame structure (single or multi-target)
+        if len(target_columns) == 1:
+            # Single target: regular DataFrame
+            assert isinstance(proba, pd.DataFrame)
+            assert proba.shape[0] == test_n_samples
+        else:
+            # Multi-target: MultiIndex DataFrame
+            assert isinstance(proba.columns, pd.MultiIndex)
+            assert proba.columns.names == target_columns
+            assert proba.shape[0] == test_n_samples
+            assert len(proba.columns.levels) == len(target_columns)
+
+        # Verify we have at least the expected minimum combinations
+        # May have more due to _RARE_ or other encoded categories
+        assert proba.shape[1] >= expected_min_columns
+
+        # Verify probabilities sum to 1.0 for each sample
+        np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
+
+        # Verify all probabilities are non-negative
+        assert (proba >= 0).all().all()
+
+        # Verify expected values are present
+        for col_name in target_columns:
+            if len(target_columns) == 1:
+                # Single target: check column names directly
+                col_values = set(proba.columns)
+            else:
+                # Multi-target: check level values
+                level_idx = target_columns.index(col_name)
+                col_values = set(proba.columns.get_level_values(level_idx).unique())
+
+            # Verify main categories/values are present
+            if col_name == "size":
+                assert {"small", "large"}.issubset(col_values)
+            elif col_name == "color":
+                assert {"red", "blue"}.issubset(col_values)
+            elif col_name == "material":
+                assert {"wood", "metal"}.issubset(col_values)
+            elif col_name == "count":
+                # Numeric discrete values (may include bins or exact values)
+                assert len(col_values) >= 3  # At least some discrete values present
+            elif col_name == "age":
+                # Numeric binned values (may be bin labels or ranges)
+                assert len(col_values) >= 3  # At least some bins present
 
 
 class TestTabularARGNRegression:
@@ -243,14 +382,29 @@ class TestTabularARGNRegression:
         )
         argn.fit(X=X, y=y)
 
-        # Predict on test data
+        # Test single target prediction
         test_X = X.head(10)
         predictions = argn.predict(test_X, target="target", n_draws=5, agg_fn="mean")
 
-        # Verify predictions are numeric
+        # Verify predictions - now returns DataFrame
+        assert isinstance(predictions, pd.DataFrame)
         assert len(predictions) == 10
-        assert all(isinstance(pred, (int, float, np.number)) for pred in predictions)
-        assert all(not np.isnan(pred) for pred in predictions)
+        assert "target" in predictions.columns
+        assert all(isinstance(pred, (int, float, np.number)) for pred in predictions["target"])
+        assert all(not np.isnan(pred) for pred in predictions["target"])
+
+        # Test multi-target prediction (numeric + categorical)
+        multi_predictions = argn.predict(test_X, target=["target", "feature1"], n_draws=5, agg_fn="mean")
+
+        # Verify multi-target predictions
+        assert isinstance(multi_predictions, pd.DataFrame)
+        assert len(multi_predictions) == 10
+        assert "target" in multi_predictions.columns
+        assert "feature1" in multi_predictions.columns
+        assert all(isinstance(pred, (int, float, np.number)) for pred in multi_predictions["target"])
+        assert all(not np.isnan(pred) for pred in multi_predictions["target"])
+        assert all(isinstance(pred, (int, float, np.number)) for pred in multi_predictions["feature1"])
+        assert all(not np.isnan(pred) for pred in multi_predictions["feature1"])
 
 
 class TestTabularARGNSequentialWithContext:

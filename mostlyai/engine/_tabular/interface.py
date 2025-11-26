@@ -38,22 +38,13 @@ from mostlyai.engine._common import (
     median_fn,
     mode_fn,
 )
-from mostlyai.engine._encoding_types.tabular.categorical import (
-    encode_categorical,
-)
-from mostlyai.engine._encoding_types.tabular.numeric import (
-    NUMERIC_BINNED_MAX_TOKEN,
-    NUMERIC_BINNED_MIN_TOKEN,
-    NUMERIC_BINNED_UNKNOWN_TOKEN,
-    encode_numeric,
-)
+from mostlyai.engine._tabular.probability import predict_proba as _predict_proba
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.domain import (
     DifferentialPrivacyConfig,
     FairnessConfig,
     ImputationConfig,
-    ModelEncodingType,
     ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
@@ -540,12 +531,12 @@ class TabularARGN(BaseEstimator):
     def predict(
         self,
         X,
-        target: str | None = None,
+        target: str | list[str] | None = None,
         ctx_data: pd.DataFrame | None = None,
         n_draws: int = 1,
         agg_fn: Literal["auto", "mode", "mean", "median", "list"] | Callable[[np.ndarray], Any] = "auto",
         **kwargs,
-    ) -> np.ndarray:
+    ) -> pd.DataFrame:
         """
         Predict target values for samples in X.
 
@@ -554,7 +545,10 @@ class TabularARGN(BaseEstimator):
 
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
-            target: Name of the target column to predict. If None, uses the target column from fit().
+            target: Name of the target column(s) to predict. Can be:
+                - str: Single target column name
+                - list[str]: Multiple target columns for multi-output prediction
+                - None: Uses the target column from fit()
             ctx_data: Context data for generation. If None, uses the context data from training.
             n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
             agg_fn: Aggregation method to combine predictions across draws. Options:
@@ -563,67 +557,86 @@ class TabularARGN(BaseEstimator):
                 - "mean": Average across draws (suitable for numeric/datetime targets).
                 - "median": Median across draws (suitable for numeric/datetime targets).
                 - "mode": Most common value across draws (suitable for categorical targets).
-                - "list": Return all draws as arrays (returns shape (n_samples, n_draws) instead of (n_samples,)).
+                - "list": Return all draws as arrays in DataFrame cells.
                 - Callable: A function that takes a 1D numpy array and returns a scalar or array.
             **kwargs: Additional arguments passed to sample() method.
 
         Returns:
-            Predicted target values as np.ndarray of shape (n_samples,) or (n_samples, n_draws) if agg_fn="list".
+            pd.DataFrame with predicted target values:
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        # Determine target column
-        target_column = target or self._target_column
-        if target_column is None:
-            raise ValueError(
-                "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
-            )
-
-        # Resolve aggregation function
-        agg_fn_func = self._resolve_agg_fn(agg_fn, target_column)
+        # Normalize target to list
+        if target is None:
+            if self._target_column is None:
+                raise ValueError(
+                    "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
+                )
+            target_columns = [self._target_column]
+        elif isinstance(target, str):
+            target_columns = [target]
+        else:
+            target_columns = target
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
-        # Exclude target column from seed if present
-        if target_column in X_df.columns:
-            X_df = X_df.drop(columns=[target_column])
-
-        # Generate predictions across multiple draws
-        all_predictions = []
-        for _ in range(n_draws):
-            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
-            if target_column in samples.columns:
-                all_predictions.append(samples[target_column].values)
-            else:
-                raise ValueError(f"Target column '{target_column}' not found in generated samples")
-
-        # Stack predictions and aggregate
-        predictions_array = np.column_stack(all_predictions)
+        # Exclude target columns from seed if present
+        target_cols_in_X = [col for col in target_columns if col in X_df.columns]
+        if target_cols_in_X:
+            _LOG.info(f"Dropping target columns from seed data: {target_cols_in_X}")
+            X_df = X_df.drop(columns=target_cols_in_X)
 
         # Check if we should return all draws (list aggregation)
         is_list_agg = (agg_fn == "list") if not callable(agg_fn) else False
 
-        if is_list_agg:
-            # For list aggregation, return all draws as a 2D array
-            return predictions_array
-        else:
-            y_pred = np.apply_along_axis(agg_fn_func, 1, predictions_array)
-            return y_pred
+        # Generate samples across multiple draws
+        all_samples = []
+        for _ in range(n_draws):
+            samples = self.sample(seed_data=X_df, ctx_data=ctx_data, **kwargs)
+            all_samples.append(samples)
+
+        # Extract and aggregate predictions for each target column
+        result_dict = {}
+        for target_col in target_columns:
+            if target_col not in all_samples[0].columns:
+                raise ValueError(f"Target column '{target_col}' not found in generated samples")
+
+            # Resolve aggregation function for this target
+            agg_fn_func = self._resolve_agg_fn(agg_fn, target_col)
+
+            # Collect predictions for this target across all draws
+            predictions_array = np.column_stack([samples[target_col].values for samples in all_samples])
+
+            if is_list_agg:
+                # For list aggregation, store all draws as arrays
+                result_dict[target_col] = [predictions_array[i] for i in range(len(predictions_array))]
+            else:
+                result_dict[target_col] = np.apply_along_axis(agg_fn_func, 1, predictions_array)
+
+        return pd.DataFrame(result_dict)
 
     def predict_proba(
         self,
         X,
-        target: str | None = None,
+        target: str | list[str] | None = None,
         ctx_data: pd.DataFrame | None = None,
-        n_draws: int = 1,
+        rare_category_replacement_method: str = "constant",
         **kwargs,
     ) -> pd.DataFrame:
         """
-        Predict class probabilities for samples in X.
+        Predict class probabilities for target variable(s).
 
-        This method generates synthetic samples conditioned on the input features and computes
-        the probability of each class based on the frequency across multiple draws.
+        This method generates model probability distributions for one or more target variables
+        conditioned on input features. Probabilities are computed directly from the model
+        (not via sampling).
+
+        The generation is conditioned on the input features X (seed_data). Each row in X produces
+        one probability distribution (single target) or joint probability distribution (multiple targets).
+
+        Single target returns an exploded DataFrame with one column per category/bin/value.
+        Multiple targets return a MultiIndex DataFrame with joint probabilities:
+        P(col1, col2, ...) = P(col1) * P(col2|col1) * P(col3|col1,col2) * ...
 
         Supported encoding types:
         - tabular_categorical: Multi-class categorical variables
@@ -632,126 +645,88 @@ class TabularARGN(BaseEstimator):
 
         Args:
             X: Input samples. Can be array-like or pd.DataFrame of shape (n_samples, n_features).
-            target: Name of the target column to predict. If None, uses the target column from fit().
+               These features are used as seed_data to condition the probability generation.
+            target: Name of the target column(s) to predict. Can be:
+                - str: Single target column name
+                - list[str]: Multiple target columns for joint probabilities (supports arbitrary number of targets)
+                - None: Uses the target column from fit()
             ctx_data: Context data for generation. If None, uses the context data from training.
-            n_draws: Number of draws to generate for each sample during prediction. Defaults to 1.
-            **kwargs: Additional arguments passed to sample() method.
+            rare_category_replacement_method: How to handle rare categories:
+                - "constant" (default): Suppress rare tokens in probability outputs
+                - "sample": Always suppress rare tokens for categorical columns
+            **kwargs: Additional generation parameters (device, etc.).
 
         Returns:
-            pd.DataFrame with shape (n_samples, n_classes) where columns are named by class labels.
-            Column names are derived from encoding stats:
-            - Binned: Special tokens (e.g., "<<NULL>>"), min value, bin ranges (e.g., "<10000", ">=50000"), and max value (e.g., "0", ..., "99999")
-            - Categorical: All category names including special tokens (e.g., "_RARE_", "<<NULL>>", "male", "female")
-            - Discrete: All numeric values including special tokens (e.g., "_RARE_", "<<NULL>>", "1", "2", "3")
-            Each row contains probability distribution that sums to 1.0.
+            Single target: DataFrame with shape (n_samples, n_categories) containing probability distributions.
+                Column names are derived from encoding stats:
+                - Binned: "<{value}" or ">={value}" (e.g., "<10000", ">=10000")
+                - Categorical: category names (e.g., "male", "female")
+                - Discrete: discrete values (e.g., "0", "1", "2")
+                Each row contains a full probability distribution that sums to 1.0.
+
+            Multiple targets: MultiIndex DataFrame with joint probabilities.
+                Columns: MultiIndex.from_product of all category combinations.
+                Example for target=["gender", "income"]:
+                    gender  income
+                    male    <10000     0.15
+                            >=10000    0.35
+                    female  <10000     0.25
+                            >=10000    0.25
 
         Raises:
-            ValueError: If target column has unsupported encoding type.
+            ValueError: If model is not fitted, target is not specified, or target has unsupported
+                       encoding type for probability output.
+
+        Notes:
+            Performance: Joint probability complexity is O(card1 × card2 × ... × cardN),
+            exponential in the number of targets.
         """
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        # Determine target column
-        target_column = target or self._target_column
-        if target_column is None:
+        # Determine target column(s)
+        if target is None:
+            target_columns = [self._target_column] if self._target_column else None
+        elif isinstance(target, str):
+            target_columns = [target]
+        else:
+            target_columns = target
+
+        if target_columns is None or not target_columns:
             raise ValueError(
                 "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
             )
 
-        # Get target column stats and validate encoding type
-        columns = self._get_column_stats()
-        if target_column not in columns:
-            raise ValueError(f"Target column '{target_column}' not found in model statistics")
-
-        target_stats = columns[target_column]
-        encoding_type = target_stats.get("encoding_type")
-        if not encoding_type:
-            raise ValueError(f"Target column '{target_column}' has no encoding type")
-
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
-        # Exclude target column from seed if present
-        if target_column in X_df.columns:
-            X_df = X_df.drop(columns=[target_column])
+        # Exclude target columns from seed if present
+        target_cols_in_X = [col for col in target_columns if col in X_df.columns]
+        if target_cols_in_X:
+            _LOG.info(f"Dropping target columns from seed data: {target_cols_in_X}")
+            X_df = X_df.drop(columns=target_cols_in_X)
 
-        # Repeat X_df n_draws times for batch sampling
-        n_samples = len(X_df)
-        X_df_repeated = pd.concat([X_df] * n_draws, ignore_index=True)
+        # Call new predict_proba utility that returns probabilities in-memory
+        workspace = Workspace(self.workspace_dir)
 
-        # Generate all samples in a single batch
-        samples = self.sample(seed_data=X_df_repeated, ctx_data=ctx_data, **kwargs)
-        if target_column not in samples.columns:
-            raise ValueError(f"Target column '{target_column}' not found in generated samples")
+        # Extract device from kwargs if provided
+        device = kwargs.get("device", self.device)
 
-        # Re-encode the sampled values using the same encoding logic as the generator
-        sampled_values = samples[target_column]
+        # Prepare ctx_data similar to sample method
+        if ctx_data is None:
+            ctx_data = self.ctx_data  # Fallback to training context
 
-        if encoding_type == ModelEncodingType.tabular_numeric_binned:
-            encoded_df = encode_numeric(sampled_values, target_stats)
-            codes = encoded_df["bin"].values
-        elif encoding_type == ModelEncodingType.tabular_numeric_discrete:
-            encoded_df = encode_numeric(sampled_values, target_stats)
-            codes = encoded_df["cat"].values
-        elif encoding_type == ModelEncodingType.tabular_categorical:
-            encoded_df = encode_categorical(sampled_values, target_stats)
-            codes = encoded_df["cat"].values
-        else:
-            raise ValueError(
-                f"Target column '{target_column}' has unsupported encoding type '{encoding_type}'. "
-                f"Only categorical, discrete numeric, and binned numeric columns are supported."
-            )
+        # Convert ctx_data to DataFrame if provided
+        ctx_data_df = None
+        if ctx_data is not None:
+            ctx_data_df = ensure_dataframe(ctx_data)
 
-        # Reshape codes to (n_samples, n_draws)
-        codes_array = codes.reshape(n_samples, n_draws)
+        probs_df = _predict_proba(
+            workspace=workspace,
+            seed_data=X_df,  # Features to condition on (without targets)
+            target_columns=target_columns,
+            ctx_data=ctx_data_df,  # Optional separate context data
+            rare_category_replacement_method=rare_category_replacement_method,
+            device=device,
+        )
 
-        # Build class labels with their corresponding code values
-        codes = target_stats["codes"]
-        class_labels = []
-        class_code_values = []
-
-        # For binned: replace <<MIN>>/<<MAX>> tokens with actual bin values and reorder
-        if encoding_type == ModelEncodingType.tabular_numeric_binned:
-            bins = target_stats["bins"]
-            min_code_value = None
-            max_code_value = None
-
-            # First add special tokens (except <<UNK>>, <<MIN>>, <<MAX>>)
-            for code_name, code_value in codes.items():
-                if code_name == NUMERIC_BINNED_UNKNOWN_TOKEN:
-                    continue  # Skip <<UNK>>
-                elif code_name == NUMERIC_BINNED_MIN_TOKEN:
-                    min_code_value = code_value  # Save for later
-                elif code_name == NUMERIC_BINNED_MAX_TOKEN:
-                    max_code_value = code_value  # Save for later
-                else:
-                    class_labels.append(code_name)
-                    class_code_values.append(code_value)
-
-            # Add MIN value if present
-            if min_code_value is not None:
-                class_labels.append(str(bins[0]))
-                class_code_values.append(min_code_value)
-
-            # Add bin range labels
-            codes_bin_offset = len(codes)
-            for i in range(len(bins) - 1):
-                lower_bound = bins[i]
-                upper_bound = bins[i + 1]
-                label = f">={lower_bound}" if i == len(bins) - 2 else f"<{upper_bound}"
-                class_labels.append(label)
-                class_code_values.append(i + codes_bin_offset)
-
-            # Add MAX value at the end if present
-            if max_code_value is not None:
-                class_labels.append(str(bins[-1]))
-                class_code_values.append(max_code_value)
-        else:
-            # For discrete and categorical: use code names as-is
-            class_labels = list(codes.keys())
-            class_code_values = list(codes.values())
-
-        # Calculate probabilities for all classes at once
-        proba_list = [np.mean(codes_array == code_value, axis=1) for code_value in class_code_values]
-        proba = np.column_stack(proba_list)
-
-        return pd.DataFrame(proba, columns=class_labels)
+        return probs_df

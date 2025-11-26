@@ -16,7 +16,10 @@ import logging
 import time
 from pathlib import Path
 
+import pandas as pd
 import torch
+
+from mostlyai.engine._common import CTXFLT, CTXSEQ
 
 _LOG = logging.getLogger(__name__)
 
@@ -35,3 +38,163 @@ def load_model_weights(model: torch.nn.Module, path: Path, device: torch.device)
             f"failed to load model weights due to incompatibility: {missing_keys = }, {unexpected_keys = }"
         )
     _LOG.info(f"loaded model weights in {time.time() - t0:.2f}s")
+
+
+def load_model_artifacts(workspace):
+    """
+    Load model configurations and statistics from workspace.
+
+    Returns:
+        Tuple of (model_config, tgt_stats, ctx_stats, is_sequential)
+    """
+    model_config = workspace.model_configs.read()
+    tgt_stats = workspace.tgt_stats.read()
+    ctx_stats = workspace.ctx_stats.read()
+    is_sequential = tgt_stats["is_sequential"]
+    return model_config, tgt_stats, ctx_stats, is_sequential
+
+
+def resolve_device(device: torch.device | str | None) -> torch.device:
+    """
+    Resolve device to use for inference.
+
+    Args:
+        device: Device specification ('cuda', 'cpu', or None for auto-detect)
+
+    Returns:
+        torch.device instance
+    """
+    if device is None:
+        return torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    return torch.device(device)
+
+
+def create_and_load_model(
+    workspace,
+    is_sequential: bool,
+    tgt_cardinalities: dict,
+    ctx_cardinalities: dict,
+    model_units,
+    ctx_seq_len_median: int | None,
+    column_order: list[str],
+    device: torch.device,
+    seq_len_median: int | None = None,
+    seq_len_max: int | None = None,
+):
+    """
+    Create model, load weights, and prepare for inference.
+
+    Args:
+        workspace: Workspace containing model weights
+        is_sequential: Whether to create SequentialModel or FlatModel
+        tgt_cardinalities: Target column cardinalities
+        ctx_cardinalities: Context column cardinalities
+        model_units: Model size configuration
+        ctx_seq_len_median: Median context sequence length
+        column_order: Order of columns for generation
+        device: Device to load model on
+        seq_len_median: Median sequence length (for sequential models)
+        seq_len_max: Maximum sequence length (for sequential models)
+
+    Returns:
+        Initialized model ready for inference
+    """
+    from mostlyai.engine._tabular.argn import FlatModel, SequentialModel, get_no_of_model_parameters
+
+    _LOG.info("Creating generative model")
+
+    if is_sequential:
+        model = SequentialModel(
+            tgt_cardinalities=tgt_cardinalities,
+            tgt_seq_len_median=seq_len_median,
+            tgt_seq_len_max=seq_len_max,
+            ctx_cardinalities=ctx_cardinalities,
+            ctxseq_len_median=ctx_seq_len_median,
+            model_size=model_units,
+            column_order=column_order,
+            device=device,
+        )
+    else:
+        model = FlatModel(
+            tgt_cardinalities=tgt_cardinalities,
+            ctx_cardinalities=ctx_cardinalities,
+            ctxseq_len_median=ctx_seq_len_median,
+            model_size=model_units,
+            column_order=column_order,
+            device=device,
+        )
+
+    no_of_model_params = get_no_of_model_parameters(model)
+    _LOG.info(f"{no_of_model_params=}")
+
+    if workspace.model_tabular_weights_path.exists():
+        load_model_weights(
+            model=model,
+            path=workspace.model_tabular_weights_path,
+            device=device,
+        )
+    else:
+        _LOG.warning("Model weights not found; using untrained model")
+
+    model.to(device)
+    model.eval()
+
+    return model
+
+
+def prepare_context_inputs(
+    ctx_data: pd.DataFrame,
+    ctx_stats: dict,
+    device: torch.device | str,
+    ctx_primary_key: str | None = None,
+) -> tuple[dict[str, torch.Tensor], pd.DataFrame, str | None]:
+    """
+    Encode context data and prepare tensor inputs for model forward pass.
+
+    Handles both flat context (CTXFLT) and sequential context (CTXSEQ).
+
+    Args:
+        ctx_data: Context DataFrame to encode
+        ctx_stats: Context statistics from training
+        device: Device for tensor placement
+        ctx_primary_key: Optional primary key column for context
+
+    Returns:
+        Tuple of (context_tensors, encoded_dataframe, encoded_primary_key):
+        - context_tensors: Dict of CTXFLT/* and CTXSEQ/* tensors for model.context_compressor()
+        - encoded_dataframe: Encoded context DataFrame (for extracting keys if needed)
+        - encoded_primary_key: Name of encoded primary key column (None if not provided)
+    """
+    from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
+
+    # Encode context data
+    ctx_encoded, ctx_primary_key_encoded, _ = encode_df(df=ctx_data, stats=ctx_stats, ctx_primary_key=ctx_primary_key)
+
+    # Pad empty sequences (required for model)
+    ctx_encoded = pad_ctx_sequences(ctx_encoded)
+
+    # Build flat context inputs (CTXFLT/*)
+    ctxflt_inputs = {
+        col: torch.unsqueeze(
+            torch.as_tensor(ctx_encoded[col].to_numpy(), device=device).type(torch.int),
+            dim=-1,
+        )
+        for col in ctx_encoded.columns
+        if col.startswith(CTXFLT)
+    }
+
+    # Build sequential context inputs (CTXSEQ/*)
+    ctxseq_inputs = {
+        col: torch.unsqueeze(
+            torch.nested.as_nested_tensor(
+                [torch.as_tensor(t, device=device).type(torch.int) for t in ctx_encoded[col]],
+                device=device,
+            ),
+            dim=-1,
+        )
+        for col in ctx_encoded.columns
+        if col.startswith(CTXSEQ)
+    }
+
+    # Merge and return with encoded dataframe
+    return (ctxflt_inputs | ctxseq_inputs), ctx_encoded, ctx_primary_key_encoded
