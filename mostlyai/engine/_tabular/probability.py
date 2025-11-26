@@ -352,12 +352,13 @@ def predict_proba(
             target_cardinality = sum(col_stats["cardinalities"].values())
             total_cardinality *= target_cardinality
 
-        _LOG.warning(
-            f"Computing joint probabilities for {len(target_columns)} targets "
-            f"results in {total_cardinality:,} total probability values per sample. "
-            f"Computation complexity grows exponentially with the number of targets. "
-            f"Consider computing probabilities for targets separately if this takes too long."
-        )
+        if total_cardinality > 100:
+            _LOG.warning(
+                f"Computing joint probabilities for {len(target_columns)} targets "
+                f"results in {total_cardinality:,} total probability values per sample. "
+                f"Computation complexity grows exponentially with the number of targets. "
+                f"Consider computing probabilities for targets separately if this takes too long."
+            )
 
     # Initialize with first target: P(col1)
     first_target_df = _generate_marginal_probs(

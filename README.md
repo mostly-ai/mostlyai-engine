@@ -140,9 +140,6 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 # predict class labels for a categorical
 predictions = argn.predict(data_test, target="income", n_draws=100, agg_fn="mode")
 
-# predict class probabilities for a categorical
-probabilities = argn.predict_proba(data_test, target="income", n_draws=100)
-
 # evaluate performance
 accuracy = accuracy_score(data_test["income"], predictions)
 auc = roc_auc_score(data_test["income"], probabilities[:, 1])
@@ -162,6 +159,37 @@ predictions = argn.predict(data_test, target="age", n_draws=10, agg_fn="mean")
 # evaluate performance
 mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
+```
+
+### Conditional Probabalities
+
+Assess any marginal conditional probability, for one or more target columns:
+
+```python
+# extract class probabilities for a categorical
+argn.predict_proba(
+    X=pd.DataFrame({
+        "age": [25, 30, 35],
+        "sex": ["Male", "Female", "Male"],
+    }),
+    target="income"
+)
+
+# extract bin probabilities for a numerical
+argn.predict_proba(
+    X=pd.DataFrame({
+        # "age": [25, 30, 35],
+        "sex": ["Male", "Female", "Male"],
+        "occupation": ["Craft-repair", "Craft-repair", "Craft-repair"]
+    }),
+    target="capital_gain"
+)
+
+# extract two-way marginals
+argn.predict_proba(
+    X=data_test[["age", "race"]],
+    target=["sex", "income"]
+)
 ```
 
 ## TabularARGN for Sequential Data
