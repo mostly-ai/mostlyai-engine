@@ -1096,24 +1096,19 @@ class FlatModel(nn.Module):
                 else:
                     # compute probabilities and sample
                     logits = self._compute_logits(sub_col, context, col_embeddings, tgt_embeds)
-                    xs = nn.Softmax(dim=-1)(logits)
+                    probs_tensor = nn.Softmax(dim=-1)(logits)
 
                     # optionally keep probabilities
                     if sub_col in return_probs:
-                        probs[sub_col] = xs
+                        probs[sub_col] = probs_tensor
 
                     # apply fairness transforms
                     if fairness_transforms:
-                        xs = apply_fairness_transforms(sub_col, xs, outputs, fairness_transforms)
+                        probs_tensor = apply_fairness_transforms(sub_col, probs_tensor, outputs, fairness_transforms)
 
                     # sample
                     out = torch.squeeze(
-                        _sample(
-                            probs=xs,
-                            temperature=temperature,
-                            top_p=top_p,
-                            fixed_probs=fixed_probs.get(sub_col),
-                        ),
+                        _sample(probs_tensor, temperature, top_p, fixed_probs.get(sub_col)),
                         dim=-1,
                     )
 
@@ -1143,14 +1138,14 @@ class FlatModel(nn.Module):
                 else:
                     # compute probabilities without sampling
                     logits = self._compute_logits(sub_col, context, col_embeddings, tgt_embeds)
-                    xs = nn.Softmax(dim=-1)(logits)
+                    probs_tensor = nn.Softmax(dim=-1)(logits)
 
                     # apply fixed_probs mask if provided
                     if sub_col in fixed_probs:
-                        xs = _sampling_fixed_probs(xs, fixed_probs[sub_col])
+                        probs_tensor = _sampling_fixed_probs(probs_tensor, fixed_probs[sub_col])
 
                     # store probabilities (no sampling, no embedding updates)
-                    probs[sub_col] = xs
+                    probs[sub_col] = probs_tensor
 
             return {}, probs
 
