@@ -44,23 +44,20 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
 )
 from mostlyai.engine._tabular.argn import ModelSize
 from mostlyai.engine._tabular.common import (
+    check_column_order,
     create_and_load_model,
+    fix_rare_token_probs,
     load_model_artifacts,
     prepare_context_inputs,
     resolve_device,
+    translate_fixed_probs,
 )
 from mostlyai.engine._tabular.encoding import encode_df
-from mostlyai.engine._tabular.generation import _fix_rare_token_probs, _translate_fixed_probs
 from mostlyai.engine._tabular.training import _calculate_sample_losses
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 _LOG = logging.getLogger(__name__)
-
-
-############################
-### MODEL INITIALIZATION ###
-############################
 
 
 @dataclass
@@ -135,8 +132,8 @@ def _initialize_model_context(
 
     # Prepare fixed_probs to suppress rare tokens
     _LOG.info(f"{rare_category_replacement_method=}")
-    rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
-    fixed_probs = _translate_fixed_probs(
+    rare_token_fixed_probs = fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
+    fixed_probs = translate_fixed_probs(
         fixed_probs=rare_token_fixed_probs,
         stats=tgt_stats,
     )
@@ -151,34 +148,6 @@ def _initialize_model_context(
         device=device,
         enable_flexible_generation=enable_flexible_generation,
     )
-
-
-##########################
-### PROBABILITY UTILS ###
-##########################
-
-
-def _check_column_order(
-    gen_column_order: list[str],
-    trn_column_order: list[str],
-    operation_name: str,
-) -> None:
-    """
-    Check if column order matches training order.
-
-    Args:
-        gen_column_order: Column order for the current operation
-        trn_column_order: Column order from training
-        operation_name: Name of the calling operation (for error messages)
-
-    Raises:
-        ValueError: If column order doesn't match training order
-    """
-    if gen_column_order != trn_column_order:
-        raise ValueError(
-            f"The column order for {operation_name} does not match the column order from training. "
-            "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
-        )
 
 
 def _get_column_metadata(target_column: str, target_stats: dict) -> list[dict]:
@@ -354,7 +323,7 @@ def _generate_marginal_probs(
 
     # Check column order when flexible generation is disabled
     if not enable_flexible_generation:
-        _check_column_order(gen_column_order, all_columns, "predict_proba")
+        check_column_order(gen_column_order, all_columns, "predict_proba")
 
     # Prepare context inputs if provided
     if ctx_data is not None and ctx_stats is not None:
@@ -627,7 +596,7 @@ def log_prob(
 
     # Check column order of input data when flexible generation is disabled
     if not enable_flexible_generation:
-        _check_column_order(list(data.columns), all_columns, "log_prob")
+        check_column_order(list(data.columns), all_columns, "log_prob")
 
     # Create and load model
     model_units = model_config.get("model_units") or ModelSize.M
