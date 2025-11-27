@@ -20,6 +20,7 @@ import pandas as pd
 import torch
 
 from mostlyai.engine._common import CTXFLT, CTXSEQ
+from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
 
 _LOG = logging.getLogger(__name__)
 
@@ -165,7 +166,6 @@ def prepare_context_inputs(
         - encoded_dataframe: Encoded context DataFrame (for extracting keys if needed)
         - encoded_primary_key: Name of encoded primary key column (None if not provided)
     """
-    from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
 
     # Encode context data
     ctx_encoded, ctx_primary_key_encoded, _ = encode_df(df=ctx_data, stats=ctx_stats, ctx_primary_key=ctx_primary_key)

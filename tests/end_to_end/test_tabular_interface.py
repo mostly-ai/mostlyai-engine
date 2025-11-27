@@ -347,6 +347,27 @@ class TestTabularARGNClassification:
                 # Numeric binned values (may be bin labels or ranges)
                 assert len(col_values) >= 3  # At least some bins present
 
+    def test_predict_proba_wrong_column_order_raises(self, classification_data, tmp_path_factory):
+        """Test predict_proba raises error with different column order when flexible generation is disabled."""
+        data = classification_data
+        X = data[["feature1", "feature2"]]
+        y = data["target"]
+
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            enable_flexible_generation=False,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=X, y=y)
+
+        # Reorder columns in test data
+        test_X = X.head(10)[["feature2", "feature1"]]
+
+        with pytest.raises(ValueError, match="column order.*does not match"):
+            argn.predict_proba(test_X, target="target")
+
 
 class TestTabularARGNRegression:
     """Test regression: predict numeric target."""
@@ -567,3 +588,70 @@ class TestTabularARGNFlatWithContext:
         assert "ctx_id" in syn_data.columns
         assert "value" in syn_data.columns
         assert "label" in syn_data.columns
+
+
+class TestTabularARGNLogProb:
+    """Test log_prob() for computing log likelihood of observations."""
+
+    @pytest.fixture
+    def log_prob_data(self):
+        """Create data with multiple column types for log_prob testing."""
+        n_samples = 100
+        return pd.DataFrame(
+            {
+                "feature": np.random.randn(n_samples),
+                "color": np.random.choice(["red", "blue", "green"], n_samples),
+                "size": np.random.choice(["small", "large"], n_samples),
+            }
+        )
+
+    @pytest.fixture
+    def fitted_log_prob_model(self, log_prob_data, tmp_path_factory):
+        """Create a fitted model for log_prob tests."""
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=log_prob_data)
+        return argn
+
+    @pytest.fixture
+    def fitted_log_prob_model_no_flex(self, log_prob_data, tmp_path_factory):
+        """Create a fitted model with flexible generation disabled."""
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            enable_flexible_generation=False,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=log_prob_data)
+        return argn
+
+    def test_log_prob(self, fitted_log_prob_model, log_prob_data):
+        """Test log_prob computes log probability for observations."""
+        test_data = log_prob_data.head(10)
+        log_probs = fitted_log_prob_model.log_prob(test_data)
+
+        assert isinstance(log_probs, pd.Series)
+        assert len(log_probs) == 10
+        assert log_probs.name == "log_prob"
+        assert (log_probs <= 0).all()
+        assert np.isfinite(log_probs).any()
+
+    def test_log_prob_values_differ_by_observation(self, fitted_log_prob_model, log_prob_data):
+        """Test that different observations get different log probabilities."""
+        test_data = log_prob_data.head(10)
+        log_probs = fitted_log_prob_model.log_prob(test_data)
+
+        # Different observations should generally have different log probs
+        assert log_probs.nunique() > 1
+
+    def test_log_prob_wrong_column_order_raises(self, fitted_log_prob_model_no_flex, log_prob_data):
+        """Test log_prob raises error with different column order when flexible generation is disabled."""
+        test_data = log_prob_data.head(10)[["size", "color", "feature"]]  # Reordered
+
+        with pytest.raises(ValueError, match="column order.*does not match"):
+            fitted_log_prob_model_no_flex.log_prob(test_data)

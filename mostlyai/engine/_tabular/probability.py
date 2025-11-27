@@ -22,6 +22,7 @@ joint probability distributions.
 
 import itertools
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -50,15 +51,134 @@ from mostlyai.engine._tabular.common import (
 )
 from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.generation import _fix_rare_token_probs, _translate_fixed_probs
+from mostlyai.engine._tabular.training import _calculate_sample_losses
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 _LOG = logging.getLogger(__name__)
 
 
+############################
+### MODEL INITIALIZATION ###
+############################
+
+
+@dataclass
+class ModelContext:
+    """Context containing initialized model and related artifacts for probability computation."""
+
+    model: torch.nn.Module
+    tgt_stats: dict
+    ctx_stats: dict
+    tgt_cardinalities: dict
+    all_columns: list[str]
+    fixed_probs: dict
+    device: torch.device
+    enable_flexible_generation: bool
+
+
+def _initialize_model_context(
+    *,
+    workspace: Workspace,
+    rare_category_replacement_method: RareCategoryReplacementMethod | str,
+    device: torch.device | str | None,
+    operation_name: str,
+) -> ModelContext:
+    """
+    Initialize model and artifacts for probability computation.
+
+    Args:
+        workspace: Workspace containing model and stats
+        rare_category_replacement_method: How to handle rare categories
+        device: Device for computation
+        operation_name: Name of calling operation (for error messages)
+
+    Returns:
+        ModelContext with initialized model and artifacts
+
+    Raises:
+        ValueError: If model is sequential (not supported)
+    """
+    # Load model artifacts
+    model_config, tgt_stats, ctx_stats, is_sequential = load_model_artifacts(workspace)
+
+    # Check model type
+    if is_sequential:
+        raise ValueError(f"{operation_name} is not yet supported for sequential models")
+
+    # Get cardinalities and config
+    tgt_cardinalities = get_cardinalities(tgt_stats)
+    ctx_cardinalities = get_cardinalities(ctx_stats)
+    enable_flexible_generation = model_config.get("enable_flexible_generation", True)
+
+    # Resolve device
+    device = resolve_device(device)
+    _LOG.info(f"Using device: {device}")
+
+    # Get all columns in training order
+    all_columns = get_columns_from_cardinalities(tgt_cardinalities)
+
+    # Create model
+    model_units = model_config.get("model_units") or ModelSize.M
+    ctx_seq_len_median = ctx_stats.get("sequence_len_median")
+
+    model = create_and_load_model(
+        workspace=workspace,
+        is_sequential=is_sequential,
+        tgt_cardinalities=tgt_cardinalities,
+        ctx_cardinalities=ctx_cardinalities,
+        model_units=model_units,
+        ctx_seq_len_median=ctx_seq_len_median,
+        column_order=all_columns,
+        device=device,
+    )
+
+    # Prepare fixed_probs to suppress rare tokens
+    _LOG.info(f"{rare_category_replacement_method=}")
+    rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
+    fixed_probs = _translate_fixed_probs(
+        fixed_probs=rare_token_fixed_probs,
+        stats=tgt_stats,
+    )
+
+    return ModelContext(
+        model=model,
+        tgt_stats=tgt_stats,
+        ctx_stats=ctx_stats,
+        tgt_cardinalities=tgt_cardinalities,
+        all_columns=all_columns,
+        fixed_probs=fixed_probs,
+        device=device,
+        enable_flexible_generation=enable_flexible_generation,
+    )
+
+
 ##########################
 ### PROBABILITY UTILS ###
 ##########################
+
+
+def _check_column_order(
+    gen_column_order: list[str],
+    trn_column_order: list[str],
+    operation_name: str,
+) -> None:
+    """
+    Check if column order matches training order.
+
+    Args:
+        gen_column_order: Column order for the current operation
+        trn_column_order: Column order from training
+        operation_name: Name of the calling operation (for error messages)
+
+    Raises:
+        ValueError: If column order doesn't match training order
+    """
+    if gen_column_order != trn_column_order:
+        raise ValueError(
+            f"The column order for {operation_name} does not match the column order from training. "
+            "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+        )
 
 
 def _get_column_metadata(target_column: str, target_stats: dict) -> list[dict]:
@@ -181,6 +301,7 @@ def _generate_marginal_probs(
     ctx_data: pd.DataFrame | None = None,
     ctx_stats: dict | None = None,
     fixed_probs: dict | None = None,
+    enable_flexible_generation: bool = True,
 ) -> np.ndarray:
     """
     Generate P(target | seed_features, context).
@@ -195,6 +316,8 @@ def _generate_marginal_probs(
         device: Device for computation
         ctx_data: Optional context data
         ctx_stats: Optional context statistics (required if ctx_data provided)
+        fixed_probs: Optional fixed probabilities for rare token handling
+        enable_flexible_generation: Whether flexible generation is enabled
 
     Returns:
         DataFrame of shape (n_samples, cardinality) with probabilities and column names
@@ -228,6 +351,10 @@ def _generate_marginal_probs(
 
     # Determine column order: seed columns + target (in training order)
     gen_column_order = [col for col in all_columns if col in seed_columns or col == target_column]
+
+    # Check column order when flexible generation is disabled
+    if not enable_flexible_generation:
+        _check_column_order(gen_column_order, all_columns, "predict_proba")
 
     # Prepare context inputs if provided
     if ctx_data is not None and ctx_stats is not None:
@@ -292,52 +419,19 @@ def predict_proba(
     """
     _LOG.info(f"PREDICT_PROBA started for targets: {target_columns}")
 
-    # Load model artifacts
-    model_config, tgt_stats, ctx_stats, is_sequential = load_model_artifacts(workspace)
-
-    # Check model type
-    if is_sequential:
-        raise ValueError("predict_proba is not yet supported for sequential models")
-
-    # Get cardinalities
-    tgt_cardinalities = get_cardinalities(tgt_stats)
-    ctx_cardinalities = get_cardinalities(ctx_stats)
-
-    # Resolve device
-    device = resolve_device(device)
-    _LOG.info(f"Using device: {device}")
-
-    # Get all columns in training order
-    all_columns = get_columns_from_cardinalities(tgt_cardinalities)
-
-    # Create model (will override column_order in forward pass for optimization)
-    model_units = model_config.get("model_units") or ModelSize.M
-    ctx_seq_len_median = ctx_stats.get("sequence_len_median")
-
-    model = create_and_load_model(
+    # Initialize model context
+    ctx = _initialize_model_context(
         workspace=workspace,
-        is_sequential=is_sequential,
-        tgt_cardinalities=tgt_cardinalities,
-        ctx_cardinalities=ctx_cardinalities,
-        model_units=model_units,
-        ctx_seq_len_median=ctx_seq_len_median,
-        column_order=all_columns,  # Will override in forward pass
+        rare_category_replacement_method=rare_category_replacement_method,
         device=device,
-    )
-
-    # Prepare fixed_probs to suppress rare tokens
-    _LOG.info(f"{rare_category_replacement_method=}")
-    rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
-    fixed_probs = _translate_fixed_probs(
-        fixed_probs=rare_token_fixed_probs,
-        stats=tgt_stats,
+        operation_name="predict_proba",
     )
 
     # Encode seed data (features to condition on) - common for both single and multi-target
     # seed_data should NOT include any target columns
     seed_encoded, _, _ = encode_df(
         df=seed_data,
-        stats=tgt_stats,
+        stats=ctx.tgt_stats,
     )
     n_samples = len(seed_data)
 
@@ -348,7 +442,7 @@ def predict_proba(
         # Compute total number of probability values
         total_cardinality = 1
         for target_col in target_columns:
-            col_stats = tgt_stats["columns"][target_col]
+            col_stats = ctx.tgt_stats["columns"][target_col]
             target_cardinality = sum(col_stats["cardinalities"].values())
             total_cardinality *= target_cardinality
 
@@ -361,16 +455,17 @@ def predict_proba(
 
     # Initialize with first target: P(col1)
     first_target_df = _generate_marginal_probs(
-        model=model,
+        model=ctx.model,
         seed_encoded=seed_encoded,
         target_column=target_columns[0],
-        tgt_stats=tgt_stats,
-        tgt_cardinalities=tgt_cardinalities,
-        all_columns=all_columns,
-        device=device,
+        tgt_stats=ctx.tgt_stats,
+        tgt_cardinalities=ctx.tgt_cardinalities,
+        all_columns=ctx.all_columns,
+        device=ctx.device,
         ctx_data=ctx_data,
-        ctx_stats=ctx_stats,
-        fixed_probs=fixed_probs,
+        ctx_stats=ctx.ctx_stats,
+        fixed_probs=ctx.fixed_probs,
+        enable_flexible_generation=ctx.enable_flexible_generation,
     )
     _LOG.info(f"Generated P({target_columns[0]}) with shape {first_target_df.shape}")
 
@@ -381,7 +476,7 @@ def predict_proba(
 
     # For multi-target: extract values and column names for joint probability computation
     joint_probs = first_target_df.values
-    all_possible_values = [_get_possible_values(target_columns[0], tgt_stats)]
+    all_possible_values = [_get_possible_values(target_columns[0], ctx.tgt_stats)]
     all_column_names = [list(first_target_df.columns)]
 
     # Create extended_seed once - will grow incrementally as we process each target
@@ -393,7 +488,7 @@ def predict_proba(
         _LOG.info(f"Processing target {target_idx + 1}/{len(target_columns)}: {target_col}")
 
         # Get possible values for current target
-        current_possible_values = _get_possible_values(target_col, tgt_stats)
+        current_possible_values = _get_possible_values(target_col, ctx.tgt_stats)
         current_card = len(current_possible_values)
 
         # Get all combinations of previous targets
@@ -419,7 +514,7 @@ def predict_proba(
             for i in range(target_idx):
                 prev_target_col = target_columns[i]
                 encoded_val = prev_combo[i]
-                prev_target_stats = tgt_stats["columns"][prev_target_col]
+                prev_target_stats = ctx.tgt_stats["columns"][prev_target_col]
                 for sub_col_key in prev_target_stats["cardinalities"].keys():
                     full_sub_col_name = get_argn_name(
                         argn_processor=prev_target_stats[ARGN_PROCESSOR],
@@ -442,16 +537,17 @@ def predict_proba(
 
         # Single batched forward pass for all combinations
         all_conditional_df = _generate_marginal_probs(
-            model=model,
+            model=ctx.model,
             seed_encoded=batched_seed,
             target_column=target_col,
-            tgt_stats=tgt_stats,
-            tgt_cardinalities=tgt_cardinalities,
-            all_columns=all_columns,
-            device=device,
+            tgt_stats=ctx.tgt_stats,
+            tgt_cardinalities=ctx.tgt_cardinalities,
+            all_columns=ctx.all_columns,
+            device=ctx.device,
             ctx_data=batched_ctx_data,
-            ctx_stats=ctx_stats,
-            fixed_probs=fixed_probs,
+            ctx_stats=ctx.ctx_stats,
+            fixed_probs=ctx.fixed_probs,
+            enable_flexible_generation=ctx.enable_flexible_generation,
         )  # DataFrame: (n_samples * num_combos, current_card)
 
         # Extract probabilities for each combo and compute joint probabilities
@@ -479,3 +575,96 @@ def predict_proba(
 
     _LOG.info(f"PREDICT_PROBA finished: returned probabilities for {len(probs_df)} samples")
     return probs_df
+
+
+@torch.no_grad()
+def log_prob(
+    *,
+    workspace: Workspace,
+    data: pd.DataFrame,
+    ctx_data: pd.DataFrame | None = None,
+    device: torch.device | str | None = None,
+) -> pd.Series:
+    """
+    Compute log probability of full observations.
+
+    This function computes P(observation | model) - the likelihood of the observation
+    under the trained model. For autoregressive models:
+
+    log P(x1, x2, ..., xn) = log P(x1) + log P(x2|x1) + ... + log P(xn|x1,...,xn-1)
+
+    Each term is the probability the model assigns to the actual observed value.
+
+    Supports all encoding types including multi-sub-column encodings like numeric_digit,
+    and both flat and sequential models.
+
+    Args:
+        workspace: Workspace object containing model and stats
+        data: DataFrame with ALL columns containing observed values
+        ctx_data: Optional context data (for models with context)
+        device: Device to run inference on ('cuda' or 'cpu'). Defaults to 'cuda' if available.
+
+    Returns:
+        pd.Series of shape (n_samples,) with log probability per row.
+        Values are <= 0 (log probabilities).
+    """
+    _LOG.info("LOG_PROB started")
+
+    # Load model artifacts
+    model_config, tgt_stats, ctx_stats, is_sequential = load_model_artifacts(workspace)
+
+    # Get cardinalities and config
+    tgt_cardinalities = get_cardinalities(tgt_stats)
+    ctx_cardinalities = get_cardinalities(ctx_stats)
+    enable_flexible_generation = model_config.get("enable_flexible_generation", True)
+
+    # Resolve device
+    device = resolve_device(device)
+    _LOG.info(f"Using device: {device}")
+
+    # Get all columns in training order
+    all_columns = get_columns_from_cardinalities(tgt_cardinalities)
+
+    # Check column order of input data when flexible generation is disabled
+    if not enable_flexible_generation:
+        _check_column_order(list(data.columns), all_columns, "log_prob")
+
+    # Create and load model
+    model_units = model_config.get("model_units") or ModelSize.M
+    ctx_seq_len_median = ctx_stats.get("sequence_len_median")
+
+    model = create_and_load_model(
+        workspace=workspace,
+        is_sequential=is_sequential,
+        tgt_cardinalities=tgt_cardinalities,
+        ctx_cardinalities=ctx_cardinalities,
+        model_units=model_units,
+        ctx_seq_len_median=ctx_seq_len_median,
+        column_order=all_columns,
+        device=device,
+    )
+
+    # Encode full data to get observed codes for all columns
+    full_encoded, _, _ = encode_df(df=data, stats=tgt_stats)
+
+    n_samples = len(data)
+    _LOG.info(f"Computing log probabilities for {n_samples} samples")
+
+    # Build batch dict with ALL encoded values as tensors
+    batch_dict: dict[str, torch.Tensor] = {}
+    for col in full_encoded.columns:
+        batch_dict[col] = torch.tensor(full_encoded[col].values, dtype=torch.long, device=device).unsqueeze(-1)
+
+    # Add context data if provided
+    if ctx_data is not None and ctx_stats:
+        ctx_inputs, _, _ = prepare_context_inputs(ctx_data=ctx_data, ctx_stats=ctx_stats, device=device)
+        batch_dict.update(ctx_inputs)
+
+    # Use the training loss calculation directly - handles both flat and sequential models
+    losses = _calculate_sample_losses(model, batch_dict)
+
+    # Negate loss to get log probability (loss = -log_prob)
+    log_probs = -losses.cpu().numpy()
+
+    _LOG.info(f"LOG_PROB finished: computed log probs for {n_samples} samples")
+    return pd.Series(log_probs, name="log_prob")
