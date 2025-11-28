@@ -162,7 +162,7 @@ mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
 ```
 
-### Conditional Probabalities
+### Conditional Probabilities
 
 Assess any marginal conditional probability, for one or more target columns:
 
