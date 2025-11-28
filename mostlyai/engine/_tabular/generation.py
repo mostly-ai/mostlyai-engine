@@ -67,10 +67,8 @@ from mostlyai.engine._encoding_types.tabular.lat_long import decode_latlong
 from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_BINNED_NULL_TOKEN,
     NUMERIC_BINNED_SUB_COL_SUFFIX,
-    NUMERIC_BINNED_UNKNOWN_TOKEN,
     NUMERIC_DISCRETE_NULL_TOKEN,
     NUMERIC_DISCRETE_SUB_COL_SUFFIX,
-    NUMERIC_DISCRETE_UNKNOWN_TOKEN,
     decode_numeric,
 )
 from mostlyai.engine._memory import get_available_ram_for_heuristics, get_available_vram_for_heuristics
@@ -80,10 +78,13 @@ from mostlyai.engine._tabular.argn import (
     SequentialModel,
 )
 from mostlyai.engine._tabular.common import (
+    check_column_order,
     create_and_load_model,
+    fix_rare_token_probs,
     load_model_artifacts,
     prepare_context_inputs,
     resolve_device,
+    translate_fixed_probs,
 )
 from mostlyai.engine._tabular.encoding import encode_df
 from mostlyai.engine._tabular.fairness import FairnessTransforms, get_fairness_transforms
@@ -454,43 +455,6 @@ def _generation_batch_size_heuristic(mem_available_gb: float, ctx_stats: dict, t
 #########################
 
 
-def _fix_rare_token_probs(
-    stats: dict,
-    rare_category_replacement_method: RareCategoryReplacementMethod | None = None,
-) -> dict[str, dict[str, CodeProbabilities]]:
-    # suppress rare token for categorical when no_of_rare_categories == 0
-    mask = {
-        col: {CATEGORICAL_SUB_COL_SUFFIX: {col_stats["codes"][CATEGORICAL_UNKNOWN_TOKEN]: 0.0}}
-        for col, col_stats in stats["columns"].items()
-        if col_stats["encoding_type"] == ModelEncodingType.tabular_categorical
-        if "codes" in col_stats
-        if col_stats.get("no_of_rare_categories", 0) == 0
-    }
-    # suppress rare token for categorical if RareCategoryReplacementMethod is sample
-    if rare_category_replacement_method == RareCategoryReplacementMethod.sample:
-        mask |= {
-            col: {CATEGORICAL_SUB_COL_SUFFIX: {col_stats["codes"][CATEGORICAL_UNKNOWN_TOKEN]: 0.0}}
-            for col, col_stats in stats["columns"].items()
-            if col_stats["encoding_type"] == ModelEncodingType.tabular_categorical
-            if "codes" in col_stats
-        }
-    # always suppress rare token for numeric_binned
-    mask |= {
-        col: {NUMERIC_BINNED_SUB_COL_SUFFIX: {col_stats["codes"][NUMERIC_BINNED_UNKNOWN_TOKEN]: 0.0}}
-        for col, col_stats in stats["columns"].items()
-        if col_stats["encoding_type"] == ModelEncodingType.tabular_numeric_binned
-        if "codes" in col_stats
-    }
-    # always suppress rare token for numeric_discrete
-    mask |= {
-        col: {NUMERIC_DISCRETE_SUB_COL_SUFFIX: {col_stats["codes"][NUMERIC_DISCRETE_UNKNOWN_TOKEN]: 0.0}}
-        for col, col_stats in stats["columns"].items()
-        if col_stats["encoding_type"] == ModelEncodingType.tabular_numeric_discrete
-        if "codes" in col_stats
-    }
-    return mask
-
-
 def _fix_imputation_probs(
     stats: dict,
     imputation: ImputationConfig | None = None,
@@ -570,23 +534,6 @@ def _fix_rebalancing_probs(
         if code_probabilities:
             mask = {column: {CATEGORICAL_SUB_COL_SUFFIX: code_probabilities}}
 
-    return mask
-
-
-def _translate_fixed_probs(
-    fixed_probs: dict[str, dict[str, CodeProbabilities]], stats: dict
-) -> dict[str, CodeProbabilities]:
-    # translate fixed probs to ARGN conventions
-    mask = {
-        get_argn_name(
-            argn_processor=stats["columns"][col][ARGN_PROCESSOR],
-            argn_table=stats["columns"][col][ARGN_TABLE],
-            argn_column=stats["columns"][col][ARGN_COLUMN],
-            argn_sub_column=sub_col,
-        ): sub_col_mask
-        for col, col_mask in fixed_probs.items()
-        for sub_col, sub_col_mask in col_mask.items()
-    }
     return mask
 
 
@@ -903,17 +850,12 @@ def generate(
         _LOG.info(f"{trn_column_order=}")
 
         if not enable_flexible_generation:
-            # check if resolved column order is the same as the one from training
-            if gen_column_order != trn_column_order:
-                raise ValueError(
-                    "The column order for generation does not match the column order from training, due to seed, rebalancing, fairness or imputation configs. "
-                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
-                )
+            check_column_order(gen_column_order, trn_column_order)
         _LOG.info(f"{rare_category_replacement_method=}")
-        rare_token_fixed_probs = _fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
+        rare_token_fixed_probs = fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
         imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation)
         rebalancing_fixed_probs = _fix_rebalancing_probs(tgt_stats, rebalancing)
-        fixed_probs = _translate_fixed_probs(
+        fixed_probs = translate_fixed_probs(
             fixed_probs=_deepmerge(
                 rare_token_fixed_probs,
                 imputation_fixed_probs,

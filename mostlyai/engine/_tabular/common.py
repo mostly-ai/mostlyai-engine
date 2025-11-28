@@ -19,9 +19,31 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from mostlyai.engine._common import CTXFLT, CTXSEQ
+from mostlyai.engine._common import (
+    ARGN_COLUMN,
+    ARGN_PROCESSOR,
+    ARGN_TABLE,
+    CTXFLT,
+    CTXSEQ,
+    get_argn_name,
+)
+from mostlyai.engine._encoding_types.tabular.categorical import (
+    CATEGORICAL_SUB_COL_SUFFIX,
+    CATEGORICAL_UNKNOWN_TOKEN,
+)
+from mostlyai.engine._encoding_types.tabular.numeric import (
+    NUMERIC_BINNED_SUB_COL_SUFFIX,
+    NUMERIC_BINNED_UNKNOWN_TOKEN,
+    NUMERIC_DISCRETE_SUB_COL_SUFFIX,
+    NUMERIC_DISCRETE_UNKNOWN_TOKEN,
+)
+from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
+from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 _LOG = logging.getLogger(__name__)
+
+# Type alias for fixed probabilities
+CodeProbabilities = dict[int, float]
 
 DPLSTM_SUFFIXES: tuple = ("ih.weight", "ih.bias", "hh.weight", "hh.bias")
 
@@ -165,7 +187,6 @@ def prepare_context_inputs(
         - encoded_dataframe: Encoded context DataFrame (for extracting keys if needed)
         - encoded_primary_key: Name of encoded primary key column (None if not provided)
     """
-    from mostlyai.engine._tabular.encoding import encode_df, pad_ctx_sequences
 
     # Encode context data
     ctx_encoded, ctx_primary_key_encoded, _ = encode_df(df=ctx_data, stats=ctx_stats, ctx_primary_key=ctx_primary_key)
@@ -198,3 +219,97 @@ def prepare_context_inputs(
 
     # Merge and return with encoded dataframe
     return (ctxflt_inputs | ctxseq_inputs), ctx_encoded, ctx_primary_key_encoded
+
+
+def check_column_order(
+    gen_column_order: list[str],
+    trn_column_order: list[str],
+) -> None:
+    """
+    Check if column order matches training order.
+
+    Args:
+        gen_column_order: Column order for the current operation
+        trn_column_order: Column order from training
+
+    Raises:
+        ValueError: If column order doesn't match training order
+    """
+    if gen_column_order != trn_column_order:
+        raise ValueError(
+            "Column order does not match training order. "
+            "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
+        )
+
+
+def fix_rare_token_probs(
+    stats: dict,
+    rare_category_replacement_method: RareCategoryReplacementMethod | None = None,
+) -> dict[str, dict[str, CodeProbabilities]]:
+    """
+    Create fixed probabilities to suppress rare tokens.
+
+    Args:
+        stats: Target statistics dict
+        rare_category_replacement_method: How to handle rare categories
+
+    Returns:
+        Dict of column -> sub_column -> code -> probability
+    """
+    # suppress rare token for categorical when no_of_rare_categories == 0
+    mask = {
+        col: {CATEGORICAL_SUB_COL_SUFFIX: {col_stats["codes"][CATEGORICAL_UNKNOWN_TOKEN]: 0.0}}
+        for col, col_stats in stats["columns"].items()
+        if col_stats["encoding_type"] == ModelEncodingType.tabular_categorical
+        if "codes" in col_stats
+        if col_stats.get("no_of_rare_categories", 0) == 0
+    }
+    # suppress rare token for categorical if RareCategoryReplacementMethod is sample
+    if rare_category_replacement_method == RareCategoryReplacementMethod.sample:
+        mask |= {
+            col: {CATEGORICAL_SUB_COL_SUFFIX: {col_stats["codes"][CATEGORICAL_UNKNOWN_TOKEN]: 0.0}}
+            for col, col_stats in stats["columns"].items()
+            if col_stats["encoding_type"] == ModelEncodingType.tabular_categorical
+            if "codes" in col_stats
+        }
+    # always suppress rare token for numeric_binned
+    mask |= {
+        col: {NUMERIC_BINNED_SUB_COL_SUFFIX: {col_stats["codes"][NUMERIC_BINNED_UNKNOWN_TOKEN]: 0.0}}
+        for col, col_stats in stats["columns"].items()
+        if col_stats["encoding_type"] == ModelEncodingType.tabular_numeric_binned
+        if "codes" in col_stats
+    }
+    # always suppress rare token for numeric_discrete
+    mask |= {
+        col: {NUMERIC_DISCRETE_SUB_COL_SUFFIX: {col_stats["codes"][NUMERIC_DISCRETE_UNKNOWN_TOKEN]: 0.0}}
+        for col, col_stats in stats["columns"].items()
+        if col_stats["encoding_type"] == ModelEncodingType.tabular_numeric_discrete
+        if "codes" in col_stats
+    }
+    return mask
+
+
+def translate_fixed_probs(
+    fixed_probs: dict[str, dict[str, CodeProbabilities]], stats: dict
+) -> dict[str, CodeProbabilities]:
+    """
+    Translate fixed probs to ARGN naming conventions.
+
+    Args:
+        fixed_probs: Dict of column -> sub_column -> code -> probability
+        stats: Target statistics dict
+
+    Returns:
+        Dict of ARGN sub_column name -> code -> probability
+    """
+    mask = {
+        get_argn_name(
+            argn_processor=stats["columns"][col][ARGN_PROCESSOR],
+            argn_table=stats["columns"][col][ARGN_TABLE],
+            argn_column=stats["columns"][col][ARGN_COLUMN],
+            argn_sub_column=sub_col,
+        ): sub_col_mask
+        for col, col_mask in fixed_probs.items()
+        for sub_col, sub_col_mask in col_mask.items()
+    }
+    return mask

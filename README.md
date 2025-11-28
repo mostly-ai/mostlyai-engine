@@ -37,7 +37,8 @@ Two model classes with these methods are available:
    * `argn.fit(data)`: Train a TabularARGN model
    * `argn.sample(n_samples)`: Generate samples
    * `argn.predict(target, n_draws, agg_fn)`: Predict a feature
-   * `argn.predict_proba(target, n_draws)`: Estimate probabilities
+   * `argn.predict_proba(target)`: Estimate probabilities
+   * `argn.log_prob(data)`: Compute log likelihood
    * `argn.impute(data)`: Fill missing values
 2. `LanguageModel()`: For semi-structured, flat textual tabular data.
    * `.fit(data)`: Train a Language model
@@ -161,7 +162,7 @@ mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
 ```
 
-### Conditional Probabalities
+### Conditional Probabilities
 
 Assess any marginal conditional probability, for one or more target columns:
 
@@ -190,6 +191,15 @@ argn.predict_proba(
     X=data_test[["age", "race"]],
     target=["sex", "income"]
 )
+```
+
+### Log Probability
+
+Compute log likelihood of observations:
+
+```python
+# compute log probability for each observation
+log_probs = argn.log_prob(data_test)
 ```
 
 ## TabularARGN for Sequential Data

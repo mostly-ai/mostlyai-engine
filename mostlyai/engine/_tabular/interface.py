@@ -38,6 +38,7 @@ from mostlyai.engine._common import (
     median_fn,
     mode_fn,
 )
+from mostlyai.engine._tabular.probability import log_prob as _log_prob
 from mostlyai.engine._tabular.probability import predict_proba as _predict_proba
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.analysis import analyze
@@ -730,3 +731,54 @@ class TabularARGN(BaseEstimator):
         )
 
         return probs_df
+
+    def log_prob(
+        self,
+        X: pd.DataFrame,
+        ctx_data: pd.DataFrame | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Compute log probability of observations.
+
+        This method computes P(observation | model) - the likelihood of the observation
+        under the trained model. For autoregressive models:
+
+        log P(x1, x2, ..., xn) = log P(x1) + log P(x2|x1) + ... + log P(xn|x1,...,xn-1)
+
+        Each term is the probability the model assigns to the actual observed value.
+
+        Args:
+            X: DataFrame with all columns containing observed values.
+            ctx_data: Context data for generation. If None, uses the context data from training.
+            **kwargs: Additional generation parameters (device, etc.).
+
+        Returns:
+            pd.DataFrame of shape (n_samples, 1) with log probability per row.
+            Column name is "log_prob". Values are <= 0 (log probabilities).
+            More negative values indicate less likely samples.
+
+        Raises:
+            ValueError: If model is not fitted.
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before computing log_prob. Call fit() first.")
+
+        X_df = ensure_dataframe(X, columns=self._feature_names)
+
+        workspace = Workspace(self.workspace_dir)
+        device = kwargs.get("device", self.device)
+
+        # Prepare ctx_data
+        if ctx_data is None:
+            ctx_data = self.ctx_data
+        ctx_data_df = ensure_dataframe(ctx_data) if ctx_data is not None else None
+
+        log_probs = _log_prob(
+            workspace=workspace,
+            data=X_df,
+            ctx_data=ctx_data_df,
+            device=device,
+        )
+
+        return log_probs
