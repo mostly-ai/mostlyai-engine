@@ -365,7 +365,7 @@ class TestTabularARGNClassification:
         # Reorder columns in test data
         test_X = X.head(10)[["feature2", "feature1"]]
 
-        with pytest.raises(ValueError, match="column order.*does not match"):
+        with pytest.raises(ValueError, match="(?i)column order.*does not match"):
             argn.predict_proba(test_X, target="target")
 
 
@@ -653,5 +653,5 @@ class TestTabularARGNLogProb:
         """Test log_prob raises error with different column order when flexible generation is disabled."""
         test_data = log_prob_data.head(10)[["size", "color", "feature"]]  # Reordered
 
-        with pytest.raises(ValueError, match="column order.*does not match"):
+        with pytest.raises(ValueError, match="(?i)column order.*does not match"):
             fitted_log_prob_model_no_flex.log_prob(test_data)

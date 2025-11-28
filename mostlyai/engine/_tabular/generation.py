@@ -850,7 +850,7 @@ def generate(
         _LOG.info(f"{trn_column_order=}")
 
         if not enable_flexible_generation:
-            check_column_order(gen_column_order, trn_column_order, "generation")
+            check_column_order(gen_column_order, trn_column_order)
         _LOG.info(f"{rare_category_replacement_method=}")
         rare_token_fixed_probs = fix_rare_token_probs(tgt_stats, rare_category_replacement_method)
         imputation_fixed_probs = _fix_imputation_probs(tgt_stats, imputation)

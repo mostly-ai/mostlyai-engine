@@ -224,7 +224,6 @@ def prepare_context_inputs(
 def check_column_order(
     gen_column_order: list[str],
     trn_column_order: list[str],
-    operation_name: str,
 ) -> None:
     """
     Check if column order matches training order.
@@ -232,14 +231,13 @@ def check_column_order(
     Args:
         gen_column_order: Column order for the current operation
         trn_column_order: Column order from training
-        operation_name: Name of the calling operation (for error messages)
 
     Raises:
         ValueError: If column order doesn't match training order
     """
     if gen_column_order != trn_column_order:
         raise ValueError(
-            f"The column order for {operation_name} does not match the column order from training. "
+            "Column order does not match training order. "
             "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
         )
 
