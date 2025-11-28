@@ -234,3 +234,51 @@ def test_trn_val_split(tmp_path, trn_val_split, tgt_pk):
     val_tgt_data = pd.read_parquet(list((tmp_path / "OriginalData" / "tgt-data").glob("*val*")))
     assert len(trn_tgt_data) == pytest.approx(int(n * trn_val_split), rel=0.2)
     assert len(val_tgt_data) == pytest.approx(int(n * (1 - trn_val_split)), rel=0.2)
+
+
+def test_trn_val_split_callable(tmp_path):
+    # create context data with keys that have trn- or val- prefixes
+    ctx_df = pd.DataFrame(
+        {
+            "pk": [f"trn-{i}" for i in range(8)] + [f"val-{i}" for i in range(2)],
+            "cat": ["A", "B"] * 5,
+        }
+    )
+    # create target data referencing context keys
+    tgt_df = pd.DataFrame(
+        {
+            "fk": [f"trn-{i}" for i in range(8)] * 10 + [f"val-{i}" for i in range(2)] * 10,
+            "value": list(range(100)),
+        }
+    )
+
+    def custom_split(keys):
+        trn_keys = keys[keys.str.startswith("trn-")]
+        val_keys = keys[keys.str.startswith("val-")]
+        return trn_keys, val_keys
+
+    split(
+        tgt_data=tgt_df,
+        ctx_data=ctx_df,
+        tgt_context_key="fk",
+        ctx_primary_key="pk",
+        trn_val_split=custom_split,
+        workspace_dir=tmp_path,
+    )
+    tgt_data_path = tmp_path / "OriginalData" / "tgt-data"
+    ctx_data_path = tmp_path / "OriginalData" / "ctx-data"
+    trn_tgt_data = pd.read_parquet(list(tgt_data_path.glob("*trn*")))
+    val_tgt_data = pd.read_parquet(list(tgt_data_path.glob("*val*")))
+    trn_ctx_data = pd.read_parquet(list(ctx_data_path.glob("*trn*")))
+    val_ctx_data = pd.read_parquet(list(ctx_data_path.glob("*val*")))
+    # verify exact counts based on custom split logic
+    assert len(trn_tgt_data) == 80  # 8 trn keys * 10 rows each
+    assert len(val_tgt_data) == 20  # 2 val keys * 10 rows each
+    assert len(trn_ctx_data) == 8
+    assert len(val_ctx_data) == 2
+    # verify all training keys start with "trn-"
+    assert all(trn_tgt_data["fk"].str.startswith("trn-"))
+    assert all(trn_ctx_data["pk"].str.startswith("trn-"))
+    # verify all validation keys start with "val-"
+    assert all(val_tgt_data["fk"].str.startswith("val-"))
+    assert all(val_ctx_data["pk"].str.startswith("val-"))

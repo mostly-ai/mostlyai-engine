@@ -19,6 +19,7 @@ Split original data for training and validation.
 import logging
 import time
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -73,7 +74,7 @@ def split(
     tgt_encoding_types: dict[str, str | ModelEncodingType] | None = None,
     ctx_encoding_types: dict[str, str | ModelEncodingType] | None = None,
     n_partitions: int = 1,
-    trn_val_split: float = 0.8,
+    trn_val_split: float | Callable[[pd.Series], tuple[pd.Series, pd.Series]] = 0.8,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ) -> None:
@@ -99,7 +100,8 @@ def split(
         tgt_encoding_types: Encoding types for columns in the target data (excluding key columns).
         ctx_encoding_types: Encoding types for columns in the context data (excluding key columns).
         n_partitions: Number of partitions to split the data into.
-        trn_val_split: Fraction of data to use for training, with the remaining data used for validation.
+        trn_val_split: Fraction of data to use for training (0 < value < 1), or a callable
+            that takes keys as input and returns (trn_keys, val_keys) tuple.
         workspace_dir: Path to the workspace directory where files will be created.
         update_progress: A custom progress callback.
     """
@@ -189,13 +191,17 @@ def split(
             keys = tgt_data[tgt_context_key].drop_duplicates()
         else:
             keys = ctx_data[ctx_primary_key]
-        # shuffle keys
-        keys = keys.sample(frac=1)
-        # split randomly into trn and val
-        assert 0 < trn_val_split < 1, f"invalid trn_val_split: {trn_val_split}"
-        trn_cnt = round(trn_val_split * len(keys))
-        trn_keys = keys[:trn_cnt]
-        val_keys = keys[trn_cnt:]
+        # split into trn and val
+        if callable(trn_val_split):
+            trn_keys, val_keys = trn_val_split(keys)
+        else:
+            # shuffle keys
+            keys = keys.sample(frac=1)
+            # split randomly into trn and val
+            assert 0 < trn_val_split < 1, f"invalid trn_val_split: {trn_val_split}"
+            trn_cnt = round(trn_val_split * len(keys))
+            trn_keys = keys[:trn_cnt]
+            val_keys = keys[trn_cnt:]
 
         def save_partition(
             df: pd.DataFrame, path: Path, key: str, sel_trn_keys: np.ndarray, sel_val_keys: np.ndarray, idx: int
