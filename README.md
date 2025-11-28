@@ -200,6 +200,9 @@ Compute log likelihood of observations:
 ```python
 # compute log probability for each observation
 log_probs = argn.log_prob(data_test)
+
+# list top 10 outliers
+data_test.iloc[log_probs.argsort()[:10]]
 ```
 
 ## TabularARGN for Sequential Data

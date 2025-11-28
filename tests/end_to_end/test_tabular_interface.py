@@ -635,11 +635,10 @@ class TestTabularARGNLogProb:
         test_data = log_prob_data.head(10)
         log_probs = fitted_log_prob_model.log_prob(test_data)
 
-        assert isinstance(log_probs, pd.DataFrame)
+        assert isinstance(log_probs, np.ndarray)
         assert len(log_probs) == 10
-        assert list(log_probs.columns) == ["log_prob"]
-        assert (log_probs["log_prob"] <= 0).all()
-        assert np.isfinite(log_probs["log_prob"]).any()
+        assert (log_probs <= 0).all()
+        assert np.isfinite(log_probs).any()
 
     def test_log_prob_values_differ_by_observation(self, fitted_log_prob_model, log_prob_data):
         """Test that different observations get different log probabilities."""
@@ -647,7 +646,7 @@ class TestTabularARGNLogProb:
         log_probs = fitted_log_prob_model.log_prob(test_data)
 
         # Different observations should generally have different log probs
-        assert log_probs["log_prob"].nunique() > 1
+        assert len(np.unique(log_probs)) > 1
 
     def test_log_prob_wrong_column_order_raises(self, fitted_log_prob_model_no_flex, log_prob_data):
         """Test log_prob raises error with different column order when flexible generation is disabled."""
@@ -677,8 +676,7 @@ class TestTabularARGNLogProb:
 
         log_probs = argn.log_prob(tgt_data)
 
-        assert isinstance(log_probs, pd.DataFrame)
+        assert isinstance(log_probs, np.ndarray)
         assert len(log_probs) == len(tgt_data)
-        assert list(log_probs.columns) == ["log_prob"]
-        assert (log_probs["log_prob"] <= 0).all()
-        assert np.isfinite(log_probs["log_prob"]).any()
+        assert (log_probs <= 0).all()
+        assert np.isfinite(log_probs).any()

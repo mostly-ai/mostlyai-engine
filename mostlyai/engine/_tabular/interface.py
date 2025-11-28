@@ -737,7 +737,7 @@ class TabularARGN(BaseEstimator):
         X: pd.DataFrame,
         ctx_data: pd.DataFrame | None = None,
         **kwargs,
-    ) -> pd.DataFrame:
+    ) -> np.ndarray:
         """
         Compute log probability of observations.
 
@@ -754,8 +754,8 @@ class TabularARGN(BaseEstimator):
             **kwargs: Additional generation parameters (device, etc.).
 
         Returns:
-            pd.DataFrame of shape (n_samples, 1) with log probability per row.
-            Column name is "log_prob". Values are <= 0 (log probabilities).
+            np.ndarray of shape (n_samples,) with log probability per row.
+            Values are <= 0 (log probabilities).
             More negative values indicate less likely samples.
 
         Raises:
