@@ -29,7 +29,6 @@ from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_DISCRETE_SUB_COL_SUFFIX,
 )
 from mostlyai.engine._tabular.generation import (
-    RareCategoryReplacementMethod,
     RebalancingConfig,
     _batch_df,
     _deepmerge,
