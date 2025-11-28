@@ -553,7 +553,7 @@ def log_prob(
     data: pd.DataFrame,
     ctx_data: pd.DataFrame | None = None,
     device: torch.device | str | None = None,
-) -> pd.Series:
+) -> pd.DataFrame:
     """
     Compute log probability of full observations.
 
@@ -574,8 +574,8 @@ def log_prob(
         device: Device to run inference on ('cuda' or 'cpu'). Defaults to 'cuda' if available.
 
     Returns:
-        pd.Series of shape (n_samples,) with log probability per row.
-        Values are <= 0 (log probabilities).
+        pd.DataFrame of shape (n_samples, 1) with log probability per row.
+        Column name is "log_prob". Values are <= 0 (log probabilities).
     """
     _LOG.info("LOG_PROB started")
 
@@ -636,4 +636,4 @@ def log_prob(
     log_probs = -losses.cpu().numpy()
 
     _LOG.info(f"LOG_PROB finished: computed log probs for {n_samples} samples")
-    return pd.Series(log_probs, name="log_prob")
+    return pd.DataFrame({"log_prob": log_probs})
