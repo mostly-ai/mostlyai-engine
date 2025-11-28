@@ -23,13 +23,10 @@ from mostlyai.engine._common import (
 )
 from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_SUB_COL_SUFFIX,
-    CATEGORICAL_UNKNOWN_TOKEN,
 )
 from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_BINNED_SUB_COL_SUFFIX,
-    NUMERIC_BINNED_UNKNOWN_TOKEN,
     NUMERIC_DISCRETE_SUB_COL_SUFFIX,
-    NUMERIC_DISCRETE_UNKNOWN_TOKEN,
 )
 from mostlyai.engine._tabular.generation import (
     RareCategoryReplacementMethod,
@@ -37,75 +34,11 @@ from mostlyai.engine._tabular.generation import (
     _batch_df,
     _deepmerge,
     _fix_imputation_probs,
-    _fix_rare_token_probs,
     _fix_rebalancing_probs,
     _reshape_pt_to_pandas,
     _resolve_gen_column_order,
-    _translate_fixed_probs,
 )
 from mostlyai.engine.domain import FairnessConfig, ImputationConfig, ModelEncodingType
-
-
-class TestFixRareTokenProbs:
-    @pytest.mark.parametrize(
-        "encoding_type",
-        [
-            ModelEncodingType.tabular_numeric_binned,
-            ModelEncodingType.tabular_numeric_discrete,
-            ModelEncodingType.tabular_numeric_digit,
-        ],
-    )
-    def test_numerics(self, encoding_type):
-        subcol, code = {
-            ModelEncodingType.tabular_numeric_binned: (NUMERIC_BINNED_SUB_COL_SUFFIX, 1),
-            ModelEncodingType.tabular_numeric_discrete: (NUMERIC_DISCRETE_SUB_COL_SUFFIX, 0),
-            ModelEncodingType.tabular_numeric_digit: (None, None),
-        }[encoding_type]
-
-        def get_stats() -> dict:
-            return {
-                "columns": {
-                    "column": {
-                        "encoding_type": encoding_type,
-                        "codes": {
-                            NUMERIC_DISCRETE_UNKNOWN_TOKEN: 0,
-                            NUMERIC_BINNED_UNKNOWN_TOKEN: 1,
-                        },
-                    },
-                }
-            }
-
-        stats = get_stats()
-        fixed_probs = _fix_rare_token_probs(stats)
-        expected = {"column": {subcol: {code: 0.0}}} if subcol else {}
-        assert fixed_probs == expected
-
-    @pytest.mark.parametrize(
-        "no_of_rare_categories,rare_category_replacement_method,do_fix",
-        [
-            (0, None, True),
-            (1, None, False),
-            (1, RareCategoryReplacementMethod.sample, True),
-        ],
-    )
-    def test_categoricals(self, no_of_rare_categories, rare_category_replacement_method, do_fix):
-        def get_stats() -> dict:
-            return {
-                "columns": {
-                    "column": {
-                        "encoding_type": ModelEncodingType.tabular_categorical.value,
-                        "no_of_rare_categories": no_of_rare_categories,
-                        "codes": {CATEGORICAL_UNKNOWN_TOKEN: 0},
-                    },
-                }
-            }
-
-        fixed_probs = _fix_rare_token_probs(
-            stats=get_stats(),
-            rare_category_replacement_method=rare_category_replacement_method,
-        )
-        expected = {"column": {CATEGORICAL_SUB_COL_SUFFIX: {0: 0.0}}} if do_fix else {}
-        assert fixed_probs == expected
 
 
 class TestFixImputationProbs:
@@ -203,22 +136,6 @@ class TestFixRebalancingProbs:
             stats=self.get_stats(), rebalancing=RebalancingConfig(column="income", probabilities={">100K": 0.3})
         )
         assert fixed_probs == {}
-
-
-class TestTranslateFixedProbs:
-    def test(self):
-        fixed_probs = {"column": {"cat": {0: 0.0}}}
-        stats = {
-            "columns": {
-                "column": {
-                    ARGN_PROCESSOR: "tgt",
-                    ARGN_TABLE: "t0",
-                    ARGN_COLUMN: "c0",
-                }
-            }
-        }
-        fixed_probs_model = _translate_fixed_probs(fixed_probs, stats)
-        assert fixed_probs_model == {"tgt:t0/c0__cat": {0: 0.0}}
 
 
 class TestDeepmerge:
