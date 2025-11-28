@@ -165,6 +165,19 @@ mae = mean_absolute_error(data_test["age"], predictions)
 print(f"MAE: {mae:.1f} years")
 ```
 
+### Log Probability / Anomaly Detection
+
+Compute log likelihood of observations:
+
+```python
+# compute log probability for each observation
+log_probs = argn.log_prob(data_test)
+
+# identify anomalies (low probability samples)
+threshold = log_probs["log_prob"].quantile(0.01)
+anomalies = data_test[log_probs["log_prob"] < threshold]
+```
+
 ## TabularARGN for Sequential Data
 
 For sequential data (e.g., time series or event logs), specify the context key:
