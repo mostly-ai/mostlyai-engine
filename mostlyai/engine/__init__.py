@@ -34,7 +34,7 @@ __all__ = [
     "TabularARGN",
     "LanguageModel",
 ]
-__version__ = "2.3.0"
+__version__ = "2.3.1"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*multi-threaded.*fork.*")
