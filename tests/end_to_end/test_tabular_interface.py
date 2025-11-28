@@ -655,3 +655,30 @@ class TestTabularARGNLogProb:
 
         with pytest.raises(ValueError, match="(?i)column order.*does not match"):
             fitted_log_prob_model_no_flex.log_prob(test_data)
+
+    def test_log_prob_sequential(self, tmp_path_factory):
+        """Test log_prob works with sequential models."""
+        tgt_data = pd.DataFrame(
+            {
+                "ctx_id": ["ctx1", "ctx1", "ctx1", "ctx2", "ctx2", "ctx3", "ctx3", "ctx3", "ctx3"],
+                "value": [10, 20, 30, 15, 25, 12, 22, 32, 42],
+                "label": ["x", "y", "x", "x", "y", "x", "y", "x", "y"],
+            }
+        )
+
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            tgt_context_key="ctx_id",
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=tgt_data)
+
+        log_probs = argn.log_prob(tgt_data)
+
+        assert isinstance(log_probs, pd.DataFrame)
+        assert len(log_probs) == len(tgt_data)
+        assert list(log_probs.columns) == ["log_prob"]
+        assert (log_probs["log_prob"] <= 0).all()
+        assert np.isfinite(log_probs["log_prob"]).any()
