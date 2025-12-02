@@ -38,6 +38,7 @@ from mostlyai.engine._common import (
     median_fn,
     mode_fn,
 )
+from mostlyai.engine._tabular.probability import embed as _embed
 from mostlyai.engine._tabular.probability import log_prob as _log_prob
 from mostlyai.engine._tabular.probability import predict_proba as _predict_proba
 from mostlyai.engine._workspace import Workspace
@@ -782,3 +783,44 @@ class TabularARGN(BaseEstimator):
         )
 
         return log_probs
+
+    def embed(
+        self,
+        x: pd.Series,
+        device: str | None = None,
+    ) -> np.ndarray:
+        """
+        Return column embeddings for the provided column values.
+
+        This method generates learned column embeddings for the values in the provided
+        pandas Series. The column must have been present during model training.
+
+        Args:
+            x: A pandas Series containing values to embed. The Series name must match
+               a column name from training.
+            device: Device to run inference on ('cuda' or 'cpu'). If None, uses CUDA
+                   if available, otherwise CPU.
+
+        Returns:
+            np.ndarray of shape (n_samples, embedding_dim) containing the column embeddings.
+
+        Raises:
+            ValueError: If model is not fitted.
+            ValueError: If column name is not found in training data.
+            ValueError: If model is sequential (not supported).
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before computing embeddings. Call fit() first.")
+
+        if x.name is None:
+            raise ValueError("Series must have a name attribute set to the column name from training.")
+
+        workspace = Workspace(self.workspace_dir)
+
+        embeddings = _embed(
+            workspace=workspace,
+            x=x,
+            device=device or self.device,
+        )
+
+        return embeddings

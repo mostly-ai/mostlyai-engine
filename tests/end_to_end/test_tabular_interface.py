@@ -590,6 +590,50 @@ class TestTabularARGNFlatWithContext:
         assert "label" in syn_data.columns
 
 
+class TestTabularARGNEmbed:
+    """Test embed() for computing column embeddings."""
+
+    @pytest.fixture
+    def fitted_embed_model(self, simple_tabular_data, tmp_path_factory):
+        """Create a fitted model for embed tests."""
+        argn = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=simple_tabular_data)
+        return argn
+
+    def test_embed(self, fitted_embed_model, simple_tabular_data):
+        """Test embed returns valid embeddings."""
+        embeddings = fitted_embed_model.embed(simple_tabular_data["category"].head(10))
+        assert isinstance(embeddings, np.ndarray)
+        assert embeddings.shape[0] == 10
+        assert embeddings.shape[1] > 0
+        assert np.isfinite(embeddings).all()
+
+        # Same values produce same embeddings
+        same_values = pd.Series(["A", "A", "A"], name="category")
+        same_embeddings = fitted_embed_model.embed(same_values)
+        assert np.allclose(same_embeddings[0], same_embeddings[1])
+
+    def test_embed_raises_errors(self, fitted_embed_model, simple_tabular_data, tmp_path_factory):
+        """Test embed raises appropriate errors."""
+        # Not fitted
+        unfitted = TabularARGN(verbose=0, workspace_dir=tmp_path_factory.mktemp("workspace"))
+        with pytest.raises(ValueError, match="fitted"):
+            unfitted.embed(simple_tabular_data["category"].head(5))
+
+        # Unknown column
+        with pytest.raises(ValueError, match="not found"):
+            fitted_embed_model.embed(pd.Series(["a"], name="unknown"))
+
+        # No name
+        with pytest.raises(ValueError, match="name"):
+            fitted_embed_model.embed(pd.Series(["A"]))
+
+
 class TestTabularARGNLogProb:
     """Test log_prob() for computing log likelihood of observations."""
 

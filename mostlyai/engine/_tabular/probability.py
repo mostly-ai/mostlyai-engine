@@ -529,6 +529,111 @@ def predict_proba(
 
 
 @torch.no_grad()
+def embed(
+    *,
+    workspace: Workspace,
+    x: pd.Series,
+    device: torch.device | str | None = None,
+) -> np.ndarray:
+    """
+    Compute column embeddings for a given column.
+
+    This function encodes the input values and passes them through the model's
+    embedding layers to produce learned column representations.
+
+    Args:
+        workspace: Workspace object containing model and stats
+        x: A pandas Series containing values to embed. The Series name must match
+           a column name from training.
+        device: Device to run inference on ('cuda' or 'cpu'). Defaults to 'cuda' if available.
+
+    Returns:
+        np.ndarray of shape (n_samples, embedding_dim) containing the column embeddings.
+
+    Raises:
+        ValueError: If column name is not found in training data.
+        ValueError: If model is sequential (not supported).
+    """
+    _LOG.info(f"EMBED started for column: {x.name}")
+
+    column_name = x.name
+    if column_name is None:
+        raise ValueError("Series must have a name attribute set to the column name from training.")
+
+    # Initialize model (without rare_category_replacement_method since we don't need fixed_probs)
+    model, tgt_stats, ctx_stats, tgt_cardinalities, all_columns, _, device, _ = _initialize_model(
+        workspace=workspace,
+        rare_category_replacement_method=None,
+        device=device,
+        allow_sequential=False,
+    )
+
+    # Validate column exists in training data
+    if column_name not in tgt_stats["columns"]:
+        raise ValueError(
+            f"Column '{column_name}' not found in training data. Available columns: {list(tgt_stats['columns'].keys())}"
+        )
+
+    # Create DataFrame from Series for encoding
+    df = x.to_frame()
+
+    # Encode the values
+    encoded_df, _, _ = encode_df(df=df, stats=tgt_stats)
+
+    n_samples = len(x)
+    _LOG.info(f"Computing embeddings for {n_samples} samples")
+
+    # Get column stats and ARGN column name
+    col_stats = tgt_stats["columns"][column_name]
+    argn_column_name = get_argn_name(
+        argn_processor=col_stats[ARGN_PROCESSOR],
+        argn_table=col_stats[ARGN_TABLE],
+        argn_column=col_stats[ARGN_COLUMN],
+    )
+
+    # Get sub-column names for this column
+    sub_col_names = [
+        get_argn_name(
+            argn_processor=col_stats[ARGN_PROCESSOR],
+            argn_table=col_stats[ARGN_TABLE],
+            argn_column=col_stats[ARGN_COLUMN],
+            argn_sub_column=sub_col,
+        )
+        for sub_col in col_stats["cardinalities"].keys()
+    ]
+
+    # Build batch dict for the encoded values
+    batch_dict = {}
+    for sub_col in sub_col_names:
+        if sub_col in encoded_df.columns:
+            batch_dict[sub_col] = torch.unsqueeze(
+                torch.tensor(encoded_df[sub_col].values, dtype=torch.long, device=device),
+                dim=-1,
+            )
+
+    # Pass through sub-column embedders
+    sub_col_embeddings = {}
+    for sub_col in sub_col_names:
+        if sub_col in batch_dict:
+            xs = batch_dict[sub_col]
+            xs = model.embedders.get(sub_col)(xs)
+            xs = torch.squeeze(xs, -2)
+            sub_col_embeddings[sub_col] = xs
+
+    # Concatenate sub-column embeddings for column embedder input
+    col_embed_in = torch.cat([sub_col_embeddings[sc] for sc in sub_col_names], dim=-1)
+
+    # Pass through column embedder
+    col_embeddings = model.column_embedders.get(argn_column_name)(col_embed_in)
+
+    # Convert to numpy
+    embeddings = col_embeddings.cpu().numpy()
+
+    _LOG.info(f"EMBED finished: returned embeddings with shape {embeddings.shape}")
+    return embeddings
+
+
+@torch.no_grad()
 def log_prob(
     *,
     workspace: Workspace,

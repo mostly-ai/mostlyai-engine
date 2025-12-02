@@ -40,6 +40,7 @@ Two model classes with these methods are available:
    * `argn.predict_proba(target)`: Estimate probabilities
    * `argn.log_prob(data)`: Compute log likelihood
    * `argn.impute(data)`: Fill missing values
+   * `argn.embed(column)`: Get column embeddings
 2. `LanguageModel()`: For semi-structured, flat textual tabular data.
    * `.fit(data)`: Train a Language model
    * `.sample(n_samples)`: Generate samples
@@ -203,6 +204,18 @@ log_probs = argn.log_prob(data_test)
 
 # list top 10 outliers
 data_test.iloc[log_probs.argsort()[:10]]
+```
+
+### Column Embeddings
+
+Extract learned column embeddings for downstream tasks:
+
+```python
+# get embeddings for a categorical column
+embeddings = argn.embed(data_test["income"])
+
+# get embeddings for a numeric column
+embeddings = argn.embed(data_test["age"])
 ```
 
 ## TabularARGN for Sequential Data
