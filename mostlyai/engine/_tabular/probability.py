@@ -34,7 +34,6 @@ from mostlyai.engine._common import (
     get_argn_name,
     get_cardinalities,
     get_columns_from_cardinalities,
-    get_sub_columns_from_cardinalities,
 )
 from mostlyai.engine._encoding_types.tabular.numeric import (
     NUMERIC_BINNED_MAX_TOKEN,
@@ -46,6 +45,7 @@ from mostlyai.engine._tabular.common import (
     check_column_order,
     create_and_load_model,
     fix_rare_token_probs,
+    get_argn_column_names,
     load_model_artifacts,
     prepare_context_inputs,
     resolve_device,
@@ -243,29 +243,25 @@ def _generate_marginal_probs(
     seed_encoded: pd.DataFrame,
     target_column: str,
     tgt_stats: dict,
-    tgt_cardinalities: dict,
-    all_columns: list[str],
+    seed_columns: list[str],
     device: torch.device,
     ctx_data: pd.DataFrame | None = None,
     ctx_stats: dict | None = None,
     fixed_probs: dict | None = None,
-    enable_flexible_generation: bool = True,
-) -> np.ndarray:
+) -> pd.DataFrame:
     """
     Generate P(target | seed_features, context).
 
     Args:
         model: The generative model
         seed_encoded: Encoded seed features (may include previous targets)
-        target_column: Target column to predict
+        target_column: Target column to predict (original column name)
         tgt_stats: Target statistics
-        tgt_cardinalities: Target cardinalities dict
-        all_columns: All columns in training order
+        seed_columns: Seed column names in original format, in correct order
         device: Device for computation
         ctx_data: Optional context data
         ctx_stats: Optional context statistics (required if ctx_data provided)
         fixed_probs: Optional fixed probabilities for rare token handling
-        enable_flexible_generation: Whether flexible generation is enabled
 
     Returns:
         DataFrame of shape (n_samples, cardinality) with probabilities and column names
@@ -275,16 +271,10 @@ def _generate_marginal_probs(
 
     # Build fixed_values dict from seed_encoded
     seed_batch_dict = {}
-    seed_columns = set()
 
     # Add all columns from seed_encoded
-    for sub_col in get_sub_columns_from_cardinalities(tgt_cardinalities):
-        if sub_col in seed_encoded.columns:
-            seed_batch_dict[sub_col] = torch.tensor(seed_encoded[sub_col].values, dtype=torch.long, device=device)
-            parts = sub_col.split("/")
-            if len(parts) >= 2:
-                col_name = parts[-2]
-                seed_columns.add(col_name)
+    for sub_col in seed_encoded.columns:
+        seed_batch_dict[sub_col] = torch.tensor(seed_encoded[sub_col].values, dtype=torch.long, device=device)
 
     # Get target sub-columns
     target_sub_cols = [
@@ -297,12 +287,12 @@ def _generate_marginal_probs(
         for sub_col in target_stats["cardinalities"].keys()
     ]
 
-    # Determine column order: seed columns + target (in training order)
-    gen_column_order = [col for col in all_columns if col in seed_columns or col == target_column]
+    # Convert column names to ARGN format for model
+    seed_columns_argn = get_argn_column_names(tgt_stats["columns"], seed_columns)
+    target_argn_name = get_argn_column_names(tgt_stats["columns"], [target_column])[0]
 
-    # Check column order when flexible generation is disabled
-    if not enable_flexible_generation:
-        check_column_order(gen_column_order, all_columns)
+    # Determine column order: seed columns + target (in training order)
+    gen_column_order = seed_columns_argn + [target_argn_name]
 
     # Prepare context inputs if provided
     if ctx_data is not None and ctx_stats is not None:
@@ -319,11 +309,6 @@ def _generate_marginal_probs(
         fixed_values=seed_batch_dict,
         column_order=gen_column_order,
     )
-
-    # Extract probabilities (assuming single sub-column for simplicity)
-    # For multi-sub-column cases, we'd need to handle differently
-    if len(target_sub_cols) != 1:
-        raise NotImplementedError("Multi-target joint probabilities currently only support single sub-column targets")
 
     probs_array = probs_dct[target_sub_cols[0]].cpu().numpy()
 
@@ -377,6 +362,16 @@ def predict_proba(
         )
     )
 
+    # Get seed column names (needed for column order check and _generate_marginal_probs)
+    seed_columns = list(seed_data.columns)
+
+    # Check column order when flexible generation is disabled
+    if not enable_flexible_generation:
+        seed_columns_argn = get_argn_column_names(tgt_stats["columns"], seed_columns)
+        target_columns_argn = get_argn_column_names(tgt_stats["columns"], target_columns)
+        gen_column_order = seed_columns_argn + target_columns_argn
+        check_column_order(gen_column_order, all_columns)
+
     # Encode seed data (features to condition on) - common for both single and multi-target
     # seed_data should NOT include any target columns
     seed_encoded, _, _ = encode_df(
@@ -410,13 +405,11 @@ def predict_proba(
         seed_encoded=seed_encoded,
         target_column=target_columns[0],
         tgt_stats=tgt_stats,
-        tgt_cardinalities=tgt_cardinalities,
-        all_columns=all_columns,
+        seed_columns=seed_columns,
         device=device,
         ctx_data=ctx_data,
         ctx_stats=ctx_stats,
         fixed_probs=fixed_probs,
-        enable_flexible_generation=enable_flexible_generation,
     )
     _LOG.info(f"Generated P({target_columns[0]}) with shape {first_target_df.shape}")
 
@@ -486,19 +479,20 @@ def predict_proba(
         if ctx_data is not None:
             batched_ctx_data = pd.concat([ctx_data] * num_prev_combos, ignore_index=True)
 
+        # Compute extended seed_columns including previous targets
+        extended_seed_columns = seed_columns + target_columns[:target_idx]
+
         # Single batched forward pass for all combinations
         all_conditional_df = _generate_marginal_probs(
             model=model,
             seed_encoded=batched_seed,
             target_column=target_col,
             tgt_stats=tgt_stats,
-            tgt_cardinalities=tgt_cardinalities,
-            all_columns=all_columns,
+            seed_columns=extended_seed_columns,
             device=device,
             ctx_data=batched_ctx_data,
             ctx_stats=ctx_stats,
             fixed_probs=fixed_probs,
-            enable_flexible_generation=enable_flexible_generation,
         )  # DataFrame: (n_samples * num_combos, current_card)
 
         # Extract probabilities for each combo and compute joint probabilities

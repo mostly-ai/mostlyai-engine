@@ -81,6 +81,7 @@ from mostlyai.engine._tabular.common import (
     check_column_order,
     create_and_load_model,
     fix_rare_token_probs,
+    get_argn_column_names,
     load_model_artifacts,
     prepare_context_inputs,
     resolve_device,
@@ -127,40 +128,20 @@ def _resolve_gen_column_order(
 
     if imputation:
         # imputed columns should be at the end in the generation model
-        imputation_argn = [
-            get_argn_name(
-                argn_processor=column_stats[col][ARGN_PROCESSOR],
-                argn_table=column_stats[col][ARGN_TABLE],
-                argn_column=column_stats[col][ARGN_COLUMN],
-            )
-            for col in imputation.columns
-            if col in column_stats
-        ]
+        imputation_argn = get_argn_column_names(column_stats, imputation.columns)
         column_order = [c for c in column_order if c not in imputation_argn] + imputation_argn
     else:
         imputation_argn = []
 
     if fairness:
         # bring sensitive columns to the front and target column to the back
-        sensitive_columns_argn = [
-            get_argn_name(
-                argn_processor=column_stats[col][ARGN_PROCESSOR],
-                argn_table=column_stats[col][ARGN_TABLE],
-                argn_column=column_stats[col][ARGN_COLUMN],
-            )
-            for col in fairness.sensitive_columns
-            if col in column_stats
-        ]
+        sensitive_columns_argn = get_argn_column_names(column_stats, fairness.sensitive_columns)
         # imputed sensitive columns should be after other usual sensitive columns
         sensitive_columns_argn = [c for c in sensitive_columns_argn if c not in imputation_argn] + [
             c for c in sensitive_columns_argn if c in imputation_argn
         ]
 
-        target_column_argn = get_argn_name(
-            argn_processor=column_stats[fairness.target_column][ARGN_PROCESSOR],
-            argn_table=column_stats[fairness.target_column][ARGN_TABLE],
-            argn_column=column_stats[fairness.target_column][ARGN_COLUMN],
-        )
+        target_column_argn = get_argn_column_names(column_stats, [fairness.target_column])[0]
         column_order = (
             sensitive_columns_argn
             + [c for c in column_order if c not in sensitive_columns_argn + [target_column_argn]]
@@ -171,25 +152,13 @@ def _resolve_gen_column_order(
         # rebalance column should be at the beginning in the generation model
         # rebalancing has higher priority than imputation
         if rebalancing.column in column_stats:
-            rebalance_column_argn = get_argn_name(
-                argn_processor=column_stats[rebalancing.column][ARGN_PROCESSOR],
-                argn_table=column_stats[rebalancing.column][ARGN_TABLE],
-                argn_column=column_stats[rebalancing.column][ARGN_COLUMN],
-            )
+            rebalance_column_argn = get_argn_column_names(column_stats, [rebalancing.column])[0]
             column_order = [rebalance_column_argn] + [c for c in column_order if c != rebalance_column_argn]
 
     if seed_data is not None:
         # seed_data columns should be at the beginning in the generation model
         # seed_data has higher priority than rebalancing and imputation
-        seed_columns_argn = [
-            get_argn_name(
-                argn_processor=column_stats[col][ARGN_PROCESSOR],
-                argn_table=column_stats[col][ARGN_TABLE],
-                argn_column=column_stats[col][ARGN_COLUMN],
-            )
-            for col in seed_data.columns
-            if col in column_stats
-        ]
+        seed_columns_argn = get_argn_column_names(column_stats, list(seed_data.columns))
         column_order = seed_columns_argn + [c for c in column_order if c not in seed_columns_argn]
 
     if POSITIONAL_COLUMN in column_order:
