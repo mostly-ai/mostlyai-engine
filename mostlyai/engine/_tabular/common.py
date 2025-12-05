@@ -242,6 +242,28 @@ def check_column_order(
         )
 
 
+def get_argn_column_names(column_stats: dict, columns: list[str]) -> list[str]:
+    """
+    Convert original column names to internal ARGN column names.
+
+    Args:
+        column_stats: Column statistics dict (e.g., tgt_stats["columns"])
+        columns: List of original column names
+
+    Returns:
+        List of ARGN column names (e.g., ['tgt:t0/c0', 'tgt:t1/c1'])
+    """
+    return [
+        get_argn_name(
+            argn_processor=column_stats[col][ARGN_PROCESSOR],
+            argn_table=column_stats[col][ARGN_TABLE],
+            argn_column=column_stats[col][ARGN_COLUMN],
+        )
+        for col in columns
+        if col in column_stats
+    ]
+
+
 def fix_rare_token_probs(
     stats: dict,
     rare_category_replacement_method: RareCategoryReplacementMethod | None = None,
