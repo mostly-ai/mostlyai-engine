@@ -203,7 +203,7 @@ class TabularARGN(BaseEstimator):
                 else:
                     # Fall back to default name
                     self._target_column = "target"
-            X_df[self._target_column] = y_array
+            X_df.loc[:, self._target_column] = y_array
 
         # Get workspace directory
         workspace_dir = self._get_workspace_dir()
