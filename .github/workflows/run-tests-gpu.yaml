@@ -1,54 +1,53 @@
-name: "[GPU] mostlyai-engine Tests"
+name: '[GPU] mostlyai-engine Tests'
 
 on:
-    workflow_call:
-
+  workflow_call:
 
 env:
-    PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
-    FORCE_COLOR: "1"
+  PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+  FORCE_COLOR: '1'
 
 jobs:
-    run-tests-gpu:
-        runs-on: gha-gpu-public
-        container:
-            image: nvidia/cuda:12.9.1-cudnn-runtime-ubuntu22.04
-            options: --gpus all
-        permissions:
-            contents: read
-            packages: write
-        steps:
-          - name: Setup | Install Git
-            run: |
-              apt-get update -qq
-              apt-get install -y --no-install-recommends git build-essential
+  run-tests-gpu:
+    runs-on: gha-gpu-public
+    container:
+      image: nvidia/cuda:12.9.1-cudnn-runtime-ubuntu22.04
+      options: --gpus all
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Setup | Install Git
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends git build-essential
 
-          - name: Setup | Checkout
-            uses: actions/checkout@v4
-            with:
-                fetch-depth: 0
-                submodules: 'recursive'
+      - name: Setup | Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
 
-          - name: Setup | uv
-            uses: astral-sh/setup-uv@v5
-            with:
-              enable-cache: false
-              python-version: '3.10'
+      - name: Setup | uv
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # v7.1.5
+        with:
+          enable-cache: false
+          python-version: '3.10'
 
-          - name: Setup | Dependencies
-            run: |
-              uv sync --frozen --only-group dev
-              uv pip install ".[gpu]"
-              uv pip install "triton==3.4.0"  # temporary fix for issues on GitHub runner (T4 GPU); to be removed after upgrading to torch 2.8
+      - name: Setup | Dependencies
+        run: |
+          uv sync --frozen --only-group dev
+          uv pip install ".[gpu]"
+          uv pip install "triton==3.4.0"  # temporary fix for issues on GitHub runner (T4 GPU); to be removed after upgrading to torch 2.8
 
-          - name: Setup | Check for available GPU-s
-            run: nvidia-smi
+      - name: Setup | Check for available GPU-s
+        run: nvidia-smi
 
-          - name: Run tests -> end_to_end -> sequential
-            run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential.py
+      - name: Run tests -> end_to_end -> sequential
+        run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential.py
 
-          - name: Run tests -> end_to_end -> sequential context
-            run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential_context.py
+      - name: Run tests -> end_to_end -> sequential context
+        run: uv run --no-sync pytest tests/end_to_end/test_tabular_sequential_context.py
 
-          - name: Run tests -> end_to_end all except sequential
-            run: uv run --no-sync pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
+      - name: Run tests -> end_to_end all except sequential
+        run: uv run --no-sync pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
