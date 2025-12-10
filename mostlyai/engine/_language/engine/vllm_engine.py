@@ -27,7 +27,6 @@ from peft import PeftConfig
 from pydantic import BaseModel
 from transformers import AutoConfig, AutoTokenizer
 from vllm import LLM, SamplingParams
-from vllm.config import _get_and_verify_max_len
 from vllm.distributed import cleanup_dist_env_and_memory
 from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
@@ -80,8 +79,11 @@ class VLLMEngine(LanguageEngine):
 
         model_path = str(model_path)
         self._lora_request = LoRARequest("adapter", 1, model_path)
-        config_max_model_len = _get_and_verify_max_len(
-            base_config, tokenizer_config=None, max_model_len=None, disable_sliding_window=False, sliding_window=None
+        # Get max model length from config (different models use different attribute names)
+        config_max_model_len = getattr(
+            base_config,
+            "max_position_embeddings",
+            getattr(base_config, "n_positions", getattr(base_config, "max_sequence_length", 2048)),
         )
 
         self.llm = LLM(
