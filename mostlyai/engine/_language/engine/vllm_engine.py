@@ -30,7 +30,7 @@ from vllm import LLM, SamplingParams
 from vllm.distributed import cleanup_dist_env_and_memory
 from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
-from vllm.sampling_params import GuidedDecodingParams
+from vllm.sampling_params import StructuredOutputsParams
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
@@ -138,18 +138,18 @@ class VLLMEngine(LanguageEngine):
 
         sampling_params = []
         for i in range(actual_batch_size):
-            guided_decoding = None
+            structured_outputs = None
             if effective_schemas and i < len(effective_schemas):
-                # Convert Pydantic model to JSON schema for guided decoding
+                # Convert Pydantic model to JSON schema for structured output
                 schema_dict = effective_schemas[i].model_json_schema()
-                guided_decoding = GuidedDecodingParams(json=schema_dict)
+                structured_outputs = StructuredOutputsParams(json=schema_dict)
 
             sampling_params.append(
                 SamplingParams(
                     max_tokens=self.max_new_tokens,
                     temperature=sampling_temperature,
                     top_p=sampling_top_p,
-                    guided_decoding=guided_decoding,
+                    structured_outputs=structured_outputs,
                 )
             )
         t_generate = time.time()
