@@ -26,11 +26,9 @@ class ModelType(str, Enum):
     The type of model.
 
     - `TABULAR`: A generative AI model tailored towards tabular data, trained from scratch.
-    - `LANGUAGE`: A generative AI model build upon a (pre-trained) language model.
     """
 
     tabular = "TABULAR"
-    language = "LANGUAGE"
 
 
 class ModelEncodingType(str, Enum):
@@ -47,10 +45,6 @@ class ModelEncodingType(str, Enum):
     - `TABULAR_DATETIME`: Model samples each part of a datetime value.
     - `TABULAR_DATETIME_RELATIVE`: Model samples the relative difference between datetimes within a sequence.
     - `TABULAR_LAT_LONG`: Model samples a latitude-longitude column. The format is "latitude,longitude".
-    - `LANGUAGE_TEXT`: Model will sample free text, using a LANGUAGE model.
-    - `LANGUAGE_CATEGORICAL`: Model samples from existing (non-rare) categories, using a LANGUAGE model.
-    - `LANGUAGE_NUMERIC`: Model samples from the valid numeric value range, using a LANGUAGE model.
-    - `LANGUAGE_DATETIME`: Model samples from the valid datetime value range, using a LANGUAGE model.
     """
 
     auto = "AUTO"
@@ -63,10 +57,6 @@ class ModelEncodingType(str, Enum):
     tabular_datetime = "TABULAR_DATETIME"
     tabular_datetime_relative = "TABULAR_DATETIME_RELATIVE"
     tabular_lat_long = "TABULAR_LAT_LONG"
-    language_text = "LANGUAGE_TEXT"
-    language_categorical = "LANGUAGE_CATEGORICAL"
-    language_numeric = "LANGUAGE_NUMERIC"
-    language_datetime = "LANGUAGE_DATETIME"
 
 
 class ModelStateStrategy(str, Enum):

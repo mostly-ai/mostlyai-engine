@@ -15,8 +15,6 @@
 from pathlib import Path
 
 from mostlyai.engine._common import ProgressCallback
-from mostlyai.engine._workspace import resolve_model_type
-from mostlyai.engine.domain import ModelType
 
 
 def encode(
@@ -35,12 +33,6 @@ def encode(
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
     """
-    model_type = resolve_model_type(workspace_dir)
-    if model_type == ModelType.tabular:
-        from mostlyai.engine._tabular.encoding import encode as encode_tabular
+    from mostlyai.engine._tabular.encoding import encode as encode_tabular
 
-        return encode_tabular(workspace_dir=workspace_dir, update_progress=update_progress)
-    else:
-        from mostlyai.engine._language.encoding import encode as encode_language
-
-        return encode_language(workspace_dir=workspace_dir, update_progress=update_progress)
+    return encode_tabular(workspace_dir=workspace_dir, update_progress=update_progress)

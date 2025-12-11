@@ -201,10 +201,6 @@ def resolve_model_type(workspace_dir: str | Path) -> ModelType:
     encoding_type = next(iter(columns.values())).get("encoding_type")
     if encoding_type.startswith(ModelType.tabular):
         model_type = ModelType.tabular
-    elif encoding_type.startswith(ModelType.language):
-        model_type = ModelType.language
     else:
-        raise ValueError(
-            f"Unknown encoding type, valid encoding types start with TABULAR_ or LANGUAGE_: {encoding_type}"
-        )
+        raise ValueError(f"Unknown encoding type, valid encoding types start with TABULAR_: {encoding_type}")
     return model_type

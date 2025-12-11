@@ -44,19 +44,6 @@ from mostlyai.engine._common import (
     read_json,
     write_json,
 )
-from mostlyai.engine._encoding_types.language.categorical import (
-    analyze_language_categorical,
-    analyze_reduce_language_categorical,
-)
-from mostlyai.engine._encoding_types.language.datetime import (
-    analyze_language_datetime,
-    analyze_reduce_language_datetime,
-)
-from mostlyai.engine._encoding_types.language.numeric import analyze_language_numeric, analyze_reduce_language_numeric
-from mostlyai.engine._encoding_types.language.text import (
-    analyze_reduce_text,
-    analyze_text,
-)
 from mostlyai.engine._encoding_types.tabular.categorical import (
     analyze_categorical,
     analyze_reduce_categorical,
@@ -96,9 +83,6 @@ _VALUE_PROTECTION_ENCODING_TYPES = (
     ModelEncodingType.tabular_numeric_binned,
     ModelEncodingType.tabular_datetime,
     ModelEncodingType.tabular_datetime_relative,
-    ModelEncodingType.language_categorical,
-    ModelEncodingType.language_numeric,
-    ModelEncodingType.language_datetime,
 )
 
 
@@ -402,20 +386,6 @@ def _analyze_reduce(
                 stats_col = analyze_reduce_character(**analyze_reduce_column_args)
             case ModelEncodingType.tabular_lat_long:
                 stats_col = analyze_reduce_latlong(**analyze_reduce_column_args)
-            case ModelEncodingType.language_text:
-                stats_col = analyze_reduce_text(**analyze_reduce_column_args)
-            case ModelEncodingType.language_categorical:
-                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_categorical(
-                    **analyze_reduce_column_args
-                )
-            case ModelEncodingType.language_numeric:
-                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_numeric(
-                    **analyze_reduce_column_args
-                )
-            case ModelEncodingType.language_datetime:
-                stats_col = analyze_reduce_text(**analyze_reduce_column_args) | analyze_reduce_language_datetime(
-                    **analyze_reduce_column_args
-                )
             case _:
                 raise RuntimeError(f"unknown encoding type {encoding_type}")
 
@@ -436,49 +406,34 @@ def _analyze_reduce(
                 _LOG.info(f"analyzed sequence length for context table `{table_name}`")
             stats_col["seq_len"] = ctxseq_stats[table_name]
 
-        is_language_column = encoding_type in (
-            ModelEncodingType.language_text,
-            ModelEncodingType.language_categorical,
-            ModelEncodingType.language_numeric,
-            ModelEncodingType.language_datetime,
-        )
+        # build mapping of original column name to ARGN table and column identifiers
+        def get_table(qualified_column_name: str) -> str:
+            # column names are assumed to be <table>::<column>
+            return qualified_column_name.split(TABLE_COLUMN_INFIX)[0]
 
-        if not is_language_column:
-            # build mapping of original column name to ARGN table and column identifiers
-            def get_table(qualified_column_name: str) -> str:
-                # column names are assumed to be <table>::<column>
-                return qualified_column_name.split(TABLE_COLUMN_INFIX)[0]
+        def get_unique_tables(qualified_column_names: Iterable[str]) -> list[str]:
+            duplicated_tables = [get_table(c) for c in qualified_column_names]
+            return list(dict.fromkeys(duplicated_tables))
 
-            def get_unique_tables(qualified_column_names: Iterable[str]) -> list[str]:
-                duplicated_tables = [get_table(c) for c in qualified_column_names]
-                return list(dict.fromkeys(duplicated_tables))
+        unique_tables = get_unique_tables(encoding_types.keys())
+        argn_identifiers: dict[str, tuple[str, str]] = {
+            c: (f"t{unique_tables.index(get_table(qualified_column_name=c))}", f"c{idx}")
+            for idx, c in enumerate(encoding_types.keys())
+        }
 
-            unique_tables = get_unique_tables(encoding_types.keys())
-            argn_identifiers: dict[str, tuple[str, str]] = {
-                c: (f"t{unique_tables.index(get_table(qualified_column_name=c))}", f"c{idx}")
-                for idx, c in enumerate(encoding_types.keys())
-            }
+        def get_argn_processor(mode, is_flat) -> str:
+            if mode == "tgt":
+                return TGT
+            else:  # mode == "ctx"
+                return CTXFLT if is_flat else CTXSEQ
 
-            def get_argn_processor(mode, is_flat) -> str:
-                if mode == "tgt":
-                    return TGT
-                else:  # mode == "ctx"
-                    return CTXFLT if is_flat else CTXSEQ
+        stats_col[ARGN_PROCESSOR] = get_argn_processor(mode, is_flat="seq_len" not in column_stats_list[0])
+        (
+            stats_col[ARGN_TABLE],
+            stats_col[ARGN_COLUMN],
+        ) = argn_identifiers[column]
 
-            stats_col[ARGN_PROCESSOR] = get_argn_processor(mode, is_flat="seq_len" not in column_stats_list[0])
-            (
-                stats_col[ARGN_TABLE],
-                stats_col[ARGN_COLUMN],
-            ) = argn_identifiers[column]
-
-        _LOG.info(
-            f"analyzed column `{column}`: {stats_col['encoding_type']} "
-            + (
-                f"nchar_max={stats_col['nchar_max']} nchar_avg={stats_col['nchar_avg']}"
-                if is_language_column
-                else f"{stats_col['cardinalities']}"
-            )
-        )
+        _LOG.info(f"analyzed column `{column}`: {stats_col['encoding_type']} {stats_col['cardinalities']}")
         stats["columns"][column] = stats_col
 
     if mode == "tgt":
@@ -574,20 +529,6 @@ def _analyze_flat_col(
         stats = analyze_character(values, root_keys, context_keys)
     elif encoding_type == ModelEncodingType.tabular_lat_long:
         stats = analyze_latlong(values, root_keys, context_keys)
-    elif encoding_type == ModelEncodingType.language_text:
-        stats = analyze_text(values, root_keys, context_keys)
-    elif encoding_type == ModelEncodingType.language_categorical:
-        stats = analyze_text(values, root_keys, context_keys) | analyze_language_categorical(
-            values, root_keys, context_keys
-        )
-    elif encoding_type == ModelEncodingType.language_numeric:
-        stats = analyze_text(values, root_keys, context_keys) | analyze_language_numeric(
-            values, root_keys, context_keys
-        )
-    elif encoding_type == ModelEncodingType.language_datetime:
-        stats = analyze_text(values, root_keys, context_keys) | analyze_language_datetime(
-            values, root_keys, context_keys
-        )
     else:
         raise RuntimeError(f"unknown encoding type: `{encoding_type}` for `{values.name}`")
     return stats

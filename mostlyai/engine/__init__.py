@@ -13,7 +13,6 @@
 # limitations under the License.
 import warnings
 
-from mostlyai.engine._language.interface import LanguageModel
 from mostlyai.engine._tabular.interface import TabularARGN
 from mostlyai.engine._tabular.tensor_utils import (
     build_model_config,
@@ -42,7 +41,6 @@ __all__ = [
     "init_logging",
     "set_random_state",
     "TabularARGN",
-    "LanguageModel",
     # Tensor interface for training optimization
     "ModelConfig",
     "build_model_config",

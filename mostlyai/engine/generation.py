@@ -17,11 +17,9 @@ from pathlib import Path
 import pandas as pd
 
 from mostlyai.engine._common import ProgressCallback
-from mostlyai.engine._workspace import resolve_model_type
 from mostlyai.engine.domain import (
     FairnessConfig,
     ImputationConfig,
-    ModelType,
     RareCategoryReplacementMethod,
     RebalancingConfig,
 )
@@ -58,50 +56,27 @@ def generate(
         sampling_temperature: Sampling temperature. Higher values increase randomness.
         sampling_top_p: Nucleus sampling probability threshold.
         device: Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        rare_category_replacement_method: Method for handling rare categories. Only applicable for tabular models.
-        rebalancing: Configuration for rebalancing column distributions. Only applicable for tabular models.
-        imputation: List of columns to impute missing values. Only applicable for tabular models.
-        fairness: Configuration for fairness constraints. Only applicable for tabular models.
+        rare_category_replacement_method: Method for handling rare categories.
+        rebalancing: Configuration for rebalancing column distributions.
+        imputation: List of columns to impute missing values.
+        fairness: Configuration for fairness constraints.
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
     """
-    model_type = resolve_model_type(workspace_dir)
-    if model_type == ModelType.tabular:
-        from mostlyai.engine._tabular.generation import generate as generate_tabular
+    from mostlyai.engine._tabular.generation import generate as generate_tabular
 
-        return generate_tabular(
-            ctx_data=ctx_data,
-            seed_data=seed_data,
-            sample_size=sample_size,
-            batch_size=batch_size,
-            sampling_temperature=sampling_temperature,
-            sampling_top_p=sampling_top_p,
-            rare_category_replacement_method=rare_category_replacement_method,
-            rebalancing=rebalancing,
-            imputation=imputation,
-            fairness=fairness,
-            device=device,
-            workspace_dir=workspace_dir,
-            update_progress=update_progress,
-        )
-    else:
-        from mostlyai.engine._language.generation import generate as generate_language
-
-        if imputation is not None:
-            raise ValueError("imputation is not supported for language models")
-        if fairness is not None:
-            raise ValueError("fairness is not supported for language models")
-        if rebalancing is not None:
-            raise ValueError("rebalancing is not supported for language models")
-        return generate_language(
-            ctx_data=ctx_data,
-            seed_data=seed_data,
-            sample_size=sample_size,
-            batch_size=batch_size,
-            sampling_temperature=sampling_temperature,
-            sampling_top_p=sampling_top_p,
-            rare_category_replacement_method=rare_category_replacement_method,
-            device=device,
-            workspace_dir=workspace_dir,
-            update_progress=update_progress,
-        )
+    return generate_tabular(
+        ctx_data=ctx_data,
+        seed_data=seed_data,
+        sample_size=sample_size,
+        batch_size=batch_size,
+        sampling_temperature=sampling_temperature,
+        sampling_top_p=sampling_top_p,
+        rare_category_replacement_method=rare_category_replacement_method,
+        rebalancing=rebalancing,
+        imputation=imputation,
+        fairness=fairness,
+        device=device,
+        workspace_dir=workspace_dir,
+        update_progress=update_progress,
+    )
