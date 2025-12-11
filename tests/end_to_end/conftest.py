@@ -13,12 +13,43 @@
 # limitations under the License.
 
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 from joblib.externals.loky import get_reusable_executor
 
 from mostlyai.engine._common import STRING
+from mostlyai.engine import load_tensors_from_workspace, train
+
+
+def train_from_workspace(
+    workspace_dir: Path | str,
+    max_sequence_window: int | None = None,
+    **train_kwargs,
+) -> None:
+    """
+    Helper function for tests to train using the tensor interface.
+
+    Loads tensors from an encoded workspace and trains. This is a convenience
+    wrapper for migrating tests from the old workspace-based train() API.
+
+    Args:
+        workspace_dir: Path to encoded workspace
+        max_sequence_window: Optional sequence window for slicing (sequential data)
+        **train_kwargs: Additional arguments passed to train() (e.g., max_epochs, model)
+    """
+    trn, val, config = load_tensors_from_workspace(
+        workspace_dir, max_sequence_window=max_sequence_window
+    )
+    train(
+        train_tensors=iter(trn),
+        val_tensors=iter(val),
+        model_config=config,
+        workspace_dir=workspace_dir,
+        **train_kwargs,
+    )
 
 
 @pytest.fixture()

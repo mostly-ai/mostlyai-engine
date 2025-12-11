@@ -21,13 +21,13 @@ import pytest
 import torch
 
 from mostlyai import engine
-from mostlyai.engine import analyze, encode, generate, split, train
+from mostlyai.engine import analyze, encode, generate, split
 from mostlyai.engine._encoding_types.tabular.categorical import CATEGORICAL_UNKNOWN_TOKEN
 from mostlyai.engine._encoding_types.tabular.lat_long import split_str_to_latlong
 from mostlyai.engine._workspace import Workspace
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
-from .conftest import MockData
+from .conftest import MockData, train_from_workspace
 
 
 @pytest.fixture(scope="module")
@@ -102,7 +102,7 @@ class TestTabularFlatWithoutContext:
         )
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(max_epochs=10, enable_flexible_generation=True, workspace_dir=workspace_dir)
+        train_from_workspace(workspace_dir, max_epochs=10, enable_flexible_generation=True)
         return workspace_dir
 
     def test_standard_generation(self, workspace_after_training):
@@ -217,7 +217,7 @@ def test_imputation(input_data, tmp_path_factory):
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=1, enable_flexible_generation=True, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=1, enable_flexible_generation=True)
     generate(
         sample_size=1_000,
         rare_category_replacement_method=RareCategoryReplacementMethod.constant,
@@ -239,7 +239,7 @@ def test_zero_column(input_data, tmp_path_factory):
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=1, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=1)
     generate(workspace_dir=workspace_dir)
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
     assert syn.shape == (1_000, 1)
@@ -278,7 +278,7 @@ def test_seed_imputation(input_data, tmp_path_factory):
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=max_epochs, enable_flexible_generation=True, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=max_epochs, enable_flexible_generation=True)
 
     # create seed data from random samples in holdout set with random nulls for imputation testing
     # use holdout data (not seen during training) to avoid memorization
@@ -373,7 +373,7 @@ def test_value_protection_disabled(input_data, tmp_path_factory):
         ws = Workspace(workspace_dir)
         ws.model_progress_messages_path.unlink(missing_ok=True)
         encode(workspace_dir=workspace_dir)
-        train(model="MOSTLY_AI/Small", max_epochs=1, workspace_dir=workspace_dir)
+        train_from_workspace(workspace_dir, model="MOSTLY_AI/Small", max_epochs=1)
         generate(workspace_dir=workspace_dir)
         syn = pd.read_parquet(workspace_dir / "SyntheticData")
         return syn
@@ -424,10 +424,7 @@ def test_emptish_flat(tmp_path_factory, input_data, n_rows, n_cols):
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(
-        max_epochs=1,
-        workspace_dir=workspace_dir,
-    )
+    train_from_workspace(workspace_dir, max_epochs=1)
     generate(workspace_dir=workspace_dir)
     syn_data_path = workspace_dir / "SyntheticData"
     syn = pd.read_parquet(syn_data_path)
@@ -443,8 +440,8 @@ def test_max_training_time(input_data, tmp_path_factory):
     # measure training time vs max training time
     start_time = time.time()
     max_training_time_secs = 2
-    train(
-        workspace_dir=workspace_dir,
+    train_from_workspace(
+        workspace_dir,
         max_training_time=max_training_time_secs / 60,
         batch_size=8,
     )
@@ -457,7 +454,7 @@ def test_max_training_time(input_data, tmp_path_factory):
     assert workspace.model_tabular_weights_path.exists()
     # check that max_epochs is respected as well if both are provided
     start_time = time.time()
-    train(workspace_dir=workspace_dir, max_epochs=2, max_training_time=10)
+    train_from_workspace(workspace_dir, max_epochs=2, max_training_time=10)
     elapsed_time = time.time() - start_time
     assert elapsed_time < 10
 
@@ -472,7 +469,7 @@ def test_reproducibility(input_data, tmp_path_factory, cleanup_joblib_pool):
         split(tgt_data=df, workspace_dir=ws, tgt_primary_key="id")
         analyze(workspace_dir=ws)
         encode(workspace_dir=ws)
-        train(workspace_dir=ws, max_epochs=1)
+        train_from_workspace(ws, max_epochs=1)
         generate(workspace_dir=ws, sample_size=100)
         engine.set_random_state(None)
 
@@ -514,7 +511,7 @@ def test_seed_generation_for_pk_only_flat_table(tmp_path_factory):
     split(tgt_data=df, workspace_dir=ws, tgt_primary_key=tgt_primary_key)
     analyze(workspace_dir=ws)
     encode(workspace_dir=ws)
-    train(workspace_dir=ws, max_epochs=1)
+    train_from_workspace(ws, max_epochs=1)
     seed_data = pd.DataFrame({tgt_primary_key: [f"seed_{i:04d}" for i in range(100)]})
     generate(workspace_dir=ws, seed_data=seed_data)
     syn = pd.read_parquet(ws / "SyntheticData")
@@ -565,7 +562,7 @@ class TestTabularFlatWithContext:
         )
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(max_epochs=10, enable_flexible_generation=True, workspace_dir=workspace_dir)
+        train_from_workspace(workspace_dir, max_epochs=10, enable_flexible_generation=True)
         return workspace_dir
 
     def test_standard_generation(self, workspace_after_training, input_data, ctx_encoding_types, tgt_encoding_types):

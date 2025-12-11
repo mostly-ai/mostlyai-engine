@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from mostlyai.engine._common import CTXFLT, CTXSEQ, TGT, get_cardinalities, get_sequence_length_stats
+from mostlyai.engine._common import CTXFLT, CTXSEQ, TGT, get_cardinalities, get_ctx_sequence_length, get_sequence_length_stats
 
 if TYPE_CHECKING:
     from mostlyai.engine._tabular.training import ModelConfig
@@ -388,8 +388,8 @@ def build_model_config(
         config["tgt_seq_len_max"] = seq_stats.get("max", 1)
 
     if ctx_stats and ctx_stats.get("is_sequential", False):
-        ctx_seq_stats = get_sequence_length_stats(ctx_stats)
-        config["ctx_seq_len_median"] = ctx_seq_stats.get("median", 1)
+        # ctx_seq_len_median is a dict mapping table names to median lengths
+        config["ctx_seq_len_median"] = get_ctx_sequence_length(ctx_stats, key="median")
 
     if empirical_probs is not None:
         config["empirical_probs"] = empirical_probs
@@ -491,3 +491,81 @@ def encode_batch(
 
     # Convert to dict of numpy arrays (Ray Data compatible)
     return {col: encoded_df[col].to_numpy() for col in encoded_df.columns}
+
+
+def load_tensors_from_workspace(
+    workspace_dir: Path | str,
+    device: torch.device | str = "cpu",
+    batch_size: int = 1024,
+    max_sequence_window: int | None = None,
+) -> tuple[list[dict[str, torch.Tensor]], list[dict[str, torch.Tensor]], "ModelConfig"]:
+    """
+    Load training and validation tensors from an encoded workspace.
+
+    This is a convenience function for testing and simple workflows that
+    loads encoded parquet data from a workspace and creates tensor batches.
+    For production with large datasets, use Ray Data pipelines instead.
+
+    Args:
+        workspace_dir: Path to workspace directory (after engine.encode())
+        device: Device for tensors ("cpu" or "cuda")
+        batch_size: Batch size for tensor batches
+        max_sequence_window: Optional window size for slicing sequences
+
+    Returns:
+        Tuple of (train_batches, val_batches, model_config) where batches are lists
+
+    Example:
+        >>> # After split/analyze/encode
+        >>> trn, val, config = load_tensors_from_workspace(workspace_dir, device="cuda")
+        >>> train(workspace_dir, train_tensors=iter(trn), val_tensors=iter(val), model_config=config)
+    """
+    import pyarrow.parquet as pq
+    import pandas as pd
+    from mostlyai.engine._workspace import Workspace
+
+    workspace = Workspace(Path(workspace_dir))
+    tgt_stats = workspace.tgt_stats.read()
+    is_sequential = tgt_stats.get("is_sequential", False)
+
+    # Build model config
+    config = build_model_config_from_workspace(workspace_dir)
+
+    def load_parquet_files(parquet_paths: list[Path]) -> pd.DataFrame:
+        if not parquet_paths:
+            return pd.DataFrame()
+        tables = [pq.read_table(p) for p in parquet_paths]
+        return pd.concat([t.to_pandas() for t in tables], ignore_index=True)
+
+    def create_batches(df: pd.DataFrame) -> list[dict[str, torch.Tensor]]:
+        """Create tensor batches from a DataFrame."""
+        if df.empty:
+            return []
+
+        n_samples = len(df)
+        batches = []
+
+        for start_idx in range(0, n_samples, batch_size):
+            end_idx = min(start_idx + batch_size, n_samples)
+            batch_df = df.iloc[start_idx:end_idx]
+
+            # Convert to columnar format
+            batch_dict = {col: batch_df[col].tolist() for col in batch_df.columns}
+
+            # Convert to tensors
+            if is_sequential:
+                tensors = prepare_sequential_batch(batch_dict, device=device)
+                if max_sequence_window:
+                    tensors = slice_sequences(tensors, max_sequence_window)
+            else:
+                tensors = prepare_flat_batch(batch_dict, device=device)
+
+            batches.append(tensors)
+
+        return batches
+
+    # Load data from parquet files
+    trn_df = load_parquet_files(workspace.encoded_data_trn.fetch_all())
+    val_df = load_parquet_files(workspace.encoded_data_val.fetch_all())
+
+    return create_batches(trn_df), create_batches(val_df), config

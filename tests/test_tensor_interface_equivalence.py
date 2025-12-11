@@ -151,11 +151,13 @@ class TestFlatDataTraining:
         batch_dict = {col: df[col].head(32).tolist() for col in df.columns}
         tensor_batch = prepare_flat_batch(batch_dict, device="cpu")
 
-        # Verify batch structure
-        assert "tgt" in tensor_batch
-        assert tensor_batch["tgt"].dim() == 2  # [batch_size, num_columns]
-        assert tensor_batch["tgt"].shape[0] == 32  # batch size
-        assert tensor_batch["tgt"].dtype == torch.long
+        # Verify batch structure - keys are like "tgt:t0/c0__cat"
+        tgt_keys = [k for k in tensor_batch if k.startswith("tgt:")]
+        assert len(tgt_keys) > 0, "Expected at least one tgt column"
+        for key in tgt_keys:
+            assert tensor_batch[key].dim() == 2  # [batch_size, 1]
+            assert tensor_batch[key].shape[0] == 32  # batch size
+            assert tensor_batch[key].dtype == torch.long
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_training_completes_successfully(self, flat_workspace):
@@ -234,10 +236,12 @@ class TestSequentialDataTraining:
         batch_dict = {col: df[col].head(8).tolist() for col in df.columns}
         tensor_batch = prepare_sequential_batch(batch_dict, device="cpu")
 
-        # Verify batch structure
-        assert "tgt" in tensor_batch
-        assert tensor_batch["tgt"].dim() == 3  # [batch_size, seq_len, num_columns]
-        assert tensor_batch["tgt"].dtype == torch.long
+        # Verify batch structure - keys are like "tgt:t0/c0__cat"
+        tgt_keys = [k for k in tensor_batch if k.startswith("tgt:")]
+        assert len(tgt_keys) > 0, "Expected at least one tgt column"
+        for key in tgt_keys:
+            assert tensor_batch[key].dim() == 3  # [batch_size, seq_len, 1]
+            assert tensor_batch[key].dtype == torch.long
 
 
 class TestModelConfigExtraction:

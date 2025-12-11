@@ -25,11 +25,10 @@ from mostlyai.engine._encoding_types.tabular.categorical import (
     CATEGORICAL_UNKNOWN_TOKEN,
 )
 from mostlyai.engine._tabular.generation import RareCategoryReplacementMethod, generate
-from mostlyai.engine._tabular.training import train
 from mostlyai.engine._workspace import Workspace
-from mostlyai.engine.domain import DifferentialPrivacyConfig, ImputationConfig, ModelEncodingType, ModelStateStrategy
+from mostlyai.engine.domain import ImputationConfig, ModelEncodingType, ModelStateStrategy
 
-from .conftest import MockData
+from .conftest import MockData, train_from_workspace
 
 
 def test_sequential_with_context(tmp_path_factory):
@@ -101,7 +100,7 @@ def test_sequential_with_context(tmp_path_factory):
 
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=10, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=10)
     generate(
         workspace_dir=workspace_dir,
         rare_category_replacement_method=RareCategoryReplacementMethod.sample,
@@ -175,7 +174,7 @@ def test_sequential_without_context(tmp_path_factory):
     syn_data_path = workspace_dir / "SyntheticData"
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=10, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=10)
     generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
     tgt = pd.read_parquet(tgt_data_path)
     syn = pd.read_parquet(syn_data_path)
@@ -196,7 +195,7 @@ def test_sequential_without_context(tmp_path_factory):
     tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=10, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=10)
     generate(ctx_data=ctx_data, workspace_dir=workspace_dir)
     syn_data_path = workspace_dir / "SyntheticData"
     tgt = pd.read_parquet(tgt_data_path)
@@ -224,7 +223,7 @@ def test_sequential_zero_length_subjects_only(tmp_path):
     )
     analyze(workspace_dir=ws_dir)
     encode(workspace_dir=ws_dir)
-    train(max_epochs=1, model="MOSTLY_AI/Small", workspace_dir=ws_dir)
+    train_from_workspace(ws_dir, max_epochs=1, model="MOSTLY_AI/Small")
     generate(sample_size=2_000, workspace_dir=ws_dir)
     syn_data_path = ws_dir / "SyntheticData"
 
@@ -268,7 +267,7 @@ def test_many_partitions_one_empty(tmp_path):
     )
     analyze(workspace_dir=tmp_path)
     encode(workspace_dir=tmp_path)
-    train(max_epochs=1, model="MOSTLY_AI/Small", workspace_dir=tmp_path)
+    train_from_workspace(tmp_path, max_epochs=1, model="MOSTLY_AI/Small")
     generate(sample_size=2_000, workspace_dir=tmp_path)
     syn_data_path = tmp_path / "SyntheticData"
 
@@ -282,7 +281,7 @@ def test_sequential_max_sequence_window(tmp_path):
     split(tgt_data=df, tgt_context_key="id", workspace_dir=tmp_path)
     analyze(workspace_dir=tmp_path)
     encode(workspace_dir=tmp_path)
-    train(max_epochs=20, max_sequence_window=3, batch_size=64, workspace_dir=tmp_path)
+    train_from_workspace(tmp_path, max_epochs=20, max_sequence_window=3, batch_size=64)
     generate(workspace_dir=tmp_path)
     syn = pd.read_parquet(tmp_path / "SyntheticData")
     # check whether we learned the A/B/A/B pattern
@@ -360,7 +359,7 @@ def test_multiple_batches(tmp_path):
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=5, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=5)
     generate(
         batch_size=trn_sample_size // 3,
         workspace_dir=workspace_dir,
@@ -408,11 +407,7 @@ class TestExtremeSequenceLengths:
         )
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(
-            max_epochs=1,
-            model="MOSTLY_AI/Small",
-            workspace_dir=workspace_dir,
-        )
+        train_from_workspace(workspace_dir, max_epochs=1, model="MOSTLY_AI/Small")
         generate(workspace_dir=workspace_dir)
         syn_data_path = workspace_dir / "SyntheticData"
         syn = pd.read_parquet(syn_data_path)
@@ -447,7 +442,7 @@ def test_itt_constant(tmp_path):
     tgt_data_path = workspace_dir / "OriginalData" / "tgt-data"
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(max_epochs=4, workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir, max_epochs=4)
     generate(workspace_dir=workspace_dir)
     syn_data_path = workspace_dir / "SyntheticData"
     tgt = pd.read_parquet(tgt_data_path)
@@ -493,7 +488,7 @@ class TestSmokeModelSizes:
     @pytest.mark.parametrize("model_id", ["MOSTLY_AI/Small", "MOSTLY_AI/Medium", "MOSTLY_AI/Large"])
     def test_smoke_model_sizes(self, before_training, model_id):
         # this is a smoke test to ensure that we don't crush on different model sizes
-        train(model=model_id, max_epochs=1, workspace_dir=before_training)
+        train_from_workspace(before_training, model=model_id, max_epochs=1)
         generate(workspace_dir=before_training)
 
 
@@ -529,32 +524,23 @@ class TestTabularTrainingStrategy:
         )
         return workspace_dir
 
-    @pytest.mark.parametrize(
-        "differential_privacy",
-        [
-            None,  # DP is disabled
-            DifferentialPrivacyConfig(),  # DP is enabled with default parameters
-        ],
-    )
-    def test_training_strategy(self, workspace_before_training, differential_privacy):
+    def test_training_strategy(self, workspace_before_training):
         model_id = "MOSTLY_AI/Small"
         workspace = Workspace(workspace_before_training)
-        analyze(workspace_dir=workspace_before_training, differential_privacy=differential_privacy)
+        analyze(workspace_dir=workspace_before_training)
         encode(workspace_dir=workspace_before_training)
-        train(
-            workspace_dir=workspace_before_training,
+        train_from_workspace(
+            workspace_before_training,
             model=model_id,
             max_epochs=1,
-            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.reset,
         )
         progress_reset = pd.read_csv(workspace.model_progress_messages_path)
 
-        train(
-            workspace_dir=workspace_before_training,
+        train_from_workspace(
+            workspace_before_training,
             model=model_id,
             max_epochs=1,
-            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.reuse,
         )
         progress_reuse = pd.read_csv(workspace.model_progress_messages_path)
@@ -564,11 +550,10 @@ class TestTabularTrainingStrategy:
         with pytest.raises(AssertionError):
             pd.testing.assert_frame_equal(progress_reset, progress_reuse)
 
-        train(
-            workspace_dir=workspace_before_training,
+        train_from_workspace(
+            workspace_before_training,
             model=model_id,
             max_epochs=2,
-            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.resume,
         )
         progress_resume = pd.read_csv(workspace.model_progress_messages_path)
@@ -579,11 +564,10 @@ class TestTabularTrainingStrategy:
 
         # in case the checkpoint doesn't exist, it should still work but change to reset strategy
         shutil.rmtree(workspace_before_training / "ModelStore" / "model-data")
-        train(
-            workspace_dir=workspace_before_training,
+        train_from_workspace(
+            workspace_before_training,
             model=model_id,
             max_epochs=1,
-            differential_privacy=differential_privacy,
             model_state_strategy=ModelStateStrategy.resume,
         )
         progress_resume_without_checkpoint = pd.read_csv(workspace.model_progress_messages_path)
@@ -628,7 +612,7 @@ def test_seed_generation(tmp_path):
     )
     analyze(workspace_dir=workspace_dir)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir, max_epochs=10)
+    train_from_workspace(workspace_dir, max_epochs=10)
 
     # we expect that the more MINUS steps provided in seed data, the shorter the sequences in synthetic data
     n_seed_steps = 6
@@ -683,7 +667,7 @@ def test_long_sequences(tmp_path):
     )
     analyze(workspace_dir=workspace_dir, value_protection=False)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir, max_epochs=1)
+    train_from_workspace(workspace_dir, max_epochs=1)
     generate(workspace_dir=workspace_dir)
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
     syn_seq_lengths = syn.groupby(key_col).size().reindex(ctx[key_col], fill_value=0)
@@ -712,7 +696,7 @@ def test_deterministic_lengths(tmp_path):
     )
     analyze(workspace_dir=workspace_dir, value_protection=False)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir)
+    train_from_workspace(workspace_dir)
     generate(workspace_dir=workspace_dir)
 
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
@@ -764,7 +748,7 @@ def test_seed_imputation(tmp_path):
     split(tgt_data=tgt, tgt_context_key=key, ctx_data=ctx, ctx_primary_key=key, workspace_dir=workspace_dir)
     analyze(workspace_dir=workspace_dir, value_protection=False)
     encode(workspace_dir=workspace_dir)
-    train(workspace_dir=workspace_dir, max_epochs=max_epochs, enable_flexible_generation=True)
+    train_from_workspace(workspace_dir, max_epochs=max_epochs, enable_flexible_generation=True)
 
     # create seed data with random nulls
     seed_parts = []

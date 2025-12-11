@@ -22,8 +22,9 @@ import pytest
 from mostlyai.engine import analyze, encode
 from mostlyai.engine._common import write_json
 from mostlyai.engine._tabular.generation import generate
-from mostlyai.engine._tabular.training import train
 from mostlyai.engine.domain import ModelEncodingType
+
+from .conftest import train_from_workspace
 
 
 @pytest.fixture
@@ -82,7 +83,7 @@ def prepare_ws(tmp_path: Path, df: pd.DataFrame, keys: dict, encoding_types: dic
 def synthetize(ws_dir: Path) -> pd.DataFrame:
     analyze(workspace_dir=ws_dir)
     encode(workspace_dir=ws_dir)
-    train(max_epochs=5, workspace_dir=ws_dir)
+    train_from_workspace(ws_dir, max_epochs=5)
     generate(workspace_dir=ws_dir)
     syn_data_path = ws_dir / "SyntheticData"
     syn = pd.read_parquet(syn_data_path)

@@ -18,8 +18,9 @@ import pytest
 
 from mostlyai.engine import analyze, encode, split
 from mostlyai.engine._tabular.generation import generate
-from mostlyai.engine._tabular.training import train
 from mostlyai.engine.domain import ModelEncodingType
+
+from .conftest import train_from_workspace
 
 
 class TestThreeTableSetup:
@@ -72,7 +73,7 @@ class TestThreeTableSetup:
 
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(max_epochs=50, workspace_dir=workspace_dir)
+        train_from_workspace(workspace_dir, max_epochs=50)
 
         generate(
             ctx_data=df_ctx,
@@ -194,7 +195,7 @@ class TestFourTableSetup:
 
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(max_epochs=10, workspace_dir=workspace_dir)
+        train_from_workspace(workspace_dir, max_epochs=10)
 
         generate(
             ctx_data=df_ctx,
@@ -256,7 +257,7 @@ class TestFlatWithSequentialContext:
 
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(max_epochs=10, workspace_dir=workspace_dir)
+        train_from_workspace(workspace_dir, max_epochs=10)
 
         generate(
             ctx_data=df_ctx,

@@ -12,93 +12,102 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import torch
 
 from mostlyai.engine._common import ProgressCallback
-from mostlyai.engine._workspace import resolve_model_type
-from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy, ModelType
+from mostlyai.engine._tabular.training import ModelConfig
+from mostlyai.engine.domain import ModelStateStrategy
 
 
 def train(
     *,
-    model: str | None = None,
-    max_training_time: float | None = 14400.0,  # 10 days
-    max_epochs: float | None = 100.0,  # 100 epochs
+    # Required: tensor data and configuration
+    train_tensors: Iterator[dict[str, torch.Tensor]],
+    val_tensors: Iterator[dict[str, torch.Tensor]],
+    model_config: ModelConfig,
+    # Required: output location
+    workspace_dir: str | Path,
+    # Training parameters
+    model: str = "MOSTLY_AI/Medium",
+    max_training_time: float = 14400.0,
+    max_epochs: float = 100.0,
     batch_size: int | None = None,
     gradient_accumulation_steps: int | None = None,
     enable_flexible_generation: bool = True,
-    max_sequence_window: int | None = None,
-    differential_privacy: DifferentialPrivacyConfig | dict | None = None,
-    model_state_strategy: ModelStateStrategy = ModelStateStrategy.reset,
+    model_state_strategy: ModelStateStrategy | str = ModelStateStrategy.reset,
     device: torch.device | str | None = None,
-    workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
     upload_model_data_callback: Callable | None = None,
 ) -> None:
     """
-    Trains a model with optional early stopping and differential privacy.
+    Train a TabularARGN model from pre-computed tensor batches.
 
-    Creates the following folder structure within the `workspace_dir`:
-
-    - `ModelStore`: Trained model checkpoints and logs.
+    This function accepts pre-computed tensor batches directly, eliminating the
+    CPU overhead of per-batch data transformation. Use with Ray Data pipelines
+    for distributed encoding and streaming tensor delivery.
 
     Args:
-        model: The identifier of the model to train. If tabular, defaults to MOSTLY_AI/Medium. If language, defaults to MOSTLY_AI/LSTMFromScratch-3m.
-        max_training_time: Maximum training time in minutes. If None, defaults to 10 days.
-        max_epochs: Maximum number of training epochs. If None, defaults to 100 epochs.
-        batch_size: Per-device batch size for training and validation. If None, determined automatically.
-        gradient_accumulation_steps: Number of steps to accumulate gradients. If None, determined automatically.
-        enable_flexible_generation: Whether to enable flexible order generation. Defaults to True.
-        max_sequence_window: Maximum sequence window for tabular sequential models. Only applicable for tabular models.
-        differential_privacy: Configuration for differential privacy training. If None, DP is disabled.
-        model_state_strategy: Strategy for handling existing model state (reset/resume/reuse).
-        device: Device to run training on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.
-        workspace_dir: Directory path for workspace. Training outputs are stored in ModelStore subdirectory.
-        update_progress: Callback function to report training progress.
-        upload_model_data_callback: Callback function to upload model data during training.
+        train_tensors: Iterator yielding training batches as dict[str, torch.Tensor].
+                       Use prepare_flat_batch() or prepare_sequential_batch() to create.
+        val_tensors: Iterator yielding validation batches as dict[str, torch.Tensor]
+        model_config: Model configuration from build_model_config() or build_model_config_from_workspace()
+        workspace_dir: Directory for model weights and progress tracking
+        model: Model size ("MOSTLY_AI/Small", "MOSTLY_AI/Medium", "MOSTLY_AI/Large")
+        max_training_time: Maximum training time in minutes (default: 14400 = 10 days)
+        max_epochs: Maximum number of epochs (default: 100)
+        batch_size: Batch size for heuristics (batches are pre-sized by caller)
+        gradient_accumulation_steps: Gradient accumulation steps
+        enable_flexible_generation: Enable flexible column order generation
+        model_state_strategy: How to handle existing model state (reset/resume/reuse)
+        device: Device for training (auto-detected if None)
+        update_progress: Progress callback
+        upload_model_data_callback: Callback for model data upload
+
+    Example:
+        >>> from mostlyai import engine
+        >>>
+        >>> # After split/analyze/encode
+        >>> trn, val, config = engine.load_tensors_from_workspace(workspace_dir, device="cuda")
+        >>> engine.train(
+        ...     train_tensors=iter(trn),
+        ...     val_tensors=iter(val),
+        ...     model_config=config,
+        ...     workspace_dir=workspace_dir,
+        ...     max_epochs=10,
+        ... )
+
+    Example with Ray Data:
+        >>> # Create tensor iterator from Ray Dataset
+        >>> def tensor_iter(dataset):
+        ...     for batch in dataset.iter_batches(batch_format="numpy"):
+        ...         yield engine.prepare_flat_batch(batch, device="cuda")
+        >>>
+        >>> config = engine.build_model_config(tgt_stats)
+        >>> engine.train(
+        ...     train_tensors=tensor_iter(train_ds),
+        ...     val_tensors=tensor_iter(val_ds),
+        ...     model_config=config,
+        ...     workspace_dir="/path/to/output",
+        ... )
     """
-    model_type = resolve_model_type(workspace_dir)
-    if model_type == ModelType.tabular:
-        from mostlyai.engine._tabular.training import train as train_tabular
+    from mostlyai.engine._tabular.training import train as train_tabular
 
-        args = inspect.signature(train_tabular).parameters
-        train_tabular(
-            model=model if model else args["model"].default,
-            workspace_dir=workspace_dir,
-            max_training_time=max_training_time if max_training_time else args["max_training_time"].default,
-            max_epochs=max_epochs if max_epochs else args["max_epochs"].default,
-            batch_size=batch_size,
-            gradient_accumulation_steps=gradient_accumulation_steps,
-            enable_flexible_generation=enable_flexible_generation,
-            differential_privacy=differential_privacy,
-            update_progress=update_progress,
-            upload_model_data_callback=upload_model_data_callback,
-            model_state_strategy=model_state_strategy,
-            device=device,
-            max_sequence_window=max_sequence_window if max_sequence_window else args["max_sequence_window"].default,
-        )
-    else:
-        from mostlyai.engine._language.training import train as train_language
-
-        if max_sequence_window is not None:
-            raise ValueError("max_sequence_window is not supported for language models")
-
-        args = inspect.signature(train_language).parameters
-        train_language(
-            model=model if model else args["model"].default,
-            workspace_dir=workspace_dir,
-            max_training_time=max_training_time if max_training_time else args["max_training_time"].default,
-            max_epochs=max_epochs if max_epochs else args["max_epochs"].default,
-            batch_size=batch_size,
-            gradient_accumulation_steps=gradient_accumulation_steps,
-            enable_flexible_generation=enable_flexible_generation,
-            differential_privacy=differential_privacy,
-            update_progress=update_progress,
-            upload_model_data_callback=upload_model_data_callback,
-            model_state_strategy=model_state_strategy,
-            device=device,
-        )
+    train_tabular(
+        train_tensors=train_tensors,
+        val_tensors=val_tensors,
+        model_config=model_config,
+        workspace_dir=workspace_dir,
+        model=model,
+        max_training_time=max_training_time,
+        max_epochs=max_epochs,
+        batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        enable_flexible_generation=enable_flexible_generation,
+        model_state_strategy=model_state_strategy,
+        device=device,
+        update_progress=update_progress,
+        upload_model_data_callback=upload_model_data_callback,
+    )

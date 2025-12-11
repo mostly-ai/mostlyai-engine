@@ -90,8 +90,8 @@ class ModelConfig(TypedDict, total=False):
     tgt_seq_len_max: int
     """Maximum sequence length for sequential data (required if is_sequential=True)"""
 
-    ctx_seq_len_median: int
-    """Median context sequence length (optional)"""
+    ctx_seq_len_median: dict[str, int]
+    """Median context sequence length per table (optional, dict mapping table names to lengths)"""
 
     empirical_probs: dict[str, list[float]] | None
     """Empirical probabilities for predictor initialization (optional, improves convergence)"""
@@ -267,10 +267,13 @@ def _calculate_sample_losses(
 def _calculate_val_loss(
     model: FlatModel | SequentialModel,
     val_dataloader: "_TensorIteratorWrapper",
+    device: torch.device,
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
     for step_data in val_dataloader:
+        # move batch to device (tensors may come from CPU)
+        step_data = {k: v.to(device) if v.device != device else v for k, v in step_data.items()}
         step_losses = _calculate_sample_losses(model, step_data)
         val_sample_losses.extend(step_losses.detach())
     model.train()
@@ -382,7 +385,7 @@ def train(
         val_cnt = model_config["val_cnt"]
         tgt_seq_len_median = model_config.get("tgt_seq_len_median", 1)
         tgt_seq_len_max = model_config.get("tgt_seq_len_max", 1)
-        ctx_seq_len_median = model_config.get("ctx_seq_len_median", 1)
+        ctx_seq_len_median = model_config.get("ctx_seq_len_median", {})
         empirical_probs_for_predictor_init = model_config.get("empirical_probs")
 
         _LOG.info(f"{is_sequential=}")
@@ -609,6 +612,8 @@ def train(
                 except StopIteration:
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
+                # move batch to device (tensors may come from CPU)
+                step_data = {k: v.to(device) if v.device != device else v for k, v in step_data.items()}
                 # forward pass + calculate sample losses
                 step_losses = _calculate_sample_losses(argn, step_data)
                 # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
@@ -642,7 +647,7 @@ def train(
             do_validation = on_epoch_end = epoch.is_integer()
             if do_validation:
                 # calculate val loss and trn loss
-                val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader)
+                val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader, device=device)
                 # handle scenario where model training ran into numeric instability
                 if pd.isna(val_loss):
                     _LOG.warning("validation loss is not available - reset model weights to last checkpoint")
@@ -742,17 +747,14 @@ def train(
                 model=argn,
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
-                dp_accountant=privacy_engine.accountant if with_dp else None,
+                dp_accountant=None,
             )
             if total_training_time > max_training_time:
                 _LOG.info("skip validation loss calculation due to time-capped early stopping")
                 val_loss = None
             else:
                 _LOG.info("calculate validation loss")
-                val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader)
-            dp_total_epsilon = (
-                privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
-            )
+                val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader, device=device)
             # send a final message to inform how far we've progressed
             trn_loss = _calculate_average_trn_loss(trn_sample_losses)
             progress_message = ProgressMessage(
@@ -764,8 +766,8 @@ def train(
                 val_loss=val_loss,
                 total_time=total_training_time,
                 learn_rate=current_lr,
-                dp_eps=dp_total_epsilon,
-                dp_delta=dp_total_delta,
+                dp_eps=None,
+                dp_delta=None,
             )
             progress.update(completed=steps, total=steps, message=progress_message)
             # ensure everything gets uploaded
