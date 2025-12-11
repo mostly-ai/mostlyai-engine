@@ -15,6 +15,15 @@ import warnings
 
 from mostlyai.engine._language.interface import LanguageModel
 from mostlyai.engine._tabular.interface import TabularARGN
+from mostlyai.engine._tabular.tensor_utils import (
+    build_model_config,
+    build_model_config_from_workspace,
+    encode_batch,
+    prepare_flat_batch,
+    prepare_sequential_batch,
+    slice_sequences,
+)
+from mostlyai.engine._tabular.training import ModelConfig
 from mostlyai.engine.analysis import analyze
 from mostlyai.engine.encoding import encode
 from mostlyai.engine.generation import generate
@@ -33,6 +42,14 @@ __all__ = [
     "set_random_state",
     "TabularARGN",
     "LanguageModel",
+    # Tensor interface for training optimization
+    "ModelConfig",
+    "build_model_config",
+    "build_model_config_from_workspace",
+    "encode_batch",
+    "prepare_flat_batch",
+    "prepare_sequential_batch",
+    "slice_sequences",
 ]
 __version__ = "2.3.3"
 

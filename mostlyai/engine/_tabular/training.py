@@ -15,21 +15,17 @@
 import logging
 import time
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from importlib.metadata import version
-from itertools import zip_longest
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 import pandas as pd
 import torch
-from datasets import disable_progress_bar, load_dataset
-from opacus import GradSampleModule, PrivacyEngine
-from opacus.accountants import GaussianAccountant, PRVAccountant, RDPAccountant
-from opacus.utils.batch_memory_manager import wrap_data_loader
+from opacus import GradSampleModule
 from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
-from torch.utils.data import DataLoader
 
 from mostlyai.engine._common import (
     CTXFLT,
@@ -37,15 +33,9 @@ from mostlyai.engine._common import (
     RIDX_SUB_COLUMN_PREFIX,
     SIDX_SUB_COLUMN_PREFIX,
     SLEN_SUB_COLUMN_PREFIX,
-    TGT,
     ProgressCallback,
     ProgressCallbackWrapper,
-    get_cardinalities,
     get_columns_from_cardinalities,
-    get_ctx_sequence_length,
-    get_empirical_probs_for_predictor_init,
-    get_max_data_points_per_sample,
-    get_sequence_length_stats,
     get_sub_columns_from_cardinalities,
     get_sub_columns_nested_from_cardinalities,
 )
@@ -66,9 +56,45 @@ from mostlyai.engine._training_utils import (
     gpu_memory_cleanup,
 )
 from mostlyai.engine._workspace import Workspace, ensure_workspace_dir
-from mostlyai.engine.domain import DifferentialPrivacyConfig, ModelStateStrategy
+from mostlyai.engine.domain import ModelStateStrategy
 
 _LOG = logging.getLogger(__name__)
+
+
+class ModelConfig(TypedDict, total=False):
+    """
+    Configuration for training with tensor interface.
+
+    When using train_tensors/val_tensors, this config provides the model
+    parameters that would normally be extracted from workspace stats.
+    """
+
+    tgt_cardinalities: dict[str, int]
+    """Target column cardinalities: {"tgt:col1": 10, "tgt:col2": 100, ...}"""
+
+    ctx_cardinalities: dict[str, int]
+    """Context column cardinalities: {"ctxflt/col1": 5, ...}"""
+
+    is_sequential: bool
+    """Whether the data contains sequences (longitudinal) or is flat (cross-sectional)"""
+
+    trn_cnt: int
+    """Number of training samples"""
+
+    val_cnt: int
+    """Number of validation samples"""
+
+    tgt_seq_len_median: int
+    """Median sequence length for sequential data (required if is_sequential=True)"""
+
+    tgt_seq_len_max: int
+    """Maximum sequence length for sequential data (required if is_sequential=True)"""
+
+    ctx_seq_len_median: int
+    """Median context sequence length (optional)"""
+
+    empirical_probs: dict[str, list[float]] | None
+    """Empirical probabilities for predictor initialization (optional, improves convergence)"""
 
 
 ##################
@@ -132,104 +158,34 @@ def _learn_rate_heuristic(batch_size: int) -> float:
 ####################
 
 
-class BatchCollator:
+class _TensorIteratorWrapper:
     """
-    Collate a batch of samples into a dictionary of tensors.
-    For sequence data, it will sample subsequences with lengths up to max_sequence_window.
+    Wrapper for tensor iterators to provide DataLoader-like interface.
+
+    Caches batches on first pass for fast replay on subsequent epochs.
+    This avoids repeated data loading overhead and keeps GPU fed continuously.
     """
 
-    def __init__(self, is_sequential: bool, max_sequence_window: int | None, device: torch.device):
-        self.is_sequential = is_sequential
-        self.max_sequence_window = max_sequence_window
-        self.device = device
+    def __init__(self, tensor_iterator: Iterator[dict[str, torch.Tensor]]):
+        self._source = tensor_iterator
+        self._cache: list[dict[str, torch.Tensor]] | None = None
 
-    def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
-        batch = pd.DataFrame(batch)
-        if self.is_sequential and self.max_sequence_window:
-            batch = self._slice_sequences(batch, self.max_sequence_window)
-        batch = self._convert_to_tensors(batch)
-        return batch
+    def __iter__(self) -> Iterator[dict[str, torch.Tensor]]:
+        if self._cache is not None:
+            return iter(self._cache)
+        return self._caching_iterator()
 
-    def _convert_to_tensors(self, batch: pd.DataFrame) -> dict[str, torch.Tensor]:
-        tensors = {}
-        for column in batch.columns:
-            if column.startswith(TGT) and self.is_sequential:
-                # construct column tensor in single step
-                tensors[column] = torch.unsqueeze(
-                    torch.tensor(
-                        # pad batch-wise to the longest sequence length with 0s
-                        np.array(list(zip_longest(*batch[column], fillvalue=0))).T,
-                        dtype=torch.int64,
-                        device=self.device,
-                    ),
-                    dim=-1,
-                )
-            elif column.startswith(TGT) and not self.is_sequential:
-                # construct column tensor in single step
-                tensors[column] = torch.unsqueeze(
-                    torch.tensor(batch[column].values, dtype=torch.int64, device=self.device),
-                    dim=-1,
-                )
-            elif column.startswith(CTXFLT):
-                # construct column tensor in single step
-                tensors[column] = torch.unsqueeze(
-                    torch.tensor(batch[column].values, dtype=torch.int64, device=self.device),
-                    dim=-1,
-                )
-            elif column.startswith(CTXSEQ):
-                # construct row tensors and convert the list to nested column tensor
-                tensors[column] = torch.unsqueeze(
-                    torch.nested.as_nested_tensor(
-                        [torch.tensor(row, dtype=torch.int64, device=self.device) for row in batch[column]],
-                        dtype=torch.int64,
-                        device=self.device,
-                    ),
-                    dim=-1,
-                )
-        return tensors
+    def _caching_iterator(self) -> Iterator[dict[str, torch.Tensor]]:
+        cache = []
+        for batch in self._source:
+            cache.append(batch)
+            yield batch
+        self._cache = cache
 
-    @staticmethod
-    def _slice_sequences(batch: pd.DataFrame, max_sequence_window: int) -> pd.DataFrame:
-        # we pad sequences with one step
-        # thus, to respect the max_sequence_window provided by the user, we need to add 1 to it
-        max_sequence_window += 1
-        # determine sequence lengths of current batch
-        tgt_columns = [col for col in batch.columns if col.startswith(TGT)]
-        seq_lens = batch[tgt_columns[0]].copy().str.len().values
-
-        # determine sampling logic for current batch
-        flip = np.random.random()
-        if flip < 0.3:  # 30%
-            # pick start of the sequence to focus on the beginning
-            sel_idxs = [np.arange(0, min(max_sequence_window, seq_len)) for seq_len in seq_lens]
-        elif 0.3 <= flip < 0.4:  # 10%
-            # pick end of the sequence to focus on the end
-            sel_idxs = [np.arange(max(0, seq_len - max_sequence_window), seq_len) for seq_len in seq_lens]
-        else:  # 60%
-            # random continuous window to focus on any part
-            start_idxs = np.random.randint(low=1 - max_sequence_window, high=seq_lens, size=len(seq_lens))
-            # ensure that sequences that fit into max_sequence_length are completely covered
-            start_idxs[seq_lens <= max_sequence_window] = 0
-            # calculate final start and end indexes
-            end_idxs = start_idxs + max_sequence_window
-            start_idxs = np.maximum(0, start_idxs)
-            sel_idxs = [
-                np.arange(start, min(seq_len, end)) for start, end, seq_len in zip(start_idxs, end_idxs, seq_lens)
-            ]
-
-        # loop over each record within batch and pick values for each tgt column
-        tgt_col_idxs = [batch.columns.get_loc(c) for c in tgt_columns]
-        rows = []
-        for row_idx, batch_row in enumerate(batch.itertuples(index=False)):
-            cells = []
-            for col_idx, batch_cell in enumerate(batch_row):
-                if col_idx in tgt_col_idxs:
-                    cells.append([batch_cell[i] for i in sel_idxs[row_idx]])
-                else:
-                    cells.append(batch_cell)
-            rows.append(cells)
-
-        return pd.DataFrame(rows, columns=batch.columns, index=batch.index)
+    def __len__(self) -> int:
+        if self._cache is not None:
+            return len(self._cache)
+        raise TypeError("Length unknown until first iteration completes")
 
 
 #####################
@@ -310,7 +266,7 @@ def _calculate_sample_losses(
 @torch.no_grad()
 def _calculate_val_loss(
     model: FlatModel | SequentialModel,
-    val_dataloader: DataLoader,
+    val_dataloader: "_TensorIteratorWrapper",
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
@@ -341,29 +297,75 @@ def _calculate_average_trn_loss(trn_sample_losses: list[torch.Tensor], n: int | 
 @gpu_memory_cleanup
 def train(
     *,
+    # Required: tensor data and configuration
+    train_tensors: Iterator[dict[str, torch.Tensor]],
+    val_tensors: Iterator[dict[str, torch.Tensor]],
+    model_config: ModelConfig,
+    # Required: output location (for model weights and progress)
+    workspace_dir: str | Path,
+    # Training parameters
     model: str = "MOSTLY_AI/Medium",
     max_training_time: float = 14400.0,  # 10 days
     max_epochs: float = 100.0,  # 100 epochs
     batch_size: int | None = None,
     gradient_accumulation_steps: int | None = None,
-    max_sequence_window: int = 100,
     enable_flexible_generation: bool = True,
-    differential_privacy: DifferentialPrivacyConfig | dict | None = None,
     upload_model_data_callback: Callable | None = None,
     model_state_strategy: ModelStateStrategy | str = ModelStateStrategy.reset,
     device: torch.device | str | None = None,
-    workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
 ):
+    """
+    Train a TabularARGN model from pre-computed tensor batches.
+
+    This function accepts pre-computed tensor batches directly, eliminating the
+    CPU overhead of per-batch data transformation. Use with Ray Data pipelines
+    for distributed encoding and streaming tensor delivery.
+
+    Args:
+        train_tensors: Iterator yielding training batches as dict[str, torch.Tensor]
+        val_tensors: Iterator yielding validation batches as dict[str, torch.Tensor]
+        model_config: Model configuration from build_model_config()
+        workspace_dir: Directory for model weights and progress tracking
+        model: Model size ("MOSTLY_AI/Small", "MOSTLY_AI/Medium", "MOSTLY_AI/Large")
+        max_training_time: Maximum training time in minutes (default: 14400 = 10 days)
+        max_epochs: Maximum number of epochs (default: 100)
+        batch_size: Batch size for heuristics (batches are pre-sized by caller)
+        gradient_accumulation_steps: Gradient accumulation steps
+        enable_flexible_generation: Enable flexible column order generation
+        upload_model_data_callback: Callback for model data upload
+        model_state_strategy: How to handle existing model state
+        device: Device for training (auto-detected if None)
+        update_progress: Progress callback
+
+    Example:
+        >>> from mostlyai.engine import train, build_model_config, prepare_flat_batch
+        >>>
+        >>> # Build config from stats
+        >>> config = build_model_config(tgt_stats)
+        >>>
+        >>> # Create tensor iterator (e.g., from Ray Data)
+        >>> def tensor_iter():
+        ...     for batch in encoded_dataset.iter_batches():
+        ...         yield prepare_flat_batch(batch, device="cuda")
+        >>>
+        >>> train(
+        ...     train_tensors=tensor_iter(),
+        ...     val_tensors=val_tensor_iter(),
+        ...     model_config=config,
+        ...     workspace_dir="/path/to/output",
+        ... )
+    """
     _LOG.info("TRAIN_TABULAR started")
     t0 = time.time()
+
     workspace_dir = ensure_workspace_dir(workspace_dir)
     workspace = Workspace(workspace_dir)
     with ProgressCallbackWrapper(
         update_progress, progress_messages_path=workspace.model_progress_messages_path
     ) as progress:
-        _LOG.info(f"numpy={version('numpy')}, pandas={version('pandas')}")
-        _LOG.info(f"torch={version('torch')}, opacus={version('opacus')}")
+        _LOG.info(f"numpy={version('numpy')}")
+        _LOG.info(f"torch={version('torch')}")
         device = (
             torch.device(device)
             if device is not None
@@ -372,15 +374,18 @@ def train(
         _LOG.info(f"{device=}")
         torch.set_default_dtype(torch.float32)
 
-        has_context = workspace.ctx_stats.path.exists()
-        tgt_stats = workspace.tgt_stats.read()
-        ctx_stats = workspace.ctx_stats.read()
-        is_sequential = tgt_stats["is_sequential"]
+        # Extract configuration from model_config
+        tgt_cardinalities = model_config["tgt_cardinalities"]
+        ctx_cardinalities = model_config.get("ctx_cardinalities", {})
+        is_sequential = model_config["is_sequential"]
+        trn_cnt = model_config["trn_cnt"]
+        val_cnt = model_config["val_cnt"]
+        tgt_seq_len_median = model_config.get("tgt_seq_len_median", 1)
+        tgt_seq_len_max = model_config.get("tgt_seq_len_max", 1)
+        ctx_seq_len_median = model_config.get("ctx_seq_len_median", 1)
+        empirical_probs_for_predictor_init = model_config.get("empirical_probs")
+
         _LOG.info(f"{is_sequential=}")
-        trn_cnt = tgt_stats["no_of_training_records"]
-        val_cnt = tgt_stats["no_of_validation_records"]
-        tgt_cardinalities = get_cardinalities(tgt_stats)
-        ctx_cardinalities = get_cardinalities(ctx_stats) if has_context else {}
         tgt_sub_columns = get_sub_columns_from_cardinalities(tgt_cardinalities)
         ctx_nested_sub_columns = get_sub_columns_nested_from_cardinalities(ctx_cardinalities, "processor")
         ctxflt_sub_columns = ctx_nested_sub_columns.get(CTXFLT, [])
@@ -401,8 +406,6 @@ def train(
         model_size = model_sizes[model]
         _LOG.info(f"{model_size=}")
         _LOG.info(f"{enable_flexible_generation=}")
-        with_dp = differential_privacy is not None
-        _LOG.info(f"{with_dp=}")
         _LOG.info(f"{model_state_strategy=}")
 
         # initialize callbacks
@@ -421,24 +424,7 @@ def train(
             trn_column_order = None
         else:
             # fixed column order based on cardinalities
-            tgt_cardinalities = get_cardinalities(tgt_stats)
             trn_column_order = get_columns_from_cardinalities(tgt_cardinalities)
-
-        # gather sequence length stats for heuristics
-        tgt_seq_len_stats = get_sequence_length_stats(tgt_stats)
-        tgt_seq_len_median = tgt_seq_len_stats["median"]
-        tgt_seq_len_max = tgt_seq_len_stats["max"]
-        max_sequence_window = np.clip(max_sequence_window, a_min=1, a_max=tgt_seq_len_max)
-        _LOG.info(f"{max_sequence_window=}")
-        ctx_seq_len_median = get_ctx_sequence_length(ctx_stats, key="median")
-
-        empirical_probs_for_predictor_init = (
-            get_empirical_probs_for_predictor_init(
-                workspace.encoded_data_trn.fetch_all()[0], tgt_cardinalities, is_sequential
-            )
-            if not with_dp
-            else None
-        )
 
         # the line below fixes issue with growing epoch time for later epochs
         # https://discuss.pytorch.org/t/training-time-gets-slower-and-slower-on-cpu/145483
@@ -454,7 +440,7 @@ def train(
             "model_size": model_size,
             "column_order": trn_column_order,
             "device": device,
-            "with_dp": with_dp,  # this flag decides whether the model is initialized with LSTM or DPLSTM layers
+            "with_dp": False,  # DP training not supported with tensor interface
             "empirical_probs_for_predictor_init": empirical_probs_for_predictor_init,
         }
         if is_sequential:
@@ -512,9 +498,10 @@ def train(
         workspace.model_configs.write(model_configs)
 
         # heuristics for batch_size and for initial learn_rate
+        # With tensor interface, batches are pre-sized by the caller
         mem_available_gb = get_available_ram_for_heuristics() / 1024**3
-        no_tgt_data_points = get_max_data_points_per_sample(tgt_stats)
-        no_ctx_data_points = get_max_data_points_per_sample(ctx_stats)
+        no_tgt_data_points = len(tgt_cardinalities) * (tgt_seq_len_median if is_sequential else 1)
+        no_ctx_data_points = len(ctx_cardinalities)
         if batch_size is None:
             batch_size = _physical_batch_size_heuristic(
                 mem_available_gb=mem_available_gb,
@@ -542,30 +529,10 @@ def train(
             # which speeds up compute, plus it results in a more stable val_loss
             val_batch_size = val_batch_size // 2
 
-        # and see if it's possible to make it compatible with DP
-        batch_collator = BatchCollator(
-            is_sequential=is_sequential, max_sequence_window=max_sequence_window, device=device
-        )
-        disable_progress_bar()
-        trn_dataset = load_dataset("parquet", data_files=[str(p) for p in workspace.encoded_data_trn.fetch_all()])[
-            "train"
-        ]
-        trn_dataloader = DataLoader(
-            dataset=trn_dataset,
-            shuffle=True,
-            # either DP logical batch size or grad accumulation physical batch size
-            batch_size=trn_batch_size if with_dp else batch_size,
-            collate_fn=batch_collator,
-        )
-        val_dataset = load_dataset("parquet", data_files=[str(p) for p in workspace.encoded_data_val.fetch_all()])[
-            "train"
-        ]
-        val_dataloader = DataLoader(
-            dataset=val_dataset,
-            shuffle=False,
-            batch_size=val_batch_size,
-            collate_fn=batch_collator,
-        )
+        # Create data iterators from provided tensor iterators
+        _LOG.info("Using tensor iterators for training data")
+        trn_dataloader = _TensorIteratorWrapper(train_tensors)
+        val_dataloader = _TensorIteratorWrapper(val_tensors)
 
         _LOG.info(f"{trn_cnt=}, {val_cnt=}")
         _LOG.info(f"{len(tgt_sub_columns)=}, {len(ctxflt_sub_columns)=}, {len(ctxseq_sub_columns)=}")
@@ -618,51 +585,6 @@ def train(
             # this can help accelerate GPU compute
             torch.backends.cudnn.benchmark = True
 
-        if with_dp:
-            if isinstance(differential_privacy, DifferentialPrivacyConfig):
-                dp_config = differential_privacy.model_dump()
-            else:
-                dp_config = DifferentialPrivacyConfig(**differential_privacy).model_dump()
-            dp_max_epsilon = dp_config.get("max_epsilon") or float("inf")
-            dp_total_delta = dp_config.get("delta", 1e-5)
-            # take the actual value_protection_epsilon from the stats
-            dp_value_protection_epsilon = (ctx_stats.get("value_protection_epsilon_spent") or 0.0) + (
-                tgt_stats.get("value_protection_epsilon_spent") or 0.0
-            )
-            # the implementation of PRV accountant seems to have numerical and memory issues for small noise multiplier
-            # therefore, we choose RDP instead as it is more stable and provides comparable privacy guarantees
-            dp_accountant = "rdp"  # hard-coded for now
-            _LOG.info(f"{dp_config=}, {dp_accountant=}")
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning, message=".*Secure RNG turned off*")
-                privacy_engine = PrivacyEngine(accountant=dp_accountant)
-            if model_state_strategy == ModelStateStrategy.resume and workspace.model_dp_accountant_path.exists():
-                _LOG.info("restore DP accountant state")
-                torch.serialization.add_safe_globals([getattr, PRVAccountant, RDPAccountant, GaussianAccountant])
-                privacy_engine.accountant.load_state_dict(
-                    torch.load(workspace.model_dp_accountant_path, map_location=device, weights_only=True)
-                )
-            # Opacus will return the modified objects
-            # - model: wrapped in GradSampleModule and contains additional hooks for computing per-sample gradients
-            # - optimizer: wrapped in DPOptimizer and will do different operations during virtual steps and logical steps
-            # - dataloader: the dataloader with batch_sampler=UniformWithReplacementSampler (for Poisson sampling)
-            argn, optimizer, trn_dataloader = privacy_engine.make_private(
-                module=argn,
-                optimizer=optimizer,
-                data_loader=trn_dataloader,
-                noise_multiplier=dp_config.get("noise_multiplier"),
-                max_grad_norm=dp_config.get("max_grad_norm"),
-                poisson_sampling=True,
-            )
-            # this further wraps the dataloader with batch_sampler=BatchSplittingSampler to achieve gradient accumulation
-            # it will split the sampled logical batches into smaller sub-batches with batch_size
-            trn_dataloader = wrap_data_loader(
-                data_loader=trn_dataloader, max_batch_size=batch_size, optimizer=optimizer
-            )
-        else:
-            privacy_engine = None
-            dp_config, dp_total_delta, dp_accountant = None, None, None
-
         progress_message = None
         start_trn_time = time.time()
         last_msg_time = time.time()
@@ -679,8 +601,7 @@ def train(
 
             stop_accumulating_grads = False
             accumulated_steps = 0
-            if not with_dp:
-                optimizer.zero_grad(set_to_none=True)
+            optimizer.zero_grad(set_to_none=True)
             while not stop_accumulating_grads:
                 # fetch next training (micro)batch
                 try:
@@ -694,27 +615,14 @@ def train(
                 #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
                 #  than the batch size in both flat and sequential case.
                 # calculate total step loss
-                step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
-                if with_dp:
-                    # opacus handles the gradient accumulation internally
-                    optimizer.zero_grad(set_to_none=True)
+                step_loss = torch.mean(step_losses) / gradient_accumulation_steps
                 # backward pass
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
-                    if with_dp:
-                        warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
                     step_loss.backward()
                 accumulated_steps += 1
-                # explicitly count the number of processed samples as the actual batch size can vary when DP is on
                 samples += step_losses.shape[0]
-                if with_dp:
-                    # for DP training, the optimizer will do different operations during virtual steps and logical steps
-                    # - virtual step: clip and accumulate gradients
-                    # - logical step: clip and accumulate gradients, add noises to gradients and update parameters
-                    optimizer.step()
-                    # if step was not skipped, it was a logical step, and we can stop accumulating gradients
-                    stop_accumulating_grads = not optimizer._is_last_step_skipped
-                elif accumulated_steps % gradient_accumulation_steps == 0:
+                if accumulated_steps % gradient_accumulation_steps == 0:
                     # update parameters with accumulated gradients
                     optimizer.step()
                     stop_accumulating_grads = True
@@ -744,21 +652,14 @@ def train(
                         device=device,
                     )
                 trn_loss = _calculate_average_trn_loss(trn_sample_losses)
-                dp_total_epsilon = (
-                    privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
+                # save model weights with the best validation loss
+                is_checkpoint = model_checkpoint.save_checkpoint_if_best(
+                    val_loss=val_loss,
+                    model=argn,
+                    optimizer=optimizer,
+                    lr_scheduler=lr_scheduler,
+                    dp_accountant=None,
                 )
-                has_exceeded_dp_max_epsilon = dp_total_epsilon > dp_max_epsilon if with_dp else False
-                if not has_exceeded_dp_max_epsilon:
-                    # save model weights with the best validation loss (and that hasn't exceeded DP max epsilon)
-                    is_checkpoint = model_checkpoint.save_checkpoint_if_best(
-                        val_loss=val_loss,
-                        model=argn,
-                        optimizer=optimizer,
-                        lr_scheduler=lr_scheduler,
-                        dp_accountant=privacy_engine.accountant if with_dp else None,
-                    )
-                else:
-                    _LOG.info("early stopping: current DP epsilon has exceeded max epsilon")
                 # gather message for progress with checkpoint info
                 progress_message = ProgressMessage(
                     epoch=epoch,
@@ -769,11 +670,11 @@ def train(
                     val_loss=val_loss,
                     total_time=total_time_init + time.time() - start_trn_time,
                     learn_rate=current_lr,
-                    dp_eps=dp_total_epsilon,
-                    dp_delta=dp_total_delta,
+                    dp_eps=None,
+                    dp_delta=None,
                 )
                 # check for early stopping
-                do_stop = early_stopper(val_loss=val_loss) or has_exceeded_dp_max_epsilon
+                do_stop = early_stopper(val_loss=val_loss)
                 # scheduling for ReduceLROnPlateau
                 if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     lr_scheduler.step(metrics=val_loss)
@@ -795,9 +696,6 @@ def train(
             if progress_message is None and (last_msg_elapsed > last_msg_interval or steps == 1):
                 # running mean loss of the most recent training samples
                 running_trn_loss = _calculate_average_trn_loss(trn_sample_losses, n=val_steps * val_batch_size)
-                dp_total_epsilon = (
-                    privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
-                )
                 progress_message = ProgressMessage(
                     epoch=epoch,
                     is_checkpoint=is_checkpoint,
@@ -807,8 +705,8 @@ def train(
                     val_loss=None,
                     total_time=total_time_init + time.time() - start_trn_time,
                     learn_rate=current_lr,
-                    dp_eps=dp_total_epsilon,
-                    dp_delta=dp_total_delta,
+                    dp_eps=None,
+                    dp_delta=None,
                 )
             if progress_message:
                 last_msg_time = time.time()
