@@ -368,6 +368,40 @@ class TestTabularARGNClassification:
         with pytest.raises(ValueError, match="(?i)column order.*does not match"):
             argn.predict_proba(test_X, target="target")
 
+    def test_predict_proba_with_context_only(self, tmp_path_factory):
+        """Test predict_proba() when X only contains join key and actual features are in context."""
+        # Create data where target depends on context features
+        df = pd.DataFrame({
+            "id": range(300),
+            "ctx_a": ["a1", "a2", "a3"] * 100,
+            "ctx_b": ["b1", "b2", "b3"] * 100,
+            "target": ["c1", "c2", "c3"] * 100,
+        })
+
+        # Train with context
+        argn = TabularARGN(
+            enable_flexible_generation=False,
+            verbose=0,
+            max_epochs=5,
+            ctx_data=df[["id", "ctx_a", "ctx_b"]],
+            ctx_primary_key="id",
+            tgt_context_key="id",
+            workspace_dir=tmp_path_factory.mktemp("workspace"),
+        )
+        argn.fit(X=df[["id", "target"]])
+
+        # Predict probabilities with only join key in X (all features in context)
+        test_df = df.head(10)
+        proba = argn.predict_proba(
+            X=test_df[["id"]], ctx_data=test_df[["id", "ctx_a", "ctx_b"]], target="target"
+        )
+
+        # Verify probabilities
+        assert proba.shape[0] == 10
+        assert proba.shape[1] >= 3  # At least 3 classes (c1, c2, c3)
+        # Verify probabilities sum to 1.0 for each sample
+        np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
+
 
 class TestTabularARGNRegression:
     """Test regression: predict numeric target."""
