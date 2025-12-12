@@ -347,8 +347,8 @@ class TestTabularARGNClassification:
                 # Numeric binned values (may be bin labels or ranges)
                 assert len(col_values) >= 3  # At least some bins present
 
-    def test_predict_proba_wrong_column_order_raises(self, classification_data, tmp_path_factory):
-        """Test predict_proba raises error with different column order when flexible generation is disabled."""
+    def test_wrong_column_order_raises(self, classification_data, tmp_path_factory):
+        """Test that wrong column order raises error when flexible generation is disabled."""
         data = classification_data
         X = data[["feature1", "feature2"]]
         y = data["target"]
@@ -362,11 +362,14 @@ class TestTabularARGNClassification:
         )
         argn.fit(X=X, y=y)
 
-        # Reorder columns in test data
-        test_X = X.head(10)[["feature2", "feature1"]]
+        # Reorder columns
+        X_reordered = X.head(5)[["feature2", "feature1"]]
 
         with pytest.raises(ValueError, match="(?i)column order.*does not match"):
-            argn.predict_proba(test_X, target="target")
+            argn.predict_proba(X_reordered, target="target")
+
+        with pytest.raises(ValueError, match="(?i)column order.*does not match"):
+            argn.sample(n_samples=10, seed_data=X_reordered)
 
 
 class TestTabularARGNRegression:
