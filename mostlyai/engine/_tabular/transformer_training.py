@@ -13,6 +13,7 @@ import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from .transformer import (
     FoundationalTabularTransformer,
@@ -93,13 +94,17 @@ def pretrain_mcm(
     total_steps = len(dataloader) * num_epochs
     scheduler = CosineAnnealingLR(optimizer, T_max=total_steps)
 
+    _LOG.info(f"Training config: {num_epochs} epochs, {len(dataloader)} batches/epoch, {total_steps} total steps")
+    _LOG.info(f"Batch size: {batch_size}, Learning rate: {learning_rate}, Device: {device}")
+
     # Training loop
     global_step = 0
     for epoch in range(num_epochs):
         epoch_loss = 0.0
         num_batches = 0
 
-        for batch in dataloader:
+        pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}", leave=True)
+        for batch in pbar:
             value_ids = batch["value_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
 
@@ -136,11 +141,9 @@ def pretrain_mcm(
             num_batches += 1
             global_step += 1
 
-            # Logging
-            if global_step % log_every == 0:
-                avg_loss = epoch_loss / num_batches
-                lr = scheduler.get_last_lr()[0]
-                _LOG.info(f"Step {global_step}, Epoch {epoch + 1}, Loss: {avg_loss:.4f}, LR: {lr:.2e}")
+            # Update progress bar
+            avg_loss = epoch_loss / num_batches
+            pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": f"{scheduler.get_last_lr()[0]:.2e}"})
 
         # End of epoch logging
         avg_epoch_loss = epoch_loss / max(num_batches, 1)
@@ -216,8 +219,10 @@ def pretrain_mcm_streaming(
     steps_since_log = 0
 
     _LOG.info(f"Starting streaming pre-training for {num_steps} steps")
+    _LOG.info(f"Batch size: {batch_size}, Learning rate: {learning_rate}, Device: {device}")
 
-    for step in range(num_steps):
+    pbar = tqdm(range(num_steps), desc="Pre-training", leave=True)
+    for step in pbar:
         # Fill buffer if needed
         while len(sample_buffer) < batch_size:
             try:
@@ -292,11 +297,13 @@ def pretrain_mcm_streaming(
         running_loss += loss.item()
         steps_since_log += 1
 
-        # Logging
-        if (step + 1) % log_every == 0:
+        # Update progress bar
+        if steps_since_log > 0:
             avg_loss = running_loss / steps_since_log
-            lr = scheduler.get_last_lr()[0]
-            _LOG.info(f"Step {step + 1}/{num_steps}, Loss: {avg_loss:.4f}, LR: {lr:.2e}")
+            pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": f"{scheduler.get_last_lr()[0]:.2e}", "buf": len(sample_buffer)})
+
+        # Reset running stats periodically
+        if (step + 1) % log_every == 0:
             running_loss = 0.0
             steps_since_log = 0
 
