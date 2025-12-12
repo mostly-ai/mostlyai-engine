@@ -1,7 +1,6 @@
 name: Complete Workflow
 
-# on: [push, pull_request]
-on: workflow_call
+on: [push, pull_request]
 
 env:
   PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
