@@ -9,9 +9,9 @@ env:
 
 jobs:
   run-tests-gpu:
-    runs-on: gha-gpu-public
+    runs-on: gha-gpu-public-internal
     container:
-      image: nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
+      image: nvidia/cuda:13.0.2-cudnn-runtime-ubuntu24.04
       options: --gpus all
     permissions:
       contents: read
