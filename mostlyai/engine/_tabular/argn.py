@@ -164,10 +164,11 @@ def _regressor_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, 
 def _flat_context_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[8], M=[64], L=[128])
+    model_size_layers = dict(S=[4], M=[16], L=[64])
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input, np.e)))
     dims = [unit * coefficient for unit in layers]
+    _LOG.info(f"[ARGN] flat context heuristic: {dim_input=} -> {dims}")
     return dims
 
 
@@ -176,10 +177,11 @@ def _sequential_context_heuristic(
 ) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[8], M=[32], L=[64, 64])
+    model_size_layers = dict(S=[4], M=[16], L=[64, 64])
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input * seq_len_median, np.e)))
     dims = [unit * coefficient for unit in layers]
+    _LOG.info(f"[ARGN] sequential context heuristic: {dim_input=} x {seq_len_median=} -> {dims}")
     return dims
 
 
@@ -190,6 +192,7 @@ def _history_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, se
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input * seq_len_median, np.e)))
     dims = [unit * coefficient for unit in layers]
+    _LOG.info(f"[ARGN] history heuristic: {dim_input=} x {seq_len_median=} -> {dims}")
     return dims
 
 
