@@ -6,13 +6,12 @@ on:
 env:
   PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
   FORCE_COLOR: '1'
-  VLLM_USE_V1: '0'
 
 jobs:
   run-tests-gpu:
     runs-on: gha-gpu-public
     container:
-      image: nvidia/cuda:13.0.2-cudnn-runtime-ubuntu24.04
+      image: nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
       options: --gpus all
     permissions:
       contents: read
