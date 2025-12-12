@@ -428,7 +428,6 @@ class FlatContextCompressor(nn.Module):
             xs = torch.cat(list(embeddings.values()), dim=-1)
             for compressor_layer in self.get():
                 xs = compressor_layer(xs)
-                xs = torch.relu(xs)
                 xs = self.dropout(xs)
                 flat_context = [xs]
         return flat_context
