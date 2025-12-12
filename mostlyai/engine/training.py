@@ -76,7 +76,7 @@ def train(
             gradient_accumulation_steps=gradient_accumulation_steps,
             enable_flexible_generation=enable_flexible_generation,
             differential_privacy=differential_privacy,
-            loss_weights=loss_weights if "loss_weights" in args else None,
+            loss_weights=loss_weights,
             update_progress=update_progress,
             upload_model_data_callback=upload_model_data_callback,
             model_state_strategy=model_state_strategy,
