@@ -27,11 +27,10 @@ from peft import PeftConfig
 from pydantic import BaseModel
 from transformers import AutoConfig, AutoTokenizer
 from vllm import LLM, SamplingParams
-from vllm.config import _get_and_verify_max_len
 from vllm.distributed import cleanup_dist_env_and_memory
 from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
-from vllm.sampling_params import GuidedDecodingParams
+from vllm.sampling_params import StructuredOutputsParams
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
@@ -80,8 +79,11 @@ class VLLMEngine(LanguageEngine):
 
         model_path = str(model_path)
         self._lora_request = LoRARequest("adapter", 1, model_path)
-        config_max_model_len = _get_and_verify_max_len(
-            base_config, tokenizer_config=None, max_model_len=None, disable_sliding_window=False, sliding_window=None
+        # Get max model length from config (different models use different attribute names)
+        config_max_model_len = getattr(
+            base_config,
+            "max_position_embeddings",
+            getattr(base_config, "n_positions", getattr(base_config, "max_sequence_length", 2048)),
         )
 
         self.llm = LLM(
@@ -136,18 +138,18 @@ class VLLMEngine(LanguageEngine):
 
         sampling_params = []
         for i in range(actual_batch_size):
-            guided_decoding = None
+            structured_outputs = None
             if effective_schemas and i < len(effective_schemas):
-                # Convert Pydantic model to JSON schema for guided decoding
+                # Convert Pydantic model to JSON schema for structured output
                 schema_dict = effective_schemas[i].model_json_schema()
-                guided_decoding = GuidedDecodingParams(json=schema_dict)
+                structured_outputs = StructuredOutputsParams(json=schema_dict)
 
             sampling_params.append(
                 SamplingParams(
                     max_tokens=self.max_new_tokens,
                     temperature=sampling_temperature,
                     top_p=sampling_top_p,
-                    guided_decoding=guided_decoding,
+                    structured_outputs=structured_outputs,
                 )
             )
         t_generate = time.time()
