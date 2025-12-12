@@ -3,19 +3,22 @@
 Train the Foundational Tabular Transformer on the T4 dataset.
 
 Usage:
-    python scripts/train_transformer_t4.py --num_steps 1000 --batch_size 64
+    python scripts/foundational/train_transformer_t4.py --num_steps 1000 --batch_size 64
 
 Requirements:
-    pip install datasets
+    pip install huggingface_hub pyarrow
 """
 
 import argparse
+import io
 import logging
+import zipfile
 from pathlib import Path
 
 import pandas as pd
+import pyarrow.parquet as pq
 import torch
-from datasets import load_dataset
+from huggingface_hub import HfFileSystem
 
 from mostlyai.engine._tabular.transformer import create_model
 from mostlyai.engine._tabular.transformer_training import (
@@ -34,64 +37,93 @@ def t4_table_iterator(max_tables: int | None = None):
     """
     Iterator that yields DataFrames from the T4 dataset.
 
+    Each parquet file in T4 is a separate table with its own schema.
+    We load them individually using HfFileSystem to avoid schema conflicts.
+
     Args:
         max_tables: Maximum number of tables to yield (None = unlimited)
 
     Yields:
         pandas DataFrames with categorical columns only
     """
-    _LOG.info("Loading T4 dataset (streaming mode)...")
+    _LOG.info("Connecting to T4 dataset via HfFileSystem...")
 
-    # Load dataset in streaming mode
-    dataset = load_dataset(
-        "mlfoundations/t4-full",
-        split="train",
-        streaming=True,
-    )
+    fs = HfFileSystem()
+    base_path = "datasets/mlfoundations/t4-full"
+
+    # List all chunk zip files
+    try:
+        all_files = fs.ls(base_path, detail=False)
+        chunk_zips = sorted([f for f in all_files if f.endswith(".zip")])
+        _LOG.info(f"Found {len(chunk_zips)} chunk zip files")
+    except Exception as e:
+        _LOG.error(f"Failed to list dataset: {e}")
+        raise
 
     tables_yielded = 0
-    for example in dataset:
-        # Each example should be a table - convert to DataFrame
-        # The exact structure depends on how T4 stores tables
-        # Let's handle different possible formats
+    tables_skipped = 0
 
-        if isinstance(example, dict):
-            # Try to convert dict to DataFrame
-            try:
-                # T4 stores tables as dicts with column names as keys
-                df = pd.DataFrame(example)
-            except Exception as e:
-                _LOG.debug(f"Skipping table: {e}")
-                continue
-        elif isinstance(example, pd.DataFrame):
-            df = example
-        else:
-            _LOG.debug(f"Unknown example type: {type(example)}")
+    for chunk_path in chunk_zips:
+        chunk_name = chunk_path.split("/")[-1]
+        _LOG.info(f"Processing {chunk_name}...")
+
+        try:
+            # Download and open the zip file
+            with fs.open(chunk_path, "rb") as f:
+                zip_data = f.read()
+
+            with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+                parquet_files = [n for n in zf.namelist() if n.endswith(".parquet")]
+                _LOG.info(f"  Found {len(parquet_files)} parquet files in {chunk_name}")
+
+                for pq_name in parquet_files:
+                    try:
+                        # Read parquet file from zip
+                        with zf.open(pq_name) as pq_file:
+                            pq_data = pq_file.read()
+                            table = pq.read_table(io.BytesIO(pq_data))
+                            df = table.to_pandas()
+
+                        # Filter to categorical columns only (object/string dtype)
+                        cat_cols = df.select_dtypes(
+                            include=["object", "string", "category"]
+                        ).columns.tolist()
+
+                        # Skip if too few categorical columns
+                        if len(cat_cols) < 2:
+                            tables_skipped += 1
+                            continue
+
+                        # Keep only categorical columns
+                        df = df[cat_cols]
+
+                        # Skip empty or tiny tables
+                        if len(df) < 10:
+                            tables_skipped += 1
+                            continue
+
+                        yield df
+                        tables_yielded += 1
+
+                        if tables_yielded % 100 == 0:
+                            _LOG.info(
+                                f"  Progress: yielded {tables_yielded} tables, skipped {tables_skipped}"
+                            )
+
+                        if max_tables is not None and tables_yielded >= max_tables:
+                            _LOG.info(f"Reached max_tables limit: {max_tables}")
+                            return
+
+                    except Exception as e:
+                        _LOG.debug(f"  Failed to read {pq_name}: {e}")
+                        tables_skipped += 1
+                        continue
+
+        except Exception as e:
+            _LOG.warning(f"Failed to process {chunk_name}: {e}")
             continue
 
-        # Filter to categorical columns only
-        cat_cols = df.select_dtypes(include=["object", "string", "category"]).columns.tolist()
-
-        # Skip if too few categorical columns
-        if len(cat_cols) < 2:
-            continue
-
-        # Keep only categorical columns
-        df = df[cat_cols]
-
-        # Skip empty tables
-        if len(df) == 0:
-            continue
-
-        yield df
-        tables_yielded += 1
-
-        if tables_yielded % 100 == 0:
-            _LOG.info(f"Yielded {tables_yielded} tables")
-
-        if max_tables is not None and tables_yielded >= max_tables:
-            _LOG.info(f"Reached max_tables limit: {max_tables}")
-            break
+    _LOG.info(f"Finished: yielded {tables_yielded} tables, skipped {tables_skipped}")
 
 
 def main():
