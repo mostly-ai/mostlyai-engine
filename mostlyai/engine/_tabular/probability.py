@@ -453,10 +453,10 @@ def predict_proba(
         # Build DataFrames for each combo with actual values, then concatenate
         combo_dfs = []
         for combo_idx, prev_combo in enumerate(prev_combos):
-            # Copy extended_seed for this combo
-            df = extended_seed.copy()
+            # Build data dict starting with columns from extended_seed
+            data = {col: extended_seed[col].values for col in extended_seed.columns}
 
-            # Add previous target columns with actual values (no dummy values)
+            # Add previous target columns with actual values
             for i in range(target_idx):
                 prev_target_col = target_columns[i]
                 encoded_val = prev_combo[i]
@@ -468,8 +468,10 @@ def predict_proba(
                         argn_column=prev_target_stats[ARGN_COLUMN],
                         argn_sub_column=sub_col_key,
                     )
-                    df[full_sub_col_name] = encoded_val
+                    data[full_sub_col_name] = encoded_val
 
+            # Create DataFrame with explicit row count
+            df = pd.DataFrame(data, index=range(n_samples))
             combo_dfs.append(df)
 
         # Concatenate all combo DataFrames into single batch
