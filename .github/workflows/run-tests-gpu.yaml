@@ -6,6 +6,7 @@ on:
 env:
   PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
   FORCE_COLOR: '1'
+  VLLM_USE_V1: '0'
 
 jobs:
   run-tests-gpu:
