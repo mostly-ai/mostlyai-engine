@@ -21,6 +21,7 @@ import pandas as pd
 import pytest
 
 from mostlyai.engine import TabularARGN
+from mostlyai.engine._workspace import Workspace
 
 from .conftest import MockData
 
@@ -175,6 +176,11 @@ class TestTabularARGNClassification:
             workspace_dir=tmp_path_factory.mktemp("workspace"),
         )
         argn.fit(X=X, y=y)
+        model_cfg = Workspace(argn.workspace_dir).model_configs.read()
+        assert "loss_weights" in model_cfg
+        assert model_cfg["loss_weights"].get("target") == 1.0
+        assert model_cfg["loss_weights"].get("feature1") == 0.0
+        assert model_cfg["loss_weights"].get("feature2") == 0.0
 
         # Test single target prediction
         test_X = X.head(10)
@@ -186,16 +192,29 @@ class TestTabularARGNClassification:
         assert "target" in predictions.columns
         assert all(pred in ["class1", "class2"] for pred in predictions["target"])
 
-        # Test multi-target prediction
-        multi_predictions = argn.predict(test_X, target=["target", "feature2"], n_draws=5, agg_fn="mode")
+        # Multi-target prediction is locked to the fitted y targets; this should raise
+        with pytest.raises(ValueError, match="(?i)target.*match.*fitted"):
+            argn.predict(test_X, target=["target", "feature2"], n_draws=5, agg_fn="mode")
 
-        # Verify multi-target predictions
+        # Fit with multi-output y and ensure multi-target prediction works when it matches fitted targets
+        X2 = data[["feature1"]]
+        y2 = data[["target", "feature2"]]
+        argn2 = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace_multi_y"),
+        )
+        argn2.fit(X=X2, y=y2)
+        model_cfg2 = Workspace(argn2.workspace_dir).model_configs.read()
+        assert model_cfg2["loss_weights"].get("target") == 1.0
+        assert model_cfg2["loss_weights"].get("feature2") == 1.0
+        assert model_cfg2["loss_weights"].get("feature1") == 0.0
+        test_X2 = X2.head(10)
+        multi_predictions = argn2.predict(test_X2, target=["target", "feature2"], n_draws=3, agg_fn="mode")
         assert isinstance(multi_predictions, pd.DataFrame)
         assert len(multi_predictions) == 10
-        assert "target" in multi_predictions.columns
-        assert "feature2" in multi_predictions.columns
-        assert all(pred in ["class1", "class2"] for pred in multi_predictions["target"])
-        assert all(pred in ["X", "Y"] for pred in multi_predictions["feature2"])
+        assert set(multi_predictions.columns) == {"target", "feature2"}
 
     def test_predict_proba(self, classification_data, tmp_path_factory):
         """Test predict_proba() for classification."""
@@ -402,6 +421,11 @@ class TestTabularARGNRegression:
             workspace_dir=tmp_path_factory.mktemp("workspace"),
         )
         argn.fit(X=X, y=y)
+        model_cfg = Workspace(argn.workspace_dir).model_configs.read()
+        assert "loss_weights" in model_cfg
+        assert model_cfg["loss_weights"].get("target") == 1.0
+        assert model_cfg["loss_weights"].get("feature1") == 0.0
+        assert model_cfg["loss_weights"].get("feature2") == 0.0
 
         # Test single target prediction
         test_X = X.head(10)
@@ -414,18 +438,29 @@ class TestTabularARGNRegression:
         assert all(isinstance(pred, (int, float, np.number)) for pred in predictions["target"])
         assert all(not np.isnan(pred) for pred in predictions["target"])
 
-        # Test multi-target prediction (numeric + categorical)
-        multi_predictions = argn.predict(test_X, target=["target", "feature1"], n_draws=5, agg_fn="mean")
+        # Multi-target prediction is locked to the fitted y targets; this should raise
+        with pytest.raises(ValueError, match="(?i)target.*match.*fitted"):
+            argn.predict(test_X, target=["target", "feature1"], n_draws=5, agg_fn="mean")
 
-        # Verify multi-target predictions
+        # Fit with multi-output y and ensure multi-target prediction works when it matches fitted targets
+        X2 = data[["feature2"]]
+        y2 = data[["target", "feature1"]]
+        argn2 = TabularARGN(
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            verbose=0,
+            workspace_dir=tmp_path_factory.mktemp("workspace_multi_y"),
+        )
+        argn2.fit(X=X2, y=y2)
+        model_cfg2 = Workspace(argn2.workspace_dir).model_configs.read()
+        assert model_cfg2["loss_weights"].get("target") == 1.0
+        assert model_cfg2["loss_weights"].get("feature1") == 1.0
+        assert model_cfg2["loss_weights"].get("feature2") == 0.0
+        test_X2 = X2.head(10)
+        multi_predictions = argn2.predict(test_X2, target=["target", "feature1"], n_draws=3, agg_fn="mean")
         assert isinstance(multi_predictions, pd.DataFrame)
         assert len(multi_predictions) == 10
-        assert "target" in multi_predictions.columns
-        assert "feature1" in multi_predictions.columns
-        assert all(isinstance(pred, (int, float, np.number)) for pred in multi_predictions["target"])
-        assert all(not np.isnan(pred) for pred in multi_predictions["target"])
-        assert all(isinstance(pred, (int, float, np.number)) for pred in multi_predictions["feature1"])
-        assert all(not np.isnan(pred) for pred in multi_predictions["feature1"])
+        assert set(multi_predictions.columns) == {"target", "feature1"}
 
 
 class TestTabularARGNSequentialWithContext:

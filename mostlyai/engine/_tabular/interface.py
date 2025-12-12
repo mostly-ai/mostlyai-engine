@@ -134,7 +134,9 @@ class TabularARGN(BaseEstimator):
         self._temp_dir = None
         self._workspace_path = None
         self._feature_names = None
-        self._target_column = None
+        # If fit(X, y) is used, we store the target column(s) here (multi-output supported).
+        # If fit(X) is used, this remains None and predict/predict_proba behave as generative utilities.
+        self._target_columns: list[str] | None = None
 
         # Initialize or disable logging based on verbose setting
         if self.verbose > 0:
@@ -188,22 +190,36 @@ class TabularARGN(BaseEstimator):
         X_df = ensure_dataframe(X)
         self._feature_names = list(X_df.columns)
 
-        # Add target column if provided
+        # Add target column(s) if provided (supports multi-output y)
+        loss_weights: dict[str, float] | None = None
+        enable_flexible_generation = self.enable_flexible_generation
         if y is not None:
-            y_array = np.asarray(y)
-            # Infer target column name if not already set
-            if not hasattr(self, "_target_column") or self._target_column is None:
-                # Infer from y
-                if isinstance(y, pd.Series) and y.name is not None:
-                    # Use Series name
-                    self._target_column = y.name
-                elif isinstance(y, pd.DataFrame) and len(y.columns) == 1:
-                    # Use single DataFrame column name
-                    self._target_column = y.columns[0]
+            # Normalize y into a DataFrame with explicit column names
+            if isinstance(y, pd.Series):
+                col = y.name or "target"
+                y_df = y.to_frame(name=col)
+            elif isinstance(y, pd.DataFrame):
+                y_df = y.copy()
+            else:
+                y_array = np.asarray(y)
+                if y_array.ndim == 1:
+                    y_df = pd.DataFrame({"target": y_array})
+                elif y_array.ndim == 2:
+                    n_out = y_array.shape[1]
+                    cols = [f"target_{i}" for i in range(n_out)]
+                    y_df = pd.DataFrame(y_array, columns=cols)
                 else:
-                    # Fall back to default name
-                    self._target_column = "target"
-            X_df.loc[:, self._target_column] = y_array
+                    raise ValueError(f"y must be 1D or 2D, got shape {y_array.shape}")
+
+            self._target_columns = list(y_df.columns)
+
+            # Attach y columns to the target training data
+            for c in self._target_columns:
+                X_df.loc[:, c] = y_df[c].to_numpy()
+
+            # Supervised fit: fixed order + train loss only on y columns
+            enable_flexible_generation = False
+            loss_weights = {c: (1.0 if c in self._target_columns else 0.0) for c in X_df.columns}
 
         # Get workspace directory
         workspace_dir = self._get_workspace_dir()
@@ -245,10 +261,11 @@ class TabularARGN(BaseEstimator):
             max_epochs=self.max_epochs,
             batch_size=self.batch_size,
             gradient_accumulation_steps=self.gradient_accumulation_steps,
-            enable_flexible_generation=self.enable_flexible_generation,
+            enable_flexible_generation=enable_flexible_generation,
             max_sequence_window=self.max_sequence_window,
             differential_privacy=self.differential_privacy,
             device=self.device,
+            loss_weights=loss_weights,
             workspace_dir=workspace_dir,
         )
 
@@ -467,7 +484,7 @@ class TabularARGN(BaseEstimator):
         if not self._fitted:
             return None
 
-        target_col = target_column or self._target_column
+        target_col = target_column or (self._target_columns[0] if self._target_columns else None)
         if target_col is None:
             return None
 
@@ -475,6 +492,25 @@ class TabularARGN(BaseEstimator):
         if target_col in columns:
             return columns[target_col].get("encoding_type")
         return None
+
+    def _validate_and_resolve_targets(self, target: str | list[str] | None) -> list[str]:
+        """
+        Resolve target argument to a list of target column names and enforce strict locking
+        when the estimator was fit with y (i.e., self._target_columns is set).
+        """
+        if target is None:
+            if self._target_columns is None:
+                raise ValueError(
+                    "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
+                )
+            return list(self._target_columns)
+
+        target_columns = [target] if isinstance(target, str) else list(target)
+        if self._target_columns is not None and target_columns != list(self._target_columns):
+            raise ValueError(
+                f"Target must match the fitted y target columns: {self._target_columns}. Got: {target_columns}"
+            )
+        return target_columns
 
     def _is_numeric_or_datetime_encoding(self, encoding_type: str | None) -> bool:
         """Check if encoding type is numeric or datetime."""
@@ -568,17 +604,7 @@ class TabularARGN(BaseEstimator):
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        # Normalize target to list
-        if target is None:
-            if self._target_column is None:
-                raise ValueError(
-                    "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
-                )
-            target_columns = [self._target_column]
-        elif isinstance(target, str):
-            target_columns = [target]
-        else:
-            target_columns = target
+        target_columns = self._validate_and_resolve_targets(target)
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 
@@ -685,18 +711,7 @@ class TabularARGN(BaseEstimator):
         if not self._fitted:
             raise ValueError("Model must be fitted before prediction. Call fit() first.")
 
-        # Determine target column(s)
-        if target is None:
-            target_columns = [self._target_column] if self._target_column else None
-        elif isinstance(target, str):
-            target_columns = [target]
-        else:
-            target_columns = target
-
-        if target_columns is None or not target_columns:
-            raise ValueError(
-                "Target column must be specified for prediction. Provide 'target' parameter or fit with y."
-            )
+        target_columns = self._validate_and_resolve_targets(target)
 
         X_df = ensure_dataframe(X, columns=self._feature_names)
 

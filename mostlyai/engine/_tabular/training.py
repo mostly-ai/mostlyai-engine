@@ -253,7 +253,10 @@ class TabularModelCheckpoint(ModelCheckpoint):
 
 
 def _calculate_sample_losses(
-    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
+    model: FlatModel | SequentialModel | GradSampleModule,
+    data: dict[str, torch.Tensor],
+    *,
+    sub_col_loss_weights: dict[str, float] | None = None,
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
@@ -287,7 +290,10 @@ def _calculate_sample_losses(
 
         # calculate per column losses
         losses_by_column = []
+        weights_by_column = []
         for col in tgt_cols:
+            w = 1.0 if sub_col_loss_weights is None else float(sub_col_loss_weights.get(col, 1.0))
+            weights_by_column.append(w)
             if col in sidx_cols:
                 mask = sidx_mask
             elif col in slen_cols:
@@ -300,10 +306,52 @@ def _calculate_sample_losses(
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask), min=1)
             losses_by_column.append(masked_loss)
     else:
-        losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
+        losses_by_column = []
+        weights_by_column = []
+        for col in tgt_cols:
+            w = 1.0 if sub_col_loss_weights is None else float(sub_col_loss_weights.get(col, 1.0))
+            weights_by_column.append(w)
+            losses_by_column.append(criterion(output[col], data[col].squeeze(1)))
     # sum up column level losses to get overall losses at sample level
-    losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
+    losses_by_column_t = torch.stack(losses_by_column, dim=0)  # (n_cols, batch)
+    weights_t = torch.as_tensor(weights_by_column, device=losses_by_column_t.device, dtype=losses_by_column_t.dtype)
+    losses_by_column_t = losses_by_column_t * weights_t.unsqueeze(1)
+    losses = torch.sum(losses_by_column_t, dim=0)
     return losses
+
+
+def _map_loss_weights_to_sub_columns(
+    *,
+    tgt_stats: dict,
+    loss_weights: dict[str, float] | None,
+) -> dict[str, float] | None:
+    """
+    Map original column names (as used in input DataFrames) to internal ARGN sub-column names.
+
+    `loss_weights` is keyed by original column name and is applied to all sub-columns of that column.
+    """
+    if loss_weights is None:
+        return None
+
+    from mostlyai.engine._common import ARGN_COLUMN, ARGN_PROCESSOR, ARGN_TABLE, get_argn_name
+
+    column_stats: dict = tgt_stats.get("columns", {})
+    sub_col_weights: dict[str, float] = {}
+
+    for col_name, weight in loss_weights.items():
+        if col_name not in column_stats:
+            continue
+        stats = column_stats[col_name]
+        for sub_col_key in stats.get("cardinalities", {}).keys():
+            sub_name = get_argn_name(
+                argn_processor=stats[ARGN_PROCESSOR],
+                argn_table=stats[ARGN_TABLE],
+                argn_column=stats[ARGN_COLUMN],
+                argn_sub_column=sub_col_key,
+            )
+            sub_col_weights[sub_name] = float(weight)
+
+    return sub_col_weights
 
 
 # gradient tracking is not needed for validation steps, disable it to save memory
@@ -349,6 +397,7 @@ def train(
     max_sequence_window: int = 100,
     enable_flexible_generation: bool = True,
     differential_privacy: DifferentialPrivacyConfig | dict | None = None,
+    loss_weights: dict[str, float] | None = None,
     upload_model_data_callback: Callable | None = None,
     model_state_strategy: ModelStateStrategy | str = ModelStateStrategy.reset,
     device: torch.device | str | None = None,
@@ -401,6 +450,7 @@ def train(
         model_size = model_sizes[model]
         _LOG.info(f"{model_size=}")
         _LOG.info(f"{enable_flexible_generation=}")
+        _LOG.info(f"{loss_weights is not None=}")
         with_dp = differential_privacy is not None
         _LOG.info(f"{with_dp=}")
         _LOG.info(f"{model_state_strategy=}")
@@ -508,6 +558,7 @@ def train(
             "model_id": model,
             "model_units": model_units,
             "enable_flexible_generation": enable_flexible_generation,
+            "loss_weights": loss_weights,
         }
         workspace.model_configs.write(model_configs)
 
@@ -668,6 +719,7 @@ def train(
         last_msg_time = time.time()
         trn_data_iter = iter(trn_dataloader)
         trn_sample_losses: list[torch.Tensor] = []
+        sub_col_loss_weights = _map_loss_weights_to_sub_columns(tgt_stats=tgt_stats, loss_weights=loss_weights)
         do_stop = False
         current_lr = initial_lr
         # infinite loop over training steps, until we decide to stop
@@ -689,7 +741,7 @@ def train(
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
                 # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
+                step_losses = _calculate_sample_losses(argn, step_data, sub_col_loss_weights=sub_col_loss_weights)
                 # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
                 #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
                 #  than the batch size in both flat and sequential case.
