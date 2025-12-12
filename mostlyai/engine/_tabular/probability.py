@@ -362,15 +362,11 @@ def predict_proba(
         )
     )
 
-    # Get seed column names (needed for column order check and _generate_marginal_probs)
+    # Get seed column names (needed for _generate_marginal_probs)
     seed_columns = list(seed_data.columns)
 
-    # Check column order when flexible generation is disabled
-    if not enable_flexible_generation:
-        seed_columns_argn = get_argn_column_names(tgt_stats["columns"], seed_columns)
-        target_columns_argn = get_argn_column_names(tgt_stats["columns"], target_columns)
-        gen_column_order = seed_columns_argn + target_columns_argn
-        check_column_order(gen_column_order, all_columns)
+    # Note: Column order validation is now handled in the interface layer (TabularARGN.predict_proba)
+    # to centralize validation logic with sample() method
 
     # Encode seed data (features to condition on) - common for both single and multi-target
     # seed_data should NOT include any target columns
