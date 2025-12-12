@@ -359,11 +359,13 @@ def _map_loss_weights_to_sub_columns(
 def _calculate_val_loss(
     model: FlatModel | SequentialModel,
     val_dataloader: DataLoader,
+    *,
+    sub_col_loss_weights: dict[str, float] | None = None,
 ) -> float:
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
     for step_data in val_dataloader:
-        step_losses = _calculate_sample_losses(model, step_data)
+        step_losses = _calculate_sample_losses(model, step_data, sub_col_loss_weights=sub_col_loss_weights)
         val_sample_losses.extend(step_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
@@ -786,7 +788,9 @@ def train(
             do_validation = on_epoch_end = epoch.is_integer()
             if do_validation:
                 # calculate val loss and trn loss
-                val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader)
+                val_loss = _calculate_val_loss(
+                    model=argn, val_dataloader=val_dataloader, sub_col_loss_weights=sub_col_loss_weights
+                )
                 # handle scenario where model training ran into numeric instability
                 if pd.isna(val_loss):
                     _LOG.warning("validation loss is not available - reset model weights to last checkpoint")
@@ -903,7 +907,9 @@ def train(
                 val_loss = None
             else:
                 _LOG.info("calculate validation loss")
-                val_loss = _calculate_val_loss(model=argn, val_dataloader=val_dataloader)
+                val_loss = _calculate_val_loss(
+                    model=argn, val_dataloader=val_dataloader, sub_col_loss_weights=sub_col_loss_weights
+                )
             dp_total_epsilon = (
                 privacy_engine.get_epsilon(dp_total_delta) + dp_value_protection_epsilon if with_dp else None
             )
