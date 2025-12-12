@@ -2,6 +2,7 @@ name: '[GPU] mostlyai-engine Tests'
 
 on:
   workflow_call:
+  push:
 
 env:
   PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring

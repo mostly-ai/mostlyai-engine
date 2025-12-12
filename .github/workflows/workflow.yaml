@@ -1,10 +1,11 @@
 name: Complete Workflow
 
-on: [push, pull_request]
+# on: [push, pull_request]
+on: workflow_call
 
 env:
   PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
-  FORCE_COLOR: "1"
+  FORCE_COLOR: '1'
 
 jobs:
   pre-commit-check:
