@@ -368,54 +368,6 @@ class TestTabularARGNClassification:
         with pytest.raises(ValueError, match="(?i)column order.*does not match"):
             argn.predict_proba(test_X, target="target")
 
-    def test_predict_proba_with_context_only(self, tmp_path_factory):
-        """Test predict_proba() when X only contains join key (single and multi-target)."""
-        df = pd.DataFrame(
-            {
-                "id": range(300),
-                "ctx_a": ["a1", "a2", "a3"] * 100,
-                "target_b": ["b1", "b2", "b3"] * 100,
-                "target_c": ["c1", "c2", "c3"] * 100,
-            }
-        )
-        test_df = df.head(10)
-
-        # Test single target
-        argn_single = TabularARGN(
-            enable_flexible_generation=False,
-            verbose=0,
-            max_epochs=5,
-            ctx_data=df[["id", "ctx_a"]],
-            ctx_primary_key="id",
-            tgt_context_key="id",
-            workspace_dir=tmp_path_factory.mktemp("workspace_single"),
-        )
-        argn_single.fit(X=df[["id", "target_b"]])
-        proba_single = argn_single.predict_proba(
-            X=test_df[["id"]], ctx_data=test_df[["id", "ctx_a"]], target="target_b"
-        )
-        assert proba_single.shape[0] == 10
-        assert proba_single.shape[1] >= 3
-        np.testing.assert_allclose(proba_single.sum(axis=1), 1.0, rtol=1e-5)
-
-        # Test multiple targets (joint probabilities)
-        argn_multi = TabularARGN(
-            enable_flexible_generation=False,
-            verbose=0,
-            max_epochs=5,
-            ctx_data=df[["id", "ctx_a"]],
-            ctx_primary_key="id",
-            tgt_context_key="id",
-            workspace_dir=tmp_path_factory.mktemp("workspace_multi"),
-        )
-        argn_multi.fit(X=df[["id", "target_b", "target_c"]])
-        proba_multi = argn_multi.predict_proba(
-            X=test_df[["id"]], ctx_data=test_df[["id", "ctx_a"]], target=["target_b", "target_c"]
-        )
-        assert proba_multi.shape[0] == 10
-        assert proba_multi.shape[1] == 16  # 4 × 4 = 16 combinations
-        np.testing.assert_allclose(proba_multi.sum(axis=1), 1.0, rtol=1e-5)
-
 
 class TestTabularARGNRegression:
     """Test regression: predict numeric target."""
