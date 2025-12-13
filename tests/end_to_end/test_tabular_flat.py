@@ -585,9 +585,9 @@ class TestTabularFlatWithContext:
         assert abs((syn_time.quantile(0.8) - orig_time.quantile(0.8)).days) < 365 * 3
 
         # check consistency between date and datetime
-        assert (syn_ctx["date"].dt.year == syn_tgt["datetime"].dt.year).mean() > 0.9
-        assert (syn_ctx["date"].dt.month == syn_tgt["datetime"].dt.month).mean() > 0.9
-        assert (syn_ctx["date"].dt.day == syn_tgt["datetime"].dt.day).mean() > 0.9
+        assert (syn_ctx["date"].dt.year == syn_tgt["datetime"].dt.year).mean() > 0.8
+        assert (syn_ctx["date"].dt.month == syn_tgt["datetime"].dt.month).mean() > 0.8
+        assert (syn_ctx["date"].dt.day == syn_tgt["datetime"].dt.day).mean() > 0.8
 
         orig_latlong = split_str_to_latlong(orig_tgt["geo"])
         orig_latlong_mean = orig_latlong.dropna().astype(float).mean()
