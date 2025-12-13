@@ -164,7 +164,7 @@ def _regressor_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, 
 def _flat_context_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[4], M=[16], L=[64])
+    model_size_layers = dict(S=[2], M=[8], L=[32])
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input, np.e)))
     dims = [unit * coefficient for unit in layers]
