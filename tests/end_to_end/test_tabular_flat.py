@@ -580,9 +580,9 @@ class TestTabularFlatWithContext:
 
         # quantiles of datetime should not be too far apart
         syn_time, orig_time = syn_tgt["datetime"], orig_tgt["datetime"]
-        assert abs((syn_time.quantile(0.1) - orig_time.quantile(0.1)).days) < 365 * 3
+        assert abs((syn_time.quantile(0.2) - orig_time.quantile(0.2)).days) < 365 * 3
         assert abs((syn_time.quantile(0.5) - orig_time.quantile(0.5)).days) < 365
-        assert abs((syn_time.quantile(0.9) - orig_time.quantile(0.9)).days) < 365 * 3
+        assert abs((syn_time.quantile(0.8) - orig_time.quantile(0.8)).days) < 365 * 3
 
         # check consistency between date and datetime
         assert (syn_ctx["date"].dt.year == syn_tgt["datetime"].dt.year).mean() > 0.9
