@@ -65,7 +65,7 @@ uv pip install -U 'mostlyai-engine[gpu]'
 On Linux, one can explicitly install the CPU-only variant of torch together with `mostlyai-engine`:
 
 ```bash
-uv pip install -U torch==2.8.0+cpu torchvision==0.23.0+cpu mostlyai-engine --extra-index-url https://download.pytorch.org/whl/cpu
+uv pip install -U torch==2.9.1+cpu torchvision==0.24.1+cpu mostlyai-engine --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 ## TabularARGN for Flat Data
