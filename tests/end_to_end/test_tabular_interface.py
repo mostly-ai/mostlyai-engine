@@ -388,6 +388,10 @@ class TestTabularARGNClassification:
         result = argn.predict(X_seed, target=["col_c", "col_b"])
         assert list(result.columns) == ["col_c", "col_b"]
 
+        # predict() works even with targets completely out of original order
+        result = argn.predict(X_seed, target=["col_c", "col_b", "col_a"])
+        assert list(result.columns) == ["col_c", "col_b", "col_a"]
+
 
 class TestTabularARGNRegression:
     """Test regression: predict numeric target."""
