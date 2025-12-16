@@ -363,10 +363,8 @@ def predict_proba(
         )
     )
 
-    # Get seed column names (needed for _generate_marginal_probs)
     seed_columns = list(seed_data.columns)
 
-    # Check column order when flexible generation is disabled
     if not enable_flexible_generation:
         seed_columns_argn = get_argn_column_names(tgt_stats["columns"], seed_columns)
         target_columns_argn = get_argn_column_names(tgt_stats["columns"], target_columns)
@@ -567,6 +565,7 @@ def log_prob(
         device=device,
     )
 
+    # Check column order of input data when flexible generation is disabled
     if not enable_flexible_generation:
         check_column_order(list(data.columns), all_columns)
 
