@@ -32,15 +32,12 @@ from sklearn.base import BaseEstimator
 
 from mostlyai.engine._common import (
     ensure_dataframe,
-    get_cardinalities,
-    get_columns_from_cardinalities,
     list_fn,
     load_generated_data,
     mean_fn,
     median_fn,
     mode_fn,
 )
-from mostlyai.engine._tabular.common import get_argn_column_names
 from mostlyai.engine._tabular.probability import log_prob as _log_prob
 from mostlyai.engine._tabular.probability import predict_proba as _predict_proba
 from mostlyai.engine._workspace import Workspace
@@ -287,49 +284,6 @@ class TabularARGN(BaseEstimator):
         """Fallback cleanup if context manager wasn't used."""
         self.close()
 
-    def _validate_column_order(
-        self,
-        data: pd.DataFrame,
-        workspace_dir: str | Path,
-        target_columns: list[str] | None = None,
-    ) -> None:
-        """
-        Validate that data columns (and optionally target columns) appear in training order.
-
-        Args:
-            data: DataFrame with seed columns to validate
-            workspace_dir: Path to workspace containing training statistics
-            target_columns: Optional list of target column names. If provided, validates
-                          the combined seed+target column order. If None, validates only seed columns.
-
-        Raises:
-            ValueError: If column order doesn't match training order and enable_flexible_generation=False
-        """
-        if not self.enable_flexible_generation:
-            workspace = Workspace(workspace_dir)
-            tgt_stats = workspace.tgt_stats.read()
-            tgt_cardinalities = get_cardinalities(tgt_stats)
-            all_columns = get_columns_from_cardinalities(tgt_cardinalities)
-
-            # Convert data columns to ARGN format
-            data_df = ensure_dataframe(data)
-            seed_columns_argn = get_argn_column_names(tgt_stats["columns"], list(data_df.columns))
-
-            # If target_columns provided, validate combined seed+target order
-            if target_columns is not None:
-                target_columns_argn = get_argn_column_names(tgt_stats["columns"], target_columns)
-                columns_to_check = seed_columns_argn + target_columns_argn
-            else:
-                columns_to_check = seed_columns_argn
-
-            # Check that columns appear in training order
-            expected_order = [col for col in all_columns if col in columns_to_check]
-            if columns_to_check != expected_order:
-                raise ValueError(
-                    "Column order does not match training order. "
-                    "A change in column order is only permitted for models that were trained with `enable_flexible_generation=True`."
-                )
-
     def sample(
         self,
         n_samples: int | None = None,
@@ -394,10 +348,6 @@ class TabularARGN(BaseEstimator):
         # Default n_samples to 1 if still None
         if n_samples is None:
             n_samples = 1
-
-        # Validate seed_data column order when flexible generation is disabled
-        if seed_data is not None:
-            self._validate_column_order(seed_data, workspace_dir)
 
         # Generate synthetic data using configured parameters
         generate(
@@ -755,9 +705,6 @@ class TabularARGN(BaseEstimator):
         if target_cols_in_X:
             _LOG.info(f"Dropping target columns from seed data: {target_cols_in_X}")
             X_df = X_df.drop(columns=target_cols_in_X)
-
-        # Validate seed+target column order when flexible generation is disabled
-        self._validate_column_order(X_df, self.workspace_dir, target_columns=target_columns)
 
         # Call new predict_proba utility that returns probabilities in-memory
         workspace = Workspace(self.workspace_dir)

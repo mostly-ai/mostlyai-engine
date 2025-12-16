@@ -559,7 +559,6 @@ def log_prob(
         device=device,
     )
 
-    # Check column order of input data when flexible generation is disabled
     if not enable_flexible_generation:
         check_column_order(list(data.columns), all_columns)
 
