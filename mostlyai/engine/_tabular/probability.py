@@ -366,6 +366,14 @@ def predict_proba(
     # Get seed column names (needed for _generate_marginal_probs)
     seed_columns = list(seed_data.columns)
 
+    # Check column order when flexible generation is disabled
+    if not enable_flexible_generation:
+        seed_columns_argn = get_argn_column_names(tgt_stats["columns"], seed_columns)
+        target_columns_argn = get_argn_column_names(tgt_stats["columns"], target_columns)
+        columns_to_check = seed_columns_argn + target_columns_argn
+        expected_order = [col for col in all_columns if col in columns_to_check]
+        check_column_order(columns_to_check, expected_order)
+
     # Encode seed data (features to condition on) - common for both single and multi-target
     # seed_data should NOT include any target columns
     seed_encoded, _, _ = encode_df(
