@@ -347,11 +347,15 @@ class TestTabularARGNClassification:
                 # Numeric binned values (may be bin labels or ranges)
                 assert len(col_values) >= 3  # At least some bins present
 
-    def test_predict_proba_wrong_column_order_raises(self, classification_data, tmp_path_factory):
-        """Test predict_proba raises error with different column order when flexible generation is disabled."""
-        data = classification_data
-        X = data[["feature1", "feature2"]]
-        y = data["target"]
+    def test_wrong_column_order_raises(self, tmp_path_factory):
+        """Test that wrong column order raises error when flexible generation is disabled."""
+        data = pd.DataFrame(
+            {
+                "col_a": ["x", "y", "z"] * 20,
+                "col_b": ["p", "q", "r"] * 20,
+                "col_c": ["1", "2", "3"] * 20,
+            }
+        )
 
         argn = TabularARGN(
             model="MOSTLY_AI/Small",
@@ -360,13 +364,33 @@ class TestTabularARGNClassification:
             enable_flexible_generation=False,
             workspace_dir=tmp_path_factory.mktemp("workspace"),
         )
-        argn.fit(X=X, y=y)
+        argn.fit(X=data)
 
-        # Reorder columns in test data
-        test_X = X.head(10)[["feature2", "feature1"]]
-
+        # Wrong seed order for sample
+        X_wrong_seed = data.head(5)[["col_b", "col_a"]]  # wrong: should be col_a, col_b
         with pytest.raises(ValueError, match="(?i)column order.*does not match"):
-            argn.predict_proba(test_X, target="target")
+            argn.sample(n_samples=5, seed_data=X_wrong_seed)
+
+        # Wrong seed order for predict_proba
+        with pytest.raises(ValueError, match="(?i)column order.*does not match"):
+            argn.predict_proba(X_wrong_seed, target="col_c")
+
+        # Wrong seed order for predict
+        with pytest.raises(ValueError, match="(?i)column order.*does not match"):
+            argn.predict(X_wrong_seed, target="col_c")
+
+        # Wrong target order for predict_proba (computes joint probabilities in order)
+        X_seed = data.head(5)[["col_a"]]
+        with pytest.raises(ValueError, match="(?i)column order.*does not match"):
+            argn.predict_proba(X_seed, target=["col_c", "col_b"])  # wrong: should be col_b, col_c
+
+        # predict() doesn't require target order - it generates all columns and extracts targets
+        result = argn.predict(X_seed, target=["col_c", "col_b"])
+        assert list(result.columns) == ["col_c", "col_b"]
+
+        # predict() works even with targets completely out of original order
+        result = argn.predict(X_seed, target=["col_c", "col_b", "col_a"])
+        assert list(result.columns) == ["col_c", "col_b", "col_a"]
 
 
 class TestTabularARGNRegression:
