@@ -1,0 +1,2535 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://mostly-ai.github.io/mostlyai-engine/api/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>API Reference - mostlyai-engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Lato";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#engine-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="mostlyai-engine" class="md-header__button md-logo" aria-label="mostlyai-engine" data-md-component="logo">
+      
+  <img src="../logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            mostlyai-engine
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 2c-1.82 0-3.53.5-5 1.35C8 5.08 10 8.3 10 12s-2 6.92-5 8.65C6.47 21.5 8.18 22 10 22a10 10 0 0 0 10-10A10 10 0 0 0 10 2"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mostly-ai/mostlyai-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mostly-ai/mostlyai-engine
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API Reference
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="mostlyai-engine" class="md-nav__button md-logo" aria-label="mostlyai-engine" data-md-component="logo">
+      
+  <img src="../logo.png" alt="logo">
+
+    </a>
+    mostlyai-engine
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mostly-ai/mostlyai-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mostly-ai/mostlyai-engine
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#engine-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Engine Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Engine Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.split" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        split
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.analyze" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analyze
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.encode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        encode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.train" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        train
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.generate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schema-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schema Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.DifferentialPrivacyConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DifferentialPrivacyConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.FairnessConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FairnessConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ImputationConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ImputationConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ModelEncodingType" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ModelEncodingType
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ModelStateStrategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ModelStateStrategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ModelType" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ModelType
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.RareCategoryReplacementMethod" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RareCategoryReplacementMethod
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.RebalancingConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RebalancingConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+                
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#engine-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Engine Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Engine Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.split" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        split
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.analyze" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analyze
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.encode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        encode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.train" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        train
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.generate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schema-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schema Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.DifferentialPrivacyConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DifferentialPrivacyConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.FairnessConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FairnessConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ImputationConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ImputationConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ModelEncodingType" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ModelEncodingType
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ModelStateStrategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ModelStateStrategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.ModelType" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ModelType
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.RareCategoryReplacementMethod" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RareCategoryReplacementMethod
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mostlyai.engine.domain.RebalancingConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RebalancingConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+
+
+
+  
+  
+
+
+  <h1>API Reference</h1>
+
+<h2 id="engine-reference">Engine Reference<a class="headerlink" href="#engine-reference" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mostlyai.engine.split" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mostlyai.engine.split</span>
+
+
+<a href="#mostlyai.engine.split" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">split</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">tgt_data</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">ctx_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">tgt_primary_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">ctx_primary_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">tgt_context_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">model_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">tgt_encoding_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">ctx_encoding_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">n_partitions</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">trn_val_split</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">workspace_dir</span><span class="o">=</span><span class="s2">&quot;engine-ws&quot;</span><span class="p">,</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">update_progress</span><span class="o">=</span><span class="kc">None</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Splits the provided original data into training and validation sets, and stores these as partitioned Parquet files.
+This is a simplified version of <code>mostlyai-data</code>, tailored towards single- and two-table use cases, while requiring
+all data to be passed as DataFrames in memory.</p>
+<p>Creates the following folder structure within the <code>workspace_dir</code>:</p>
+<ul>
+<li><code>OriginalData/tgt-data</code>: Partitioned target data files.</li>
+<li><code>OriginalData/tgt-meta</code>: Metadata files for target data.</li>
+<li><code>OriginalData/ctx-data</code>: Partitioned context data files (if context is provided).</li>
+<li><code>OriginalData/ctx-meta</code>: Metadata files for context data (if context is provided).</li>
+</ul>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>tgt_data</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame containing the target data.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ctx_data</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame containing the context data.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tgt_primary_key</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Primary key column name in the target data.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ctx_primary_key</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Primary key column name in the context data.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tgt_context_key</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Context key column name in the target data.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>model_type</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <a class="autorefs autorefs-internal" title="mostlyai.engine.domain.ModelType" href="#mostlyai.engine.domain.ModelType">ModelType</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Model type for the target data. If not provided, it will be inferred from the encoding types, or set to TABULAR by default.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tgt_encoding_types</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="str">str</span> | <a class="autorefs autorefs-internal" title="mostlyai.engine.domain.ModelEncodingType" href="#mostlyai.engine.domain.ModelEncodingType">ModelEncodingType</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Encoding types for columns in the target data (excluding key columns).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ctx_encoding_types</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="str">str</span> | <a class="autorefs autorefs-internal" title="mostlyai.engine.domain.ModelEncodingType" href="#mostlyai.engine.domain.ModelEncodingType">ModelEncodingType</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Encoding types for columns in the context data (excluding key columns).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>n_partitions</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of partitions to split the data into.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>trn_val_split</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | <span title="collections.abc.Callable">Callable</span>[[<span title="pandas.Series">Series</span>], <span title="tuple">tuple</span>[<span title="pandas.Series">Series</span>, <span title="pandas.Series">Series</span>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fraction of data to use for training (0 &lt; value &lt; 1), or a callable
+that takes keys as input and returns (trn_keys, val_keys) tuple.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.8</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>workspace_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Path to the workspace directory where files will be created.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;engine-ws&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>update_progress</code>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine._common.ProgressCallback">ProgressCallback</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A custom progress callback.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mostlyai.engine.analyze" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mostlyai.engine.analyze</span>
+
+
+<a href="#mostlyai.engine.analyze" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">analyze</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">value_protection</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">differential_privacy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">workspace_dir</span><span class="o">=</span><span class="s2">&quot;engine-ws&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">update_progress</span><span class="o">=</span><span class="kc">None</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Generates (privacy-safe) column-level statistics of the original data, that has been <code>split</code> into the workspace.
+This information is required for encoding the original as well as for decoding the generating data.</p>
+<p>Creates the following folder structure within the <code>workspace_dir</code>:</p>
+<ul>
+<li><code>ModelStore/tgt-stats/stats.json</code>: Column-level statistics for target data</li>
+<li><code>ModelStore/ctx-stats/stats.json</code>: Column-level statistics for context data (if context is provided).</li>
+</ul>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>value_protection</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to enable value protection for rare values.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>workspace_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Path to workspace directory containing partitioned data.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;engine-ws&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>update_progress</code>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine._common.ProgressCallback">ProgressCallback</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional callback to update progress during analysis.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mostlyai.engine.encode" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mostlyai.engine.encode</span>
+
+
+<a href="#mostlyai.engine.encode" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">encode</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">workspace_dir</span><span class="o">=</span><span class="s1">&#39;engine-ws&#39;</span><span class="p">,</span> <span class="n">update_progress</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Encodes data in the workspace that has already been split and analyzed.</p>
+<p>Creates the following folder structure within the <code>workspace_dir</code>:</p>
+<ul>
+<li><code>OriginalData/encoded-data</code>: Encoded data for training, stored as parquet files.</li>
+</ul>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>workspace_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory path for workspace.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;engine-ws&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>update_progress</code>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine._common.ProgressCallback">ProgressCallback</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Callback for progress updates.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mostlyai.engine.train" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mostlyai.engine.train</span>
+
+
+<a href="#mostlyai.engine.train" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">train</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">max_training_time</span><span class="o">=</span><span class="mf">14400.0</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">max_epochs</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">gradient_accumulation_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">enable_flexible_generation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_sequence_window</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">differential_privacy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">model_state_strategy</span><span class="o">=</span><span class="n">ModelStateStrategy</span><span class="o">.</span><span class="n">reset</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">workspace_dir</span><span class="o">=</span><span class="s2">&quot;engine-ws&quot;</span><span class="p">,</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">update_progress</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">upload_model_data_callback</span><span class="o">=</span><span class="kc">None</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Trains a model with optional early stopping and differential privacy.</p>
+<p>Creates the following folder structure within the <code>workspace_dir</code>:</p>
+<ul>
+<li><code>ModelStore</code>: Trained model checkpoints and logs.</li>
+</ul>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>model</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The identifier of the model to train. If tabular, defaults to MOSTLY_AI/Medium. If language, defaults to MOSTLY_AI/LSTMFromScratch-3m.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_training_time</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum training time in minutes. If None, defaults to 10 days.</p>
+              </div>
+            </td>
+            <td>
+                  <code>14400.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_epochs</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum number of training epochs. If None, defaults to 100 epochs.</p>
+              </div>
+            </td>
+            <td>
+                  <code>100.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch_size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-device batch size for training and validation. If None, determined automatically.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>gradient_accumulation_steps</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of steps to accumulate gradients. If None, determined automatically.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>enable_flexible_generation</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to enable flexible order generation. Defaults to True.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_sequence_window</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum sequence window for tabular sequential models. Only applicable for tabular models.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>differential_privacy</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="mostlyai.engine.domain.DifferentialPrivacyConfig" href="#mostlyai.engine.domain.DifferentialPrivacyConfig">DifferentialPrivacyConfig</a> | <span title="dict">dict</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration for differential privacy training. If None, DP is disabled.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>model_state_strategy</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="mostlyai.engine.domain.ModelStateStrategy" href="#mostlyai.engine.domain.ModelStateStrategy">ModelStateStrategy</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Strategy for handling existing model state (reset/resume/reuse).</p>
+              </div>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine.domain.ModelStateStrategy.reset">reset</span></code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span> | <span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Device to run training on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>workspace_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory path for workspace. Training outputs are stored in ModelStore subdirectory.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;engine-ws&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>update_progress</code>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine._common.ProgressCallback">ProgressCallback</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Callback function to report training progress.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>upload_model_data_callback</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Callable">Callable</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Callback function to upload model data during training.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mostlyai.engine.generate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mostlyai.engine.generate</span>
+
+
+<a href="#mostlyai.engine.generate" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">generate</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">ctx_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">seed_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">sample_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">sampling_temperature</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">sampling_top_p</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">rare_category_replacement_method</span><span class="o">=</span><span class="n">RareCategoryReplacementMethod</span><span class="o">.</span><span class="n">constant</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">rebalancing</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">imputation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">fairness</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">workspace_dir</span><span class="o">=</span><span class="s2">&quot;engine-ws&quot;</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">update_progress</span><span class="o">=</span><span class="kc">None</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Generates synthetic data from a trained model.</p>
+<p>Creates the following folder structure within the <code>workspace_dir</code>:</p>
+<ul>
+<li><code>SyntheticData</code>: Generated synthetic data, stored as parquet files.</li>
+</ul>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>ctx_data</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Context data to be used for generation.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>seed_data</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Seed data to condition generation on fixed target columns.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of samples to generate. Defaults to number of original samples.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch_size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Batch size for generation. If None, determined automatically.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sampling_temperature</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sampling temperature. Higher values increase randomness.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sampling_top_p</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nucleus sampling probability threshold.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Device to run generation on ('cuda' or 'cpu'). Defaults to 'cuda' if available, else 'cpu'.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rare_category_replacement_method</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="mostlyai.engine.domain.RareCategoryReplacementMethod" href="#mostlyai.engine.domain.RareCategoryReplacementMethod">RareCategoryReplacementMethod</a> | <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Method for handling rare categories. Only applicable for tabular models.</p>
+              </div>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine.domain.RareCategoryReplacementMethod.constant">constant</span></code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rebalancing</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="mostlyai.engine.domain.RebalancingConfig" href="#mostlyai.engine.domain.RebalancingConfig">RebalancingConfig</a> | <span title="dict">dict</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration for rebalancing column distributions. Only applicable for tabular models.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>imputation</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="mostlyai.engine.domain.ImputationConfig" href="#mostlyai.engine.domain.ImputationConfig">ImputationConfig</a> | <span title="dict">dict</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>List of columns to impute missing values. Only applicable for tabular models.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>fairness</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="mostlyai.engine.domain.FairnessConfig" href="#mostlyai.engine.domain.FairnessConfig">FairnessConfig</a> | <span title="dict">dict</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration for fairness constraints. Only applicable for tabular models.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>workspace_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory path for workspace.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;engine-ws&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>update_progress</code>
+            </td>
+            <td>
+                  <code><span title="mostlyai.engine._common.ProgressCallback">ProgressCallback</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Callback for progress updates.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="schema-reference">Schema Reference<a class="headerlink" href="#schema-reference" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.DifferentialPrivacyConfig" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.DifferentialPrivacyConfig</span>
+
+
+<a href="#mostlyai.engine.domain.DifferentialPrivacyConfig" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The differential privacy configuration for training the model.
+If not provided, then no differential privacy will be applied.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_epsilon</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Specifies the maximum allowable epsilon value. If the training process exceeds this threshold, it will be terminated early. Only model checkpoints with epsilon values below this limit will be retained. If not provided, the training will proceed without early termination based on epsilon constraints.</p>
+              </div>
+            </td>
+            <td>
+                  <code>10.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>delta</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The delta value for differential privacy. It is the probability of the privacy guarantee not holding. The smaller the delta, the more confident you can be that the privacy guarantee holds. This delta will be equally distributed between the analysis and the training phase.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1e-05</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>noise_multiplier</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Determines how much noise while training the model with differential privacy. This is the ratio of the standard deviation of the Gaussian noise to the L2-sensitivity of the function to which the noise is added.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.5</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_grad_norm</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Determines the maximum impact of a single sample on updating the model weights during training with differential privacy. This is the maximum norm of the per-sample gradients.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>value_protection_epsilon</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The DP epsilon of the privacy budget for determining the value ranges, which are gathered prior to the model training during the analysis step. Only applicable if value protection is True.
+Privacy budget will be equally distributed between the columns. For categorical we calculate noisy histograms and use a noisy threshold. For numeric and datetime we calculate bounds based on noisy histograms.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.FairnessConfig" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.FairnessConfig</span>
+
+
+<a href="#mostlyai.engine.domain.FairnessConfig" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Configure a fairness objective for the table.</p>
+<p>The generated synthetic data will maintain robust statistical parity between the target column and
+the specified sensitive columns. All these columns must be categorical.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>target_column</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sensitive_columns</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.ImputationConfig" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.ImputationConfig</span>
+
+
+<a href="#mostlyai.engine.domain.ImputationConfig" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Configure imputation. Imputed columns will suppress the sampling of NULL values.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>columns</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The names of the columns to be imputed.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.ModelEncodingType" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.ModelEncodingType</span>
+
+
+<a href="#mostlyai.engine.domain.ModelEncodingType" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The encoding type used for model training and data generation.</p>
+<ul>
+<li><code>AUTO</code>: Model chooses among available encoding types based on the column's data type.</li>
+<li><code>TABULAR_CATEGORICAL</code>: Model samples from existing (non-rare) categories.</li>
+<li><code>TABULAR_NUMERIC_AUTO</code>: Model chooses among 3 numeric encoding types based on the values.</li>
+<li><code>TABULAR_NUMERIC_DISCRETE</code>: Model samples from existing discrete numerical values.</li>
+<li><code>TABULAR_NUMERIC_BINNED</code>: Model samples from binned buckets, to then sample randomly within a bucket.</li>
+<li><code>TABULAR_NUMERIC_DIGIT</code>: Model samples each digit of a numerical value.</li>
+<li><code>TABULAR_CHARACTER</code>: Model samples each character of a string value.</li>
+<li><code>TABULAR_DATETIME</code>: Model samples each part of a datetime value.</li>
+<li><code>TABULAR_DATETIME_RELATIVE</code>: Model samples the relative difference between datetimes within a sequence.</li>
+<li><code>TABULAR_LAT_LONG</code>: Model samples a latitude-longitude column. The format is "latitude,longitude".</li>
+<li><code>LANGUAGE_TEXT</code>: Model will sample free text, using a LANGUAGE model.</li>
+<li><code>LANGUAGE_CATEGORICAL</code>: Model samples from existing (non-rare) categories, using a LANGUAGE model.</li>
+<li><code>LANGUAGE_NUMERIC</code>: Model samples from the valid numeric value range, using a LANGUAGE model.</li>
+<li><code>LANGUAGE_DATETIME</code>: Model samples from the valid datetime value range, using a LANGUAGE model.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.ModelStateStrategy" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.ModelStateStrategy</span>
+
+
+<a href="#mostlyai.engine.domain.ModelStateStrategy" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The strategy of how any existing model states and training progress are to be handled.</p>
+<ul>
+<li><code>RESET</code>: Start training from scratch. Overwrite any existing model states and training progress.</li>
+<li><code>REUSE</code>: Reuse any existing model states, but start progress from scratch. Used for fine-tuning existing models.</li>
+<li><code>RESUME</code>: Reuse any existing model states and progress. Used for continuing an aborted training.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.ModelType" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.ModelType</span>
+
+
+<a href="#mostlyai.engine.domain.ModelType" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The type of model.</p>
+<ul>
+<li><code>TABULAR</code>: A generative AI model tailored towards tabular data, trained from scratch.</li>
+<li><code>LANGUAGE</code>: A generative AI model build upon a (pre-trained) language model.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.RareCategoryReplacementMethod" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.RareCategoryReplacementMethod</span>
+
+
+<a href="#mostlyai.engine.domain.RareCategoryReplacementMethod" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Specifies how rare categories will be sampled.
+Only applicable if value protection has been enabled.</p>
+<ul>
+<li><code>CONSTANT</code>: Replace rare categories by a constant <code>_RARE_</code> token.</li>
+<li><code>SAMPLE</code>: Replace rare categories by a sample from non-rare categories.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mostlyai.engine.domain.RebalancingConfig" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mostlyai.engine.domain.RebalancingConfig</span>
+
+
+<a href="#mostlyai.engine.domain.RebalancingConfig" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Configure rebalancing.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>column</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The name of the column to be rebalanced.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>probabilities</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The target distribution of samples values. The keys are the categorical values, and the values are the probabilities.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+  
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+        
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href=".." class="md-footer__link md-footer__link--prev" aria-label="Previous: Getting started">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Getting started
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.top", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "content.code.select", "content.code.copy", "navigation.footer"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>

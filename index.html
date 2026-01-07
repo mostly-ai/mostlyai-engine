@@ -1,0 +1,1178 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://mostly-ai.github.io/mostlyai-engine/">
+      
+      
+      
+        <link rel="next" href="api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>mostlyai-engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Lato";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#synthetic-data-engine" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="mostlyai-engine" class="md-header__button md-logo" aria-label="mostlyai-engine" data-md-component="logo">
+      
+  <img src="logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            mostlyai-engine
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Getting started
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 2c-1.82 0-3.53.5-5 1.35C8 5.08 10 8.3 10 12s-2 6.92-5 8.65C6.47 21.5 8.18 22 10 22a10 10 0 0 0 10-10A10 10 0 0 0 10 2"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mostly-ai/mostlyai-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mostly-ai/mostlyai-engine
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="api/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API Reference
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="mostlyai-engine" class="md-nav__button md-logo" aria-label="mostlyai-engine" data-md-component="logo">
+      
+  <img src="logo.png" alt="logo">
+
+    </a>
+    mostlyai-engine
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mostly-ai/mostlyai-engine" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mostly-ai/mostlyai-engine
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabularargn-for-flat-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TabularARGN for Flat Data
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TabularARGN for Flat Data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sampling-synthetic-data-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling / Synthetic Data Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#imputation-filling-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Imputation / Filling Gaps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#predictions-classification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions / Classification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#predictions-regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions / Regression
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conditional-probabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conditional Probabilities
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log-probability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log Probability
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabularargn-for-sequential-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TabularARGN for Sequential Data
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TabularARGN for Sequential Data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-training-with-context-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Training - With Context Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sampling-synthetic-data-generation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling / Synthetic Data Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-usage-of-languagemodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage of LanguageModel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Usage of LanguageModel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-training_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sampling-synthetic-text-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling / Synthetic Text Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#further-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Further Examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+                
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabularargn-for-flat-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TabularARGN for Flat Data
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TabularARGN for Flat Data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sampling-synthetic-data-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling / Synthetic Data Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#imputation-filling-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Imputation / Filling Gaps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#predictions-classification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions / Classification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#predictions-regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions / Regression
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conditional-probabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conditional Probabilities
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#log-probability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log Probability
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tabularargn-for-sequential-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TabularARGN for Sequential Data
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TabularARGN for Sequential Data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-training-with-context-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Training - With Context Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sampling-synthetic-data-generation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling / Synthetic Data Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-usage-of-languagemodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage of LanguageModel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Usage of LanguageModel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-training_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sampling-synthetic-text-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sampling / Synthetic Text Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#further-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Further Examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+
+
+
+  
+  
+
+
+<h1 id="synthetic-data-engine">Synthetic Data Engine 💎<a class="headerlink" href="#synthetic-data-engine" title="Permanent link">&para;</a></h1>
+<p><img alt="GitHub Release" src="https://img.shields.io/github/v/release/mostly-ai/mostlyai-engine" />
+<a href="https://mostly-ai.github.io/mostlyai-engine/"><img alt="Documentation" src="https://img.shields.io/badge/docs-latest-green" /></a>
+<a href="https://pypi.org/project/mostlyai-engine/"><img alt="stats" src="https://pepy.tech/badge/mostlyai-engine" /></a>
+<img alt="license" src="https://img.shields.io/github/license/mostly-ai/mostlyai-engine" />
+<img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/mostlyai-engine" /></p>
+<p><a href="https://mostly-ai.github.io/mostlyai-engine/">Documentation</a> | <a href="https://arxiv.org/abs/2501.12012">Technical Paper</a> | <a href="https://app.mostly.ai/">Free Cloud Service</a></p>
+<p>Create high-fidelity privacy-safe synthetic data:</p>
+<ol>
+<li>train a generative model once:<ul>
+<li>train on flat or sequential data</li>
+<li>control training time &amp; params</li>
+<li>monitor training progress</li>
+<li>optionally enable differential privacy</li>
+<li>optionally provide context data</li>
+</ul>
+</li>
+<li>generate synthetic data samples to your needs:<ul>
+<li>up-sample / down-sample</li>
+<li>conditionally generate</li>
+<li>rebalance categories</li>
+<li>impute missing values</li>
+<li>incorporate fairness</li>
+<li>adjust sampling temperature</li>
+<li>predict / classify / regress</li>
+<li>detect outliers / anomalies</li>
+<li>and more</li>
+</ul>
+</li>
+</ol>
+<p>...all within your own compute environment, all with a few lines of Python code 💥.</p>
+<p>Note: Models only need to be trained once and can then be flexibly reused for various downstream tasks — such as regression, classification, imputation, or sampling — without the need for retraining.</p>
+<p>Two model classes with these methods are available:</p>
+<ol>
+<li><code>TabularARGN()</code>: For structured, flat or sequential tabular data.</li>
+<li><code>argn.fit(data)</code>: Train a TabularARGN model</li>
+<li><code>argn.sample(n_samples)</code>: Generate samples</li>
+<li><code>argn.predict(target, n_draws, agg_fn)</code>: Predict a feature</li>
+<li><code>argn.predict_proba(target)</code>: Estimate probabilities</li>
+<li><code>argn.log_prob(data)</code>: Compute log likelihood</li>
+<li><code>argn.impute(data)</code>: Fill missing values</li>
+<li><code>LanguageModel()</code>: For semi-structured, flat textual tabular data.</li>
+<li><code>.fit(data)</code>: Train a Language model</li>
+<li><code>.sample(n_samples)</code>: Generate samples</li>
+</ol>
+<p>This library serves as the core model engine for the <a href="https://github.com/mostly-ai/mostlyai">Synthetic Data SDK</a>. For an easy-to-use, higher-level toolkit, please refer to the SDK.</p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>It is highly recommended to install the package within a dedicated virtual environment using <a href="https://docs.astral.sh/uv/">uv</a>.</p>
+<p>The latest release of <code>mostlyai-engine</code> can be installed via uv:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>mostlyai-engine
+</span></code></pre></div>
+<p>or alternatively for a GPU setup (needed for LLM finetuning and inference):
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span><span class="s1">&#39;mostlyai-engine[gpu]&#39;</span>
+</span></code></pre></div></p>
+<p>On Linux, one can explicitly install the CPU-only variant of torch together with <code>mostlyai-engine</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span><span class="nv">torch</span><span class="o">==</span><span class="m">2</span>.9.1+cpu<span class="w"> </span><span class="nv">torchvision</span><span class="o">==</span><span class="m">0</span>.24.1+cpu<span class="w"> </span>mostlyai-engine<span class="w"> </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cpu
+</span></code></pre></div>
+<h2 id="tabularargn-for-flat-data">TabularARGN for Flat Data<a class="headerlink" href="#tabularargn-for-flat-data" title="Permanent link">&para;</a></h2>
+<p>The <code>TabularARGN</code> class provides a scikit-learn-compatible interface for working with structured tabular data. It can be used for synthetic data generation, classification, regression, and imputation.</p>
+<h3 id="model-training">Model Training<a class="headerlink" href="#model-training" title="Permanent link">&para;</a></h3>
+<p>Load your data and train the model:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">train_test_split</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mostlyai.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">TabularARGN</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># prepare data</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;https://github.com/user-attachments/files/23480587/census10k.csv.gz&quot;</span><span class="p">)</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">data_train</span><span class="p">,</span> <span class="n">data_test</span> <span class="o">=</span> <span class="n">train_test_split</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># fit TabularARGN</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">argn</span> <span class="o">=</span> <span class="n">TabularARGN</span><span class="p">()</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">argn</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data_train</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="sampling-synthetic-data-generation">Sampling / Synthetic Data Generation<a class="headerlink" href="#sampling-synthetic-data-generation" title="Permanent link">&para;</a></h3>
+<p>Generate new synthetic samples:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># unconditional sampling</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">argn</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Generate new synthetic samples conditionally:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># prepare seed</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">seed_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">25</span><span class="p">,</span> <span class="mi">50</span><span class="p">],</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="s2">&quot;education&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Bachelors&quot;</span><span class="p">,</span> <span class="s2">&quot;HS-grad&quot;</span><span class="p">]</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">})</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># conditional sampling</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">argn</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">seed_data</span><span class="o">=</span><span class="n">seed_data</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="imputation-filling-gaps">Imputation / Filling Gaps<a class="headerlink" href="#imputation-filling-gaps" title="Permanent link">&para;</a></h3>
+<p>Fill in missing values:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># prepare demo data with missings</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">data_with_missings</span> <span class="o">=</span> <span class="n">data_test</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">300</span><span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">data_with_missings</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">299</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">data_with_missings</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">199</span><span class="p">,</span> <span class="s2">&quot;race&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">data_with_missings</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">100</span><span class="p">:</span><span class="mi">299</span><span class="p">,</span> <span class="s2">&quot;income&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># impute missing values each with a random sample</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">data_imputed</span> <span class="o">=</span> <span class="n">argn</span><span class="o">.</span><span class="n">impute</span><span class="p">(</span><span class="n">data_with_missings</span><span class="p">)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="c1"># impute missing values each with their point estimates</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="n">data_imputed</span> <span class="o">=</span> <span class="n">argn</span><span class="o">.</span><span class="n">impute</span><span class="p">(</span><span class="n">data_with_missings</span><span class="p">,</span> <span class="n">n_draws</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="predictions-classification">Predictions / Classification<a class="headerlink" href="#predictions-classification" title="Permanent link">&para;</a></h3>
+<p>Predict any categorical target column:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">accuracy_score</span><span class="p">,</span> <span class="n">roc_auc_score</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># predict class labels for a categorical</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">predictions</span> <span class="o">=</span> <span class="n">argn</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">data_test</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;income&quot;</span><span class="p">,</span> <span class="n">n_draws</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">agg_fn</span><span class="o">=</span><span class="s2">&quot;mode&quot;</span><span class="p">)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># evaluate performance</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">accuracy</span> <span class="o">=</span> <span class="n">accuracy_score</span><span class="p">(</span><span class="n">data_test</span><span class="p">[</span><span class="s2">&quot;income&quot;</span><span class="p">],</span> <span class="n">predictions</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">auc</span> <span class="o">=</span> <span class="n">roc_auc_score</span><span class="p">(</span><span class="n">data_test</span><span class="p">[</span><span class="s2">&quot;income&quot;</span><span class="p">],</span> <span class="n">probabilities</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Accuracy: </span><span class="si">{</span><span class="n">accuracy</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, AUC: </span><span class="si">{</span><span class="n">auc</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="predictions-regression">Predictions / Regression<a class="headerlink" href="#predictions-regression" title="Permanent link">&para;</a></h3>
+<p>Predict any numerical target column:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">mean_absolute_error</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># predict target values</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">predictions</span> <span class="o">=</span> <span class="n">argn</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">data_test</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;age&quot;</span><span class="p">,</span> <span class="n">n_draws</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">agg_fn</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="c1"># evaluate performance</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="n">mae</span> <span class="o">=</span> <span class="n">mean_absolute_error</span><span class="p">(</span><span class="n">data_test</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">],</span> <span class="n">predictions</span><span class="p">)</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MAE: </span><span class="si">{</span><span class="n">mae</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> years&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="conditional-probabilities">Conditional Probabilities<a class="headerlink" href="#conditional-probabilities" title="Permanent link">&para;</a></h3>
+<p>Assess any marginal conditional probability, for one or more target columns:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># extract class probabilities for a categorical</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">argn</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">X</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>        <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">25</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">35</span><span class="p">],</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        <span class="s2">&quot;sex&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Male&quot;</span><span class="p">,</span> <span class="s2">&quot;Female&quot;</span><span class="p">,</span> <span class="s2">&quot;Male&quot;</span><span class="p">],</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="p">}),</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="n">target</span><span class="o">=</span><span class="s2">&quot;income&quot;</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="p">)</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1"># extract bin probabilities for a numerical</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="n">argn</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>    <span class="n">X</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>        <span class="c1"># &quot;age&quot;: [25, 30, 35],</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>        <span class="s2">&quot;sex&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Male&quot;</span><span class="p">,</span> <span class="s2">&quot;Female&quot;</span><span class="p">,</span> <span class="s2">&quot;Male&quot;</span><span class="p">],</span>
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>        <span class="s2">&quot;occupation&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Craft-repair&quot;</span><span class="p">,</span> <span class="s2">&quot;Craft-repair&quot;</span><span class="p">,</span> <span class="s2">&quot;Craft-repair&quot;</span><span class="p">]</span>
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>    <span class="p">}),</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>    <span class="n">target</span><span class="o">=</span><span class="s2">&quot;capital_gain&quot;</span>
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="p">)</span>
+</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>
+</span><span id="__span-9-20"><a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a><span class="c1"># extract two-way marginals</span>
+</span><span id="__span-9-21"><a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a><span class="n">argn</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span>
+</span><span id="__span-9-22"><a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>    <span class="n">X</span><span class="o">=</span><span class="n">data_test</span><span class="p">[[</span><span class="s2">&quot;age&quot;</span><span class="p">,</span> <span class="s2">&quot;race&quot;</span><span class="p">]],</span>
+</span><span id="__span-9-23"><a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>    <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;sex&quot;</span><span class="p">,</span> <span class="s2">&quot;income&quot;</span><span class="p">]</span>
+</span><span id="__span-9-24"><a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="log-probability">Log Probability<a class="headerlink" href="#log-probability" title="Permanent link">&para;</a></h3>
+<p>Compute log likelihood of observations:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># compute log probability for each observation</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">log_probs</span> <span class="o">=</span> <span class="n">argn</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">data_test</span><span class="p">)</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># list top 10 outliers</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="n">data_test</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">log_probs</span><span class="o">.</span><span class="n">argsort</span><span class="p">()[:</span><span class="mi">10</span><span class="p">]]</span>
+</span></code></pre></div>
+<h2 id="tabularargn-for-sequential-data">TabularARGN for Sequential Data<a class="headerlink" href="#tabularargn-for-sequential-data" title="Permanent link">&para;</a></h2>
+<p>For sequential data (e.g., time series or event logs), specify the context key:</p>
+<h3 id="model-training-with-context-data">Model Training - With Context Data<a class="headerlink" href="#model-training-with-context-data" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mostlyai.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">TabularARGN</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># load sequential data</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="n">tgt_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;https://github.com/user-attachments/files/23480787/batting.csv.gz&quot;</span><span class="p">)</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="n">ctx_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;https://github.com/user-attachments/files/23480786/players.csv.gz&quot;</span><span class="p">)</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="c1"># fit TabularARGN with a context key column</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="n">argn</span> <span class="o">=</span> <span class="n">TabularARGN</span><span class="p">(</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>    <span class="n">tgt_context_key</span><span class="o">=</span><span class="s2">&quot;players_id&quot;</span><span class="p">,</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">ctx_primary_key</span><span class="o">=</span><span class="s2">&quot;id&quot;</span><span class="p">,</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>    <span class="n">ctx_data</span><span class="o">=</span><span class="n">ctx_data</span><span class="p">,</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>    <span class="n">max_training_time</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># 2 minutes</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>    <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="p">)</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="n">argn</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">tgt_data</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="sampling-synthetic-data-generation_1">Sampling / Synthetic Data Generation<a class="headerlink" href="#sampling-synthetic-data-generation_1" title="Permanent link">&para;</a></h3>
+<p>Generate new synthetic samples (using existing context):
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">argn</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+</span></code></pre></div></p>
+<p>Generate new synthetic samples conditionally (using custom context and seed):</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">ctx_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Player1&quot;</span><span class="p">,</span> <span class="s2">&quot;Player2&quot;</span><span class="p">],</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">170</span><span class="p">,</span> <span class="mi">160</span><span class="p">],</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="s2">&quot;height&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">70</span><span class="p">,</span> <span class="mi">68</span><span class="p">],</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="s2">&quot;bats&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;R&quot;</span><span class="p">,</span> <span class="s2">&quot;L&quot;</span><span class="p">],</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="s2">&quot;throws&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;R&quot;</span><span class="p">,</span> <span class="s2">&quot;L&quot;</span><span class="p">],</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="p">})</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="n">argn</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">ctx_data</span><span class="o">=</span><span class="n">ctx_data</span><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="basic-usage-of-languagemodel">Basic Usage of LanguageModel<a class="headerlink" href="#basic-usage-of-languagemodel" title="Permanent link">&para;</a></h2>
+<p>The <code>LanguageModel</code> class provides a scikit-learn-compatible interface for working with semi-structured textual data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.</p>
+<p><strong>Note</strong>: The default model is <code>MOSTLY_AI/LSTMFromScratch-3m</code>, a lightweight LSTM model trained from scratch (GPU strongly recommended). You can also use pre-trained HuggingFace models by setting model to e.g. <code>microsoft/phi-1.5</code> (GPU required).</p>
+<h3 id="model-training_1">Model Training<a class="headerlink" href="#model-training_1" title="Permanent link">&para;</a></h3>
+<p>Load your data and train the model:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mostlyai.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">LanguageModel</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># load data</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;https://github.com/user-attachments/files/23486562/airbnb20k.csv.gz&quot;</span><span class="p">)</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># fit LanguageModel</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="n">lm</span> <span class="o">=</span> <span class="n">LanguageModel</span><span class="p">(</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;MOSTLY_AI/LSTMFromScratch-3m&quot;</span><span class="p">,</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>    <span class="n">tgt_encoding_types</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>        <span class="s1">&#39;neighbourhood&#39;</span><span class="p">:</span> <span class="s1">&#39;LANGUAGE_CATEGORICAL&#39;</span><span class="p">,</span>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>        <span class="s1">&#39;title&#39;</span><span class="p">:</span> <span class="s1">&#39;LANGUAGE_TEXT&#39;</span><span class="p">,</span>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>    <span class="p">},</span>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>    <span class="n">max_training_time</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>  <span class="c1"># 10 minutes</span>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>    <span class="n">verbose</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="p">)</span>
+</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="n">lm</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="sampling-synthetic-text-generation">Sampling / Synthetic Text Generation<a class="headerlink" href="#sampling-synthetic-text-generation" title="Permanent link">&para;</a></h3>
+<p>Generate new synthetic samples using the trained language model:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># unconditional sampling</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">lm</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">sampling_temperature</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="p">)</span>
+</span></code></pre></div>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># prepare seed</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">seed_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    <span class="s2">&quot;neighbourhood&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;Westminster&quot;</span><span class="p">,</span> <span class="s2">&quot;Hackney&quot;</span><span class="p">],</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="p">})</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="c1"># conditional sampling with seed values</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="n">lm</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>    <span class="n">seed_data</span><span class="o">=</span><span class="n">seed_data</span><span class="p">,</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="n">sampling_temperature</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="further-examples">Further Examples<a class="headerlink" href="#further-examples" title="Permanent link">&para;</a></h2>
+<p>Example notebooks demonstrating various use cases are available in the <code>examples</code> directory:
+- TabularARGN for flat tabular data <a href="https://colab.research.google.com/github/mostly-ai/mostlyai-engine/blob/main/examples/flat.ipynb"><img alt="Run on Colab" src="https://img.shields.io/badge/Open%20in-Colab-blue?logo=google-colab" /></a>
+- TabularARGN for sequential data <a href="https://colab.research.google.com/github/mostly-ai/mostlyai-engine/blob/main/examples/language.ipynb"><img alt="Run on Colab" src="https://img.shields.io/badge/Open%20in-Colab-blue?logo=google-colab" /></a>
+- LanguageModel for textual data <a href="https://colab.research.google.com/github/mostly-ai/mostlyai-engine/blob/main/examples/sequential.ipynb"><img alt="Run on Colab" src="https://img.shields.io/badge/Open%20in-Colab-blue?logo=google-colab" /></a></p>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+  
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+        
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+        
+          
+          <a href="api/" class="md-footer__link md-footer__link--next" aria-label="Next: API Reference">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                API Reference
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.top", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "content.code.select", "content.code.copy", "navigation.footer"], "search": "assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>
