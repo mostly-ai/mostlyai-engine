@@ -1,4 +1,4 @@
-# Copyright 2025 MOSTLY AI
+# Copyright 2025-2026 MOSTLY AI
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -117,9 +117,9 @@ def _embedding_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int) 
     if isinstance(model_size, dict):
         return model_size[id]
     model_size_output_dim = dict(
-        S=max(10, int(2 * np.ceil(dim_input**0.15))),
-        M=max(10, int(3 * np.ceil(dim_input**0.25))),
-        L=max(10, int(4 * np.ceil(dim_input**0.33))),
+        S=int(2 * np.ceil(dim_input**0.15)),
+        M=int(3 * np.ceil(dim_input**0.25)),
+        L=int(4 * np.ceil(dim_input**0.33)),
     )
     return min(dim_input, model_size_output_dim[model_size])
 
