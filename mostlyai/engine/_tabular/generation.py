@@ -640,10 +640,9 @@ def decode_buffered_samples(
             keys=keys,
             key_name=tgt_context_key,
         )
-        df_syn = df_syn.drop(
-            columns=[c for c in df_syn.columns if c.startswith(POSITIONAL_COLUMN)],
-            axis=1,
-        ).reset_index(drop=True)
+        df_syn = df_syn.drop(columns=[c for c in df_syn.columns if c.startswith(POSITIONAL_COLUMN)]).reset_index(
+            drop=True
+        )
     else:
         data, seed_data = zip(*buffer.buffer)
         df_syn = pd.concat(data, axis=0).reset_index(drop=True)
