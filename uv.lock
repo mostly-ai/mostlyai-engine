@@ -2645,7 +2645,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.9.0,<2.10.0" },
     { name = "torchaudio", specifier = ">=2.9.0,<2.10.0" },
     { name = "torchvision", specifier = ">=0.24.0,<0.25.0" },
-    { name = "transformers", specifier = ">=4.55.0" },
+    { name = "transformers", specifier = ">=4.55.0,<5" },
     { name = "vllm", marker = "(sys_platform == 'darwin' and extra == 'gpu') or (sys_platform == 'linux' and extra == 'gpu')", specifier = "==0.12.0" },
     { name = "xgrammar", specifier = ">=0.1.21" },
 ]
