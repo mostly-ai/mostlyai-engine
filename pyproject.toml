@@ -33,7 +33,7 @@ dependencies = [
     "scikit-learn>=1.4.0",
     "psutil>=5.9.5,<6",  # upgrade when colab psutil is updated
     "tokenizers>=0.21.0",
-    "transformers>=4.55.0,<5",  # keep <5 for vllm==0.12 compatibility
+    "transformers>=4.55.0,<5",  # keep <5 for vllm compatibility
     "datasets>=3.0.0",
     "accelerate>=1.5.0",
     "peft>=0.12.0",
@@ -50,7 +50,7 @@ dependencies = [
 gpu = [
     "bitsandbytes==0.42.0; sys_platform == 'darwin'",
     "bitsandbytes>=0.45.5; sys_platform == 'linux'",
-    "vllm==0.12.0; sys_platform == 'linux' or sys_platform == 'darwin'",
+    "vllm==0.16.0; sys_platform == 'linux' or sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
