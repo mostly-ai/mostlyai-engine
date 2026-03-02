@@ -51,6 +51,21 @@ class LSTMFromScratchConfig(PretrainedConfig):
 
 class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
     config_class = LSTMFromScratchConfig
+    # Opacus DPLSTM exposes duplicate parameter aliases (for example `lstm.l0.ih.weight`
+    # and `lstm.weight_ih_l0`) that need to be treated as tied when saving.
+    _tied_weights_keys = [
+        r"lstm\.l\d+\.(ih|hh)\.(weight|bias)",
+        r"lstm\.(weight|bias)_(ih|hh)_l\d+",
+    ]
+
+    @property
+    def all_tied_weights_keys(self) -> set[str]:
+        """
+        Compatibility shim for newer Transformers save paths.
+        """
+        tied_keys = set(getattr(self, "_tied_weights_keys", []) or [])
+        tied_keys.update(getattr(self, "_dynamic_tied_weights_keys", []) or [])
+        return tied_keys
 
     def __init__(self, config: LSTMFromScratchConfig):
         super().__init__(config)
@@ -73,6 +88,7 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
         )
         self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size)
         self.loss_fn = nn.CrossEntropyLoss()
+        self.post_init()
 
         # this will be filled by left_to_right_padding() during the generation
         self.pad_token_id = None
