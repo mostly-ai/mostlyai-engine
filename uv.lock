@@ -2167,7 +2167,7 @@ requires-dist = [
     { name = "json-repair", specifier = ">=0.47.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "opacus", specifier = ">=1.5.4" },
-    { name = "pandas", specifier = ">=3.0.0" },
+    { name = "pandas", specifier = ">=2.2.0" },
     { name = "peft", specifier = ">=0.12.0" },
     { name = "psutil", specifier = ">=5.9.5,<6" },
     { name = "pyarrow", specifier = ">=16.0.0" },
