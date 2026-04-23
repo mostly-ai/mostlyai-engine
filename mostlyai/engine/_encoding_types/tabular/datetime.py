@@ -234,9 +234,10 @@ def decode_datetime(df_encoded: pd.DataFrame, stats: dict):
     d = df_encoded["day"] + stats["min_values"]["day"]
     # fix invalid dates by setting these to last day of month
     is_leap = y.apply(lambda x: calendar.isleap(x))
-    d[is_leap & (m == 2) & (d > 29)] = 29
-    d[~is_leap & (m == 2) & (d > 28)] = 28
-    d[((m == 4) | (m == 6) | (m == 9) | (m == 11)) & (d > 30)] = 30
+    d = d.copy()
+    d.loc[is_leap & (m == 2) & (d > 29)] = 29
+    d.loc[~is_leap & (m == 2) & (d > 28)] = 28
+    d.loc[((m == 4) | (m == 6) | (m == 9) | (m == 11)) & (d > 30)] = 30
     # concatenate to datetime string
     y = y.astype(str)
     m = m.astype(str).str.zfill(2)
@@ -271,7 +272,7 @@ def decode_datetime(df_encoded: pd.DataFrame, stats: dict):
         # set all values to NaN if no valid values were present
         values[df_encoded["nan"] == 0] = pd.NA
     # convert from string to datetime
-    values = pd.to_datetime(values)
+    values = pd.to_datetime(values).astype("datetime64[ns]")
     if not stats["has_time"]:
-        values = pd.to_datetime(values.dt.date)
+        values = pd.to_datetime(values.dt.date).astype("datetime64[ns]")
     return values
