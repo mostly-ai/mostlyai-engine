@@ -273,8 +273,9 @@ def safe_convert_datetime(values: pd.Series, date_only: bool = False) -> pd.Seri
         utc=True,
         dayfirst=False,  # assume 1/3/2020 is Jan 3
     )
-    # check whether firstday=True yields less non-NA, and if so, switch to using that flag
-    if values_parsed_fixed.isna().sum() > values.isna().sum():
+    has_slash_dates = values.astype("string").str.contains(r"^\s*\d{1,2}/\d{1,2}/\d{4}(?:\s|$)", regex=True).any()
+    # some mixed-format slash dates are interpreted more reliably with dayfirst=True
+    if has_slash_dates and values_parsed_fixed.isna().sum() > values.isna().sum():
         values_parsed_fixed_dayfirst = pd.to_datetime(
             values,
             errors="coerce",  # silently map invalid dates to NA
@@ -937,6 +938,7 @@ def impute_from_non_nan_distribution(values: pd.Series, column_stats: dict) -> t
     Returns:
         tuple[pd.Series, pd.Series]: The series with imputed values and the mask of NaNs.
     """
+    values = values.copy()
     nan_mask = values.isna()
     vc = values.value_counts(normalize=True)
     if vc.empty:
@@ -944,7 +946,8 @@ def impute_from_non_nan_distribution(values: pd.Series, column_stats: dict) -> t
     probs = vc.values
     categories = vc.index
     # NOTE: an alternative will be to use the largest remainder method
-    values[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
+    if nan_mask.any():
+        values.loc[nan_mask] = np.random.choice(categories, size=nan_mask.sum(), p=probs)
     return values, nan_mask.astype(int)
 
 

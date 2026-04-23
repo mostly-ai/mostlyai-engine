@@ -75,14 +75,23 @@ def create_schemas(
     numeric_fields = field_types.get(ModelEncodingType.language_numeric, [])
     datetime_fields = field_types.get(ModelEncodingType.language_datetime, [])
     cache = {}
+
+    def _normalize_seed_value(seed_value):
+        return None if pd.isna(seed_value) else seed_value
+
     for _, seed_row in seed_df.iterrows():
-        cache_key = hash(tuple(sorted([(field_name, str(seed_value)) for field_name, seed_value in seed_row.items()])))
+        normalized_seed_items = [
+            (field_name, _normalize_seed_value(seed_value)) for field_name, seed_value in seed_row.items()
+        ]
+        cache_key = hash(
+            tuple(sorted([(field_name, str(seed_value)) for field_name, seed_value in normalized_seed_items]))
+        )
         if cache_key in cache:
             yield cache[cache_key]
             continue
         model_dict = {}
         if not seed_row.empty:
-            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in seed_row.items()}  # type: ignore[valid-type]
+            model_dict |= {field_name: (Literal[seed_value], ...) for field_name, seed_value in normalized_seed_items}  # type: ignore[valid-type]
         for field_name in unseeded_fields:
             if field_name in categorical_fields:
                 categories = stats["columns"][field_name]["categories"]

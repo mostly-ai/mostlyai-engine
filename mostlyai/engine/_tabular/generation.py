@@ -1223,7 +1223,9 @@ def generate(
                 # Use context inputs prepared earlier
                 x = ctx_inputs
                 fixed_values = {
-                    col: torch.as_tensor(seed_batch_encoded[col].to_numpy(), device=model.device).type(torch.int)
+                    col: torch.as_tensor(seed_batch_encoded[col].to_numpy(copy=True), device=model.device).type(
+                        torch.int
+                    )
                     for col in seed_batch_encoded.columns
                     if col in tgt_sub_columns
                 }

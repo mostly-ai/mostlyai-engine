@@ -102,7 +102,9 @@ def encode_character(values: pd.Series, stats: dict, _: pd.Series | None = None)
     df_split = split_sub_columns_character(values, max_string_length)
     for idx in range(max_string_length):
         sub_col = f"P{idx}"
-        np_codes = np.array(pd.Categorical(df_split[sub_col], categories=stats["codes"][sub_col]).codes)
+        categories = list(stats["codes"][sub_col].keys())
+        values_at_pos = df_split[sub_col].where(df_split[sub_col].isin(categories), UNKNOWN_TOKEN)
+        np_codes = np.array(pd.Categorical(values_at_pos, categories=categories).codes)
         np.place(np_codes, np_codes == -1, 0)
         df_split[sub_col] = np_codes
     if stats["has_nan"]:

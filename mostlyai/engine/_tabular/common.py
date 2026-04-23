@@ -197,7 +197,7 @@ def prepare_context_inputs(
     # Build flat context inputs (CTXFLT/*)
     ctxflt_inputs = {
         col: torch.unsqueeze(
-            torch.as_tensor(ctx_encoded[col].to_numpy(), device=device).type(torch.int),
+            torch.as_tensor(ctx_encoded[col].to_numpy(copy=True), device=device).type(torch.int),
             dim=-1,
         )
         for col in ctx_encoded.columns
