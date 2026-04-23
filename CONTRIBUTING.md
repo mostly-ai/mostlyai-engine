@@ -23,12 +23,12 @@ Thanks for your interest in contributing to Synthetic Data Engine! Follow these 
 
 3. **Create a virtual environment and install dependencies**:
    ```bash
-   uv sync --frozen --extra cpu --python=3.10  # For CPU-only
+   uv sync --frozen --extra cpu --python=3.11  # For CPU-only
    source .venv/bin/activate
    ```
    If using GPU, run:
    ```bash
-   uv sync --frozen --extra gpu --python=3.10  # For GPU support
+   uv sync --frozen --extra gpu --python=3.11  # For GPU support
    source .venv/bin/activate
    ```
 
