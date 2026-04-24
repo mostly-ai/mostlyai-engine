@@ -53,6 +53,7 @@ _LOG = logging.getLogger(__name__)
 def encode(
     workspace_dir: str | Path | None = None,
     update_progress: ProgressCallback | None = None,
+    parallel_backend: str = "loky",
 ) -> None:
     _LOG.info("ENCODE_TABULAR started")
     t0 = time.time()
@@ -84,6 +85,7 @@ def encode(
                 ctx_partition_file=ctx_pqt_partitions[i] if has_context else None,
                 ctx_stats=ctx_stats if has_context else None,
                 n_jobs=min(16, max(1, cpu_count() - 1)),
+                parallel_backend=parallel_backend,
             )
             progress.update(completed=i, total=len(tgt_pqt_partitions) + 1)
     _LOG.info(f"ENCODE_TABULAR finished in {time.time() - t0:.2f}s")
@@ -97,6 +99,7 @@ def _encode_partition(
     ctx_partition_file: Path | None = None,
     ctx_stats: dict | None = None,
     n_jobs: int = 1,
+    parallel_backend: str = "loky",
 ) -> None:
     seq_len_stats = get_sequence_length_stats(tgt_stats)
     is_sequential = tgt_stats["is_sequential"]
@@ -112,6 +115,7 @@ def _encode_partition(
         ctx_primary_key=None,
         tgt_context_key=tgt_context_key,
         n_jobs=n_jobs,
+        parallel_backend=parallel_backend,
     )
 
     has_context = ctx_partition_file is not None and tgt_context_key and ctx_primary_key
@@ -128,6 +132,7 @@ def _encode_partition(
             ctx_primary_key=ctx_primary_key,
             tgt_context_key=None,
             n_jobs=n_jobs,
+            parallel_backend=parallel_backend,
         )
         # pad each list with one extra item
         df_ctx = pad_ctx_sequences(df_ctx)
@@ -185,6 +190,7 @@ def encode_df(
     ctx_primary_key: str | None = None,
     tgt_context_key: str | None = None,
     n_jobs: int = 1,
+    parallel_backend: str = "loky",
 ) -> tuple[pd.DataFrame, str | None, str | None]:
     """
     Encodes a given table represented by a DataFrame object. The result will be delivered
@@ -194,6 +200,7 @@ def encode_df(
     :param stats: stats for each of the columns
     :param ctx_primary_key: context primary key
     :param tgt_context_key: target context key
+    :param parallel_backend: joblib parallel backend to use
     :return: encoded data and keys following columns' naming conventions
     """
 
@@ -238,7 +245,7 @@ def encode_df(
             )
         )
     if delayed_encodes:
-        with parallel_config("loky", n_jobs=n_jobs):
+        with parallel_config(parallel_backend, n_jobs=n_jobs):
             df_columns.extend(Parallel()(delayed_encodes))
 
     df = pd.concat(df_columns, axis=1) if df_columns else pd.DataFrame()
