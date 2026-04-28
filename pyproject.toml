@@ -24,32 +24,32 @@ classifiers = [
 ]
 
 dependencies = [
-    "setuptools>=77.0.3",
+    "setuptools>=77.0.3,<81.0.0",  # vllm 0.20 caps setuptools for Python > 3.11
     "numpy>=2.0.0",
     "pandas>=2.2.0",
     "pyarrow>=16.0.0",
     "joblib>=1.4.2",
     "scikit-learn>=1.4.0",
     "psutil>=5.9.5,<6",  # upgrade when colab psutil is updated
-    "tokenizers>=0.21.0",
-    "transformers>=4.55.0,<5",  # keep <5 for vllm==0.12 compatibility
+    "tokenizers>=0.21.1",  # vllm 0.20 lower bound
+    "transformers>=4.56.0",  # vllm 0.20 excludes a few 5.x minors; unbounded upper ok with resolver
     "datasets>=3.0.0",
     "accelerate>=1.5.0",
     "peft>=0.12.0",
     "huggingface-hub[hf-xet]>=0.30.2",
     "opacus>=1.5.4",
-    "xgrammar>=0.1.21",
+    "xgrammar>=0.1.32,<1.0.0",  # aligned with vllm 0.20
     "json-repair>=0.47.0",
-    "torch>=2.9.0,<2.10.0",
-    "torchaudio>=2.9.0,<2.10.0",
-    "torchvision>=0.24.0,<0.25.0"
+    "torch>=2.11.0,<2.12.0",
+    "torchaudio>=2.11.0,<2.12.0",
+    "torchvision>=0.26.0,<0.27.0"
 ]
 
 [project.optional-dependencies]
 gpu = [
     "bitsandbytes==0.42.0; sys_platform == 'darwin'",
     "bitsandbytes>=0.45.5; sys_platform == 'linux'",
-    "vllm==0.12.0; sys_platform == 'linux' or sys_platform == 'darwin'",
+    "vllm==0.20.0; sys_platform == 'linux' or sys_platform == 'darwin'",
 ]
 
 [dependency-groups]
