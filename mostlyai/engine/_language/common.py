@@ -88,7 +88,8 @@ def load_base_model_and_config(
     use_int4_training = is_gpu_training and is_bitsandbytes_available and not differential_privacy
     if differential_privacy:
         torch_dtype = torch.float32
-        attn_implementation = get_attention_implementation(config) if bf16_supported else None
+        # Eager attention keeps standard backward paths; fused SDPA can break Opacus grad_sample hooks.
+        attn_implementation = "eager"
     elif bf16_supported:
         attn_implementation = get_attention_implementation(config)
         torch_dtype = torch.bfloat16
@@ -133,8 +134,9 @@ def load_base_model_and_config(
     if isinstance(quantization_config, BitsAndBytesConfig):
         # convert all non-kbit layers to float32
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
-    if is_gpu_training and model.supports_gradient_checkpointing:
+    if is_gpu_training and model.supports_gradient_checkpointing and not differential_privacy:
         # pay 50% time penalty for _large_ memory savings
+        # gradient checkpointing breaks Opacus per-sample gradient hooks
         _LOG.info("enable gradient checkpointing")
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()
