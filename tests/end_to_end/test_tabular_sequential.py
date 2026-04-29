@@ -55,7 +55,7 @@ def test_sequential_with_context(tmp_path_factory):
         seq_len_quantiles={0.0: 1, 0.1: 1, 0.2: 1, 0.3: 2, 0.4: 2, 0.5: 3, 0.6: 4, 0.7: 5, 0.8: 5, 0.9: 5, 1.0: 5},
     )
     mock_data.df["purchase_date"] = mock_data.df.apply(
-        lambda x: x["purchase_date"] + pd.to_timedelta(int(x["seq"]) ** 2, unit="d"), axis=1
+        lambda x: x["purchase_date"] + pd.to_timedelta(int(x["seq"]) ** 2, unit="D"), axis=1
     )
     # set some dates to NaN
     mock_data.df.loc[mock_data.df.sample(n=100).index, "purchase_date"] = np.nan

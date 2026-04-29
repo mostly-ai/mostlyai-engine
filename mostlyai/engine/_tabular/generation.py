@@ -1066,7 +1066,7 @@ def generate(
                     sidx_df = encode_positional_column(sidx, max_seq_len=seq_steps, prefix=SIDX_SUB_COLUMN_PREFIX)
                     sidx_vals = {
                         c: torch.unsqueeze(
-                            torch.as_tensor(sidx_df[c].to_numpy(), device=model.device).type(torch.int),
+                            torch.as_tensor(sidx_df[c].to_numpy(copy=True), device=model.device).type(torch.int),
                             dim=-1,
                         )
                         for c in sidx_df
@@ -1110,7 +1110,7 @@ def generate(
                             sdec = pd.Series([0] * step_size)  # initial sequence index decile
                         sdec_vals = {
                             f"{SDEC_SUB_COLUMN_PREFIX}cat": torch.unsqueeze(
-                                torch.as_tensor(sdec.to_numpy(), device=model.device).type(torch.int), dim=-1
+                                torch.as_tensor(sdec.to_numpy(copy=True), device=model.device).type(torch.int), dim=-1
                             )
                         }
 
@@ -1119,7 +1119,9 @@ def generate(
                     if len(seed_step_encoded) > 0:
                         seed_vals = {
                             col: torch.unsqueeze(
-                                torch.as_tensor(seed_step_encoded[col].to_numpy(), device=model.device).type(torch.int),
+                                torch.as_tensor(seed_step_encoded[col].to_numpy(copy=True), device=model.device).type(
+                                    torch.int
+                                ),
                                 dim=-1,
                             )
                             for col in seed_step_encoded.columns
