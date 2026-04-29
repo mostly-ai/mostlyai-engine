@@ -35,7 +35,7 @@ dependencies = [
     "transformers>=5.5.1",  # vllm 0.20 forbids 5.0–5.4 and 5.5.0; >=5.5.1 needed for newer HF model types (e.g. gemma4)
     "datasets>=3.0.0",
     "accelerate>=1.5.0",
-    "peft>=0.12.0",
+    "peft>=0.18.2",  # transformers 5.7+ checks min PEFT in model.add_adapter (integrations/peft.py)
     "huggingface-hub[hf-xet]>=0.30.2",
     "opacus>=1.5.4",
     "xgrammar>=0.1.32,<1.0.0",  # aligned with vllm 0.20
