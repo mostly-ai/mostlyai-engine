@@ -339,7 +339,7 @@ def train(
         _LOG.info(f"{torch.cuda.device_count()=}")
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
-        use_mixed_precision = bf16_supported and model != LSTMFromScratchConfig.model_id
+        use_mixed_precision = bf16_supported and model != LSTMFromScratchConfig.model_id and not with_dp
         _LOG.info(f"{use_mixed_precision=}")
 
         ctx_stats = workspace.ctx_stats.read()
@@ -450,7 +450,11 @@ def train(
             if resume_from_last_checkpoint:
                 tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
                 model, _ = load_base_model_and_config(
-                    model_id_or_path, device=device, is_peft_adapter=False, is_training=True
+                    model_id_or_path,
+                    device=device,
+                    is_peft_adapter=False,
+                    is_training=True,
+                    differential_privacy=with_dp,
                 )
             else:
                 # fresh initialization of the custom tokenizer and LSTM model
@@ -468,6 +472,7 @@ def train(
                 device=device,
                 is_peft_adapter=resume_from_last_checkpoint,
                 is_training=True,
+                differential_privacy=with_dp,
             )
             tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
             if tokenizer.eos_token is None:

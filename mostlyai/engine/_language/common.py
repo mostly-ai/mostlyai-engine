@@ -52,7 +52,12 @@ def get_attention_implementation(config: PretrainedConfig) -> str | None:
 
 
 def load_base_model_and_config(
-    model_id_or_path: str | Path, device: torch.device, is_peft_adapter: bool, is_training: bool
+    model_id_or_path: str | Path,
+    device: torch.device,
+    is_peft_adapter: bool,
+    is_training: bool,
+    *,
+    differential_privacy: bool = False,
 ) -> tuple[PreTrainedModel, PretrainedConfig]:
     # opacus DP does not support parallel/sharded training
     model_id_or_path = str(model_id_or_path)
@@ -79,7 +84,12 @@ def load_base_model_and_config(
             "CUDA device was found but bitsandbytes is not available. Please use extra [gpu] to install bitsandbytes for quantization."
         )
     bf16_supported = is_bf16_supported(device)
-    if bf16_supported:
+    # Opacus needs reliable per-sample grads; bfloat16 params + grad_sample hooks are a poor match on many setups.
+    use_int4_training = is_gpu_training and is_bitsandbytes_available and not differential_privacy
+    if differential_privacy:
+        torch_dtype = torch.float32
+        attn_implementation = get_attention_implementation(config) if bf16_supported else None
+    elif bf16_supported:
         attn_implementation = get_attention_implementation(config)
         torch_dtype = torch.bfloat16
     else:
@@ -87,7 +97,7 @@ def load_base_model_and_config(
         torch_dtype = torch.float32
     if hasattr(config, "quantization_config"):
         quantization_config = AutoQuantizationConfig.from_dict(config.quantization_config)
-    elif is_gpu_training and is_bitsandbytes_available:
+    elif use_int4_training:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
