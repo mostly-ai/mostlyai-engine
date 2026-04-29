@@ -62,10 +62,13 @@ or alternatively for a GPU setup (needed for LLM finetuning and inference):
 uv pip install -U 'mostlyai-engine[gpu]'
 ```
 
-On Linux, one can explicitly install the CPU-only variant of torch together with `mostlyai-engine`:
+On Linux, one can explicitly install the CPU-only variant of PyTorch together with `mostlyai-engine` (match the versions expected by the engine’s `torch` / `torchvision` / `torchaudio` pins):
 
 ```bash
-uv pip install -U torch==2.9.1+cpu torchvision==0.24.1+cpu mostlyai-engine --extra-index-url https://download.pytorch.org/whl/cpu
+uv pip install --index-strategy unsafe-first-match -U \
+  torch==2.11.0+cpu torchvision==0.26.0+cpu torchaudio==2.11.0+cpu \
+  mostlyai-engine \
+  --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 ## TabularARGN for Flat Data
