@@ -28,9 +28,13 @@ from pydantic import BaseModel
 from transformers import AutoConfig, AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.distributed import cleanup_dist_env_and_memory
-from vllm.inputs.data import TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.sampling_params import StructuredOutputsParams
+
+try:
+    from vllm.inputs.data import TokensPrompt
+except ModuleNotFoundError:  # vLLM >= 0.20
+    from vllm.inputs.llm import TokensPrompt
 
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
