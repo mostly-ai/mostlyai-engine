@@ -54,7 +54,6 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
 
     def __init__(self, config: LSTMFromScratchConfig):
         super().__init__(config)
-        self.config = config
 
         self.embedding = nn.Embedding(self.config.vocab_size, self.config.embedding_size)
         self.dropout = nn.Dropout(self.config.dropout)
@@ -76,6 +75,43 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
 
         # this will be filled by left_to_right_padding() during the generation
         self.pad_token_id = None
+
+        # Transformers >= 5: `remove_tied_weights_from_state_dict` gathers patterns from each submodule's
+        # `_tied_weights_keys`, not from `all_tied_weights_keys`. DPLSTM registers duplicate storages under
+        # nested names (lstm.l{i}.…) and flat PyTorch names (lstm.weight_ih_l{i}); drop the nested copy
+        # when saving by declaring targets as tied to the canonical flat keys.
+        if self.config.with_dp:
+            tied: dict[str, str] = {}
+            for i in range(self.config.num_layers):
+                tied[f"lstm.l{i}.ih.weight"] = f"lstm.weight_ih_l{i}"
+                tied[f"lstm.l{i}.ih.bias"] = f"lstm.bias_ih_l{i}"
+                tied[f"lstm.l{i}.hh.weight"] = f"lstm.weight_hh_l{i}"
+                tied[f"lstm.l{i}.hh.bias"] = f"lstm.bias_hh_l{i}"
+            self._tied_weights_keys = tied
+        else:
+            self._tied_weights_keys = None
+
+        self.post_init()
+
+    def _init_weights(self, module: nn.Module) -> None:
+        # Keep PyTorch defaults for our main modules (historical behavior). HF post_init()
+        # still runs init_weights on the rest (e.g. any submodules inside DPLSTM).
+        if module in (self.embedding, self.lm_head, self.lstm):
+            return
+        super()._init_weights(module)
+
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict[str, str]:
+        """
+        Transformers >= 5 sets `all_tied_weights_keys` from this. `self._tied_weights_keys` is also read when
+        saving (see `remove_tied_weights_from_state_dict`). Keep both in sync for DPLSTM aliases.
+        """
+        get_expanded = getattr(super(), "get_expanded_tied_weights_keys", None)
+        base: dict[str, str] = dict(get_expanded(all_submodels=all_submodels)) if callable(get_expanded) else {}
+        extra = dict(self._tied_weights_keys or {})
+        if not extra:
+            return base
+        base.update(extra)
+        return base
 
     def forward(
         self,
