@@ -55,6 +55,9 @@ class LanguageModel(BaseEstimator):
         tgt_encoding_types: Dictionary mapping column names to encoding types.
             Example: {'category': 'LANGUAGE_CATEGORICAL', 'headline': 'LANGUAGE_TEXT'}
         model: The identifier of the language model to train. Defaults to MOSTLY_AI/LSTMFromScratch-3m.
+            Pretrained Hugging Face checkpoints are supported; verified examples include
+            HuggingFaceTB/SmolLM2-135M, HuggingFaceTB/SmolLM3-3B, Qwen/Qwen3-0.6B, and microsoft/phi-4
+            (GPU strongly recommended).
         max_training_time: Maximum training time in minutes. Defaults to 14400 (10 days).
         max_epochs: Maximum number of training epochs. Defaults to 100.
         batch_size: Per-device batch size for training and validation. If None, determined automatically.

@@ -47,7 +47,10 @@ def train(
     - `ModelStore`: Trained model checkpoints and logs.
 
     Args:
-        model: The identifier of the model to train. If tabular, defaults to MOSTLY_AI/Medium. If language, defaults to MOSTLY_AI/LSTMFromScratch-3m.
+        model: The identifier of the model to train. If tabular, defaults to MOSTLY_AI/Medium. If language,
+            defaults to MOSTLY_AI/LSTMFromScratch-3m. For language models, Hugging Face hub ids are supported;
+            verified pretrained checkpoints include HuggingFaceTB/SmolLM2-135M, HuggingFaceTB/SmolLM3-3B,
+            Qwen/Qwen3-0.6B, and microsoft/phi-4.
         max_training_time: Maximum training time in minutes. If None, defaults to 10 days.
         max_epochs: Maximum number of training epochs. If None, defaults to 100 epochs.
         batch_size: Per-device batch size for training and validation. If None, determined automatically.

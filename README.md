@@ -262,7 +262,7 @@ argn.sample(ctx_data=ctx_data)
 
 The `LanguageModel` class provides a scikit-learn-compatible interface for working with semi-structured textual data. It leverages pre-trained language models or trains lightweight LSTM models from scratch to generate synthetic text data.
 
-**Note**: The default model is `MOSTLY_AI/LSTMFromScratch-3m`, a lightweight LSTM model trained from scratch (GPU strongly recommended). You can also use pre-trained HuggingFace models by setting model to e.g. `microsoft/phi-1.5` (GPU required).
+**Note**: The default model is `MOSTLY_AI/LSTMFromScratch-3m`, a lightweight LSTM model trained from scratch (GPU strongly recommended). You can also use pretrained Hugging Face models (`model="<hub/repo>"`; GPU required). Verified checkpoints include `HuggingFaceTB/SmolLM2-135M`, `HuggingFaceTB/SmolLM3-3B`, `Qwen/Qwen3-0.6B`, and `microsoft/phi-4`.
 
 ### Model Training
 
