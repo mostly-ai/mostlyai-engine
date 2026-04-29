@@ -22,6 +22,17 @@ from transformers.modeling_outputs import CausalLMOutput
 _LOG = logging.getLogger(__name__)
 
 
+def _dplstm_state_dict_aliases(num_layers: int) -> dict[str, str]:
+    """Nested DPLSTM names -> flat ``nn.LSTM`` names (same storage; needed for checkpoint save)."""
+    aliases: dict[str, str] = {}
+    for i in range(num_layers):
+        aliases[f"lstm.l{i}.ih.weight"] = f"lstm.weight_ih_l{i}"
+        aliases[f"lstm.l{i}.ih.bias"] = f"lstm.bias_ih_l{i}"
+        aliases[f"lstm.l{i}.hh.weight"] = f"lstm.weight_hh_l{i}"
+        aliases[f"lstm.l{i}.hh.bias"] = f"lstm.bias_hh_l{i}"
+    return aliases
+
+
 class LSTMFromScratchConfig(PretrainedConfig):
     model_type = model_id = "MOSTLY_AI/LSTMFromScratch-3m"
 
@@ -76,20 +87,8 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
         # this will be filled by left_to_right_padding() during the generation
         self.pad_token_id = None
 
-        # Transformers >= 5: `remove_tied_weights_from_state_dict` gathers patterns from each submodule's
-        # `_tied_weights_keys`, not from `all_tied_weights_keys`. DPLSTM registers duplicate storages under
-        # nested names (lstm.l{i}.…) and flat PyTorch names (lstm.weight_ih_l{i}); drop the nested copy
-        # when saving by declaring targets as tied to the canonical flat keys.
-        if self.config.with_dp:
-            tied: dict[str, str] = {}
-            for i in range(self.config.num_layers):
-                tied[f"lstm.l{i}.ih.weight"] = f"lstm.weight_ih_l{i}"
-                tied[f"lstm.l{i}.ih.bias"] = f"lstm.bias_ih_l{i}"
-                tied[f"lstm.l{i}.hh.weight"] = f"lstm.weight_hh_l{i}"
-                tied[f"lstm.l{i}.hh.bias"] = f"lstm.bias_hh_l{i}"
-            self._tied_weights_keys = tied
-        else:
-            self._tied_weights_keys = None
+        # `_tied_weights_keys` is always a dict: empty unless DP (see `remove_tied_weights_from_state_dict`).
+        self._tied_weights_keys = _dplstm_state_dict_aliases(self.config.num_layers) if self.config.with_dp else {}
 
         self.post_init()
 
@@ -105,13 +104,10 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
         Transformers >= 5 sets `all_tied_weights_keys` from this. `self._tied_weights_keys` is also read when
         saving (see `remove_tied_weights_from_state_dict`). Keep both in sync for DPLSTM aliases.
         """
-        get_expanded = getattr(super(), "get_expanded_tied_weights_keys", None)
-        base: dict[str, str] = dict(get_expanded(all_submodels=all_submodels)) if callable(get_expanded) else {}
-        extra = dict(self._tied_weights_keys or {})
-        if not extra:
-            return base
-        base.update(extra)
-        return base
+        expanded = getattr(super(), "get_expanded_tied_weights_keys", None)
+        out: dict[str, str] = dict(expanded(all_submodels=all_submodels)) if expanded is not None else {}
+        out.update(self._tied_weights_keys)
+        return out
 
     def forward(
         self,
