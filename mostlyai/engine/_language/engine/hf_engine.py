@@ -22,11 +22,11 @@ import torch
 from peft import PeftModel
 from pydantic import BaseModel
 from transformers import AutoTokenizer
-from xgrammar.contrib.hf import LogitsProcessor
 
 from mostlyai.engine._language.common import load_base_model_and_config
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
+from mostlyai.engine._language.xgrammar_hf_logits import LogitsProcessor
 from mostlyai.engine._language.xgrammar_utils import create_compiled_grammars
 
 
