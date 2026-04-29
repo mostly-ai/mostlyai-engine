@@ -143,10 +143,15 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 
 # predict class labels for a categorical
 predictions = argn.predict(data_test, target="income", n_draws=100, agg_fn="mode")
+# model-conditional class probabilities (same inputs as predict; target column dropped from seed)
+probabilities = argn.predict_proba(data_test, target="income")
 
 # evaluate performance
-accuracy = accuracy_score(data_test["income"], predictions)
-auc = roc_auc_score(data_test["income"], probabilities[:, 1])
+accuracy = accuracy_score(data_test["income"], predictions["income"])
+# AUC: sklearn needs binary 0/1 targets and scores for the "positive" class (here: second category)
+pos_label = probabilities.columns[1]
+y_true_bin = (data_test["income"] == pos_label).astype(int)
+auc = roc_auc_score(y_true_bin, probabilities[pos_label])
 print(f"Accuracy: {accuracy:.3f}, AUC: {auc:.3f}")
 ```
 
