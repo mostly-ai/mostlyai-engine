@@ -233,7 +233,7 @@ def _gpu_estimate_max_batch_size(
     model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens: int, initial_batch_size: int
 ) -> int:
     batch_size = 2 ** int(np.log2(initial_batch_size))
-    optimizer = torch.optim.AdamW(params=model.parameters())
+    optimizer = torch.optim.AdamW(params=[p for p in model.parameters() if p.requires_grad])
 
     # create test batch of zeros with estimated max sequence length
     def create_test_batch(batch_size: int):
@@ -584,7 +584,10 @@ def train(
             batch_size=val_batch_size,
             collate_fn=data_collator,
         )
-        optimizer = torch.optim.AdamW(params=model.parameters(), lr=initial_lr)
+        optimizer = torch.optim.AdamW(
+            params=[p for p in model.parameters() if p.requires_grad],
+            lr=initial_lr,
+        )
         early_stopper = EarlyStopper(val_loss_patience=4)
         lr_scheduler: LRScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer=optimizer,
