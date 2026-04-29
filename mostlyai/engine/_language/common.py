@@ -59,6 +59,12 @@ def load_base_model_and_config(
     *,
     differential_privacy: bool = False,
 ) -> tuple[PreTrainedModel, PretrainedConfig]:
+    """Load a HF base model (and config) for language training or inference.
+
+    When ``differential_privacy`` is True (Opacus DP training), the loader prefers
+    settings that keep per-sample gradients well-defined: float32 weights, no int4
+    training path, eager attention (not fused SDPA), and no gradient checkpointing.
+    """
     # opacus DP does not support parallel/sharded training
     model_id_or_path = str(model_id_or_path)
     if is_peft_adapter:

@@ -233,6 +233,7 @@ def _gpu_estimate_max_batch_size(
     model: PreTrainedModel | GradSampleModule, device: torch.device, max_tokens: int, initial_batch_size: int
 ) -> int:
     batch_size = 2 ** int(np.log2(initial_batch_size))
+    # Match training optimizer: only trainable params (e.g. LoRA), for consistent memory probe.
     optimizer = torch.optim.AdamW(params=[p for p in model.parameters() if p.requires_grad])
 
     # create test batch of zeros with estimated max sequence length
@@ -340,6 +341,7 @@ def train(
         bf16_supported = is_bf16_supported(device)
         _LOG.info(f"{bf16_supported=}")
         use_mixed_precision = bf16_supported and model != LSTMFromScratchConfig.model_id and not with_dp
+        # DP uses float32 + no autocast (see load_base_model_and_config); bf16 autocast breaks Opacus grad_sample.
         _LOG.info(f"{use_mixed_precision=}")
 
         ctx_stats = workspace.ctx_stats.read()
@@ -592,7 +594,7 @@ def train(
         optimizer = torch.optim.AdamW(
             params=[p for p in model.parameters() if p.requires_grad],
             lr=initial_lr,
-        )
+        )  # frozen PEFT base weights must not be in Opacus optimizer (no grad_sample on unused params)
         early_stopper = EarlyStopper(val_loss_patience=4)
         lr_scheduler: LRScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer=optimizer,
