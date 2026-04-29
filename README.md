@@ -62,7 +62,7 @@ or alternatively for a GPU setup (needed for LLM finetuning and inference):
 uv pip install -U 'mostlyai-engine[gpu]'
 ```
 
-On Linux, one can explicitly install the CPU-only variant of PyTorch together with `mostlyai-engine` (match the versions expected by the engine’s `torch` / `torchvision` / `torchaudio` pins):
+On Linux, one can explicitly install the CPU-only variant of PyTorch together with `mostlyai-engine`:
 
 ```bash
 uv pip install --index-strategy unsafe-first-match -U \
