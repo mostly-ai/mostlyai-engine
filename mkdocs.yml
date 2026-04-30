@@ -32,6 +32,9 @@ nav:
   - Getting started: index.md
   - API Reference: api.md
 
+hooks:
+  - mkdocs_pygments_hook.py
+
 plugins:
   - search
   - mkdocstrings:
