@@ -36,8 +36,7 @@ jobs:
 
       - name: Setup | Dependencies
         run: |
-          uv sync --frozen --only-group dev
-          uv pip install ".[gpu]"
+          uv sync --frozen --no-default-groups --group dev --extra gpu
 
       - name: Setup | Check for available GPU-s
         run: nvidia-smi
