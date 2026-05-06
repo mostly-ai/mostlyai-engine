@@ -289,7 +289,8 @@ class SequentialContextEmbedders(Embedders):
         mask = None
         for sub_col in self.cardinalities:
             xs = torch.as_tensor(x[sub_col], device=self.device)
-            xs = torch.nested.to_padded_tensor(xs, padding=-1)
+            if xs.is_nested:
+                xs = torch.nested.to_padded_tensor(xs, padding=-1)
             mask = (xs != -1).squeeze(-1)
             xs = torch.where(xs == -1, torch.tensor(0), xs)
             xs = self.get(sub_col)(xs)
