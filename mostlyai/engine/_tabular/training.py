@@ -138,10 +138,20 @@ class BatchCollator:
     For sequence data, it will sample subsequences with lengths up to max_sequence_window.
     """
 
-    def __init__(self, is_sequential: bool, max_sequence_window: int | None, device: torch.device):
+    def __init__(
+        self,
+        is_sequential: bool,
+        max_sequence_window: int | None,
+        device: torch.device,
+        *,
+        use_nested_ctxseq: bool = True,
+    ):
         self.is_sequential = is_sequential
         self.max_sequence_window = max_sequence_window
         self.device = device
+        # Opacus per-sample gradients do not support NestedTensor on CPU/CUDA; use padded
+        # dense tensors for CTXSEQ when training with DP (see test_tabular_sequential DP path).
+        self.use_nested_ctxseq = use_nested_ctxseq
 
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
         batch = pd.DataFrame(batch)
@@ -177,15 +187,26 @@ class BatchCollator:
                     dim=-1,
                 )
             elif column.startswith(CTXSEQ):
-                # construct row tensors and convert the list to nested column tensor
-                tensors[column] = torch.unsqueeze(
-                    torch.nested.as_nested_tensor(
-                        [torch.tensor(row, dtype=torch.int64, device=self.device) for row in batch[column]],
-                        dtype=torch.int64,
-                        device=self.device,
-                    ),
-                    dim=-1,
-                )
+                if self.use_nested_ctxseq:
+                    # construct row tensors and convert the list to nested column tensor
+                    tensors[column] = torch.unsqueeze(
+                        torch.nested.as_nested_tensor(
+                            [torch.tensor(row, dtype=torch.int64, device=self.device) for row in batch[column]],
+                            dtype=torch.int64,
+                            device=self.device,
+                        ),
+                        dim=-1,
+                    )
+                else:
+                    # padded batch (variable-length rows); -1 marks padding (matches SequentialContextEmbedders)
+                    tensors[column] = torch.unsqueeze(
+                        torch.tensor(
+                            np.array(list(zip_longest(*batch[column], fillvalue=-1))).T,
+                            dtype=torch.int64,
+                            device=self.device,
+                        ),
+                        dim=-1,
+                    )
         return tensors
 
     @staticmethod
@@ -544,7 +565,10 @@ def train(
 
         # and see if it's possible to make it compatible with DP
         batch_collator = BatchCollator(
-            is_sequential=is_sequential, max_sequence_window=max_sequence_window, device=device
+            is_sequential=is_sequential,
+            max_sequence_window=max_sequence_window,
+            device=device,
+            use_nested_ctxseq=not with_dp,
         )
         disable_progress_bar()
         trn_dataset = load_dataset("parquet", data_files=[str(p) for p in workspace.encoded_data_trn.fetch_all()])[
