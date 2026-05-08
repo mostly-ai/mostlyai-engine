@@ -2,7 +2,7 @@
 name = "mostlyai-engine"
 version = "2.6.1"
 description = "Synthetic Data Engine"
-authors = [{ name = "MOSTLY AI", email = "dev@mostly.ai" }]
+authors = [{ name = "MOSTLY AI", email = "michael.platzer@gmail.com" }]
 requires-python = ">=3.11,<3.14"
 readme = "README.md"
 license = "Apache-2.0"
