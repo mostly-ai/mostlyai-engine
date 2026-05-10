@@ -23,6 +23,7 @@ def encode(
     *,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    parallel_backend: str = "loky",
 ) -> None:
     """
     Encodes data in the workspace that has already been split and analyzed.
@@ -34,13 +35,18 @@ def encode(
     Args:
         workspace_dir: Directory path for workspace.
         update_progress: Callback for progress updates.
+        parallel_backend: Joblib parallel backend to use. Options include 'loky', 'threading', 'multiprocessing', etc.
     """
     model_type = resolve_model_type(workspace_dir)
     if model_type == ModelType.tabular:
         from mostlyai.engine._tabular.encoding import encode as encode_tabular
 
-        return encode_tabular(workspace_dir=workspace_dir, update_progress=update_progress)
+        return encode_tabular(
+            workspace_dir=workspace_dir, update_progress=update_progress, parallel_backend=parallel_backend
+        )
     else:
         from mostlyai.engine._language.encoding import encode as encode_language
 
-        return encode_language(workspace_dir=workspace_dir, update_progress=update_progress)
+        return encode_language(
+            workspace_dir=workspace_dir, update_progress=update_progress, parallel_backend=parallel_backend
+        )

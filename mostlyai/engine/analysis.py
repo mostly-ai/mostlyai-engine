@@ -108,6 +108,7 @@ def analyze(
     differential_privacy: DifferentialPrivacyConfig | None = None,
     workspace_dir: str | Path = "engine-ws",
     update_progress: ProgressCallback | None = None,
+    parallel_backend: str = "loky",
 ) -> None:
     """
     Generates (privacy-safe) column-level statistics of the original data, that has been `split` into the workspace.
@@ -122,6 +123,7 @@ def analyze(
         value_protection: Whether to enable value protection for rare values.
         workspace_dir: Path to workspace directory containing partitioned data.
         update_progress: Optional callback to update progress during analysis.
+        parallel_backend: Joblib parallel backend to use. Options include 'loky', 'threading', 'multiprocessing', etc.
     """
 
     _LOG.info("ANALYZE started")
@@ -167,6 +169,7 @@ def analyze(
                 ctx_primary_key=ctx_primary_key if has_context else None,
                 ctx_root_key=ctx_root_key,
                 n_jobs=min(16, max(1, cpu_count() - 1)),
+                parallel_backend=parallel_backend,
             )
             progress.update(completed=i, total=len(tgt_pqt_partitions) + 1)
 
@@ -221,6 +224,7 @@ def _analyze_partition(
     ctx_primary_key: str | None = None,
     ctx_root_key: str | None = None,
     n_jobs: int = 1,
+    parallel_backend: str = "loky",
 ) -> None:
     """
     Calculates partial statistics about a single partition.
@@ -252,7 +256,7 @@ def _analyze_partition(
         ctx_root_keys = ctx_primary_keys.rename("__rkey")
 
     # analyze all target columns
-    with parallel_config("loky", n_jobs=n_jobs):
+    with parallel_config(parallel_backend, n_jobs=n_jobs):
         results = Parallel()(
             delayed(_analyze_col)(
                 values=tgt_df[column],
@@ -293,7 +297,7 @@ def _analyze_partition(
 
         # analyze all context columns
         assert isinstance(ctx_encoding_types, dict)
-        with parallel_config("loky", n_jobs=n_jobs):
+        with parallel_config(parallel_backend, n_jobs=n_jobs):
             results = Parallel()(
                 delayed(_analyze_col)(
                     values=ctx_df[column],

@@ -157,6 +157,7 @@ def _encode_partition(
 def encode(
     workspace_dir: str | Path | None = None,
     update_progress: ProgressCallback | None = None,
+    parallel_backend: str = "loky",
 ) -> None:
     _LOG.info("ENCODE_LANGUAGE started")
     t0 = time.time()
