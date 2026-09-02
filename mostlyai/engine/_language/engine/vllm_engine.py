@@ -88,7 +88,6 @@ class VLLMEngine(LanguageEngine):
             enable_lora=True,
             dtype=torch.bfloat16 if is_bf16_supported(device) else torch.float16,
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
-            swap_space=0,
             disable_log_stats=True,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=get_dynamic_gpu_memory_utilization(),
