@@ -23,32 +23,31 @@ classifiers = [
 ]
 
 dependencies = [
-    "setuptools>=77.0.3,<81.0.0",  # vllm 0.20 caps setuptools for Python > 3.11
     "numpy>=2.0.0",
     "pandas>=2.2.0",
     "pyarrow>=16.0.0",
     "joblib>=1.4.2",
     "scikit-learn>=1.4.0",
     "psutil>=5.9.5,<6",  # upgrade when colab psutil is updated
-    "tokenizers>=0.21.1",  # vllm 0.20 lower bound
-    "transformers>=5.5.1",  # vllm 0.20 forbids 5.0–5.4 and 5.5.0; >=5.5.1 needed for newer HF model types (e.g. gemma4)
+    "tokenizers>=0.21.1",  # vllm lower bound
+    "transformers>=5.5.3",  # aligned with vllm 0.28
     "datasets>=3.0.0",
     "accelerate>=1.5.0",
     "peft>=0.18.2",  # transformers 5.7+ checks min PEFT in model.add_adapter (integrations/peft.py)
     "huggingface-hub[hf-xet]>=0.30.2",
     "opacus>=1.6.0",
-    "xgrammar>=0.1.32,<1.0.0",  # aligned with vllm 0.20
-    "json-repair>=0.47.0",
-    "torch>=2.11.0,<2.12.0",
+    "xgrammar>=0.2.1,<1.0.0",  # aligned with vllm 0.28
+    "json-repair>=0.60.1",
+    "torch>=2.13.0,<2.14.0",
     "torchaudio>=2.11.0,<2.12.0",
-    "torchvision>=0.26.0,<0.27.0"
+    "torchvision>=0.28.0,<0.29.0",
 ]
 
 [project.optional-dependencies]
 gpu = [
     "bitsandbytes==0.42.0; sys_platform == 'darwin'",
     "bitsandbytes>=0.45.5; sys_platform == 'linux'",
-    "vllm==0.20.0; sys_platform == 'linux' or sys_platform == 'darwin'",
+    "vllm==0.28.0; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
@@ -66,7 +65,7 @@ docs = [
     "mkdocs-material>=9.0",
     "mkdocs-llmstxt>=0.2",
     "griffe>=1.0",
-    "pymdown-extensions>=10.0",
+    "pymdown-extensions>=11.0",
     "griffe-fieldz>=0.2",
     "black>=26.3.1",
 ]
