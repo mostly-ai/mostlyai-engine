@@ -14,8 +14,51 @@
 
 from __future__ import annotations
 
+import inspect
+import re
+import textwrap
 import time
 from os import PathLike
+
+# Workaround for vLLM / Triton kernel warmup issue (https://github.com/vllm-project/vllm/issues/49920)
+# In Triton 3.7.x, `re.search(r"^def\s+\w+\s*\(", src, re.MULTILINE)` in `triton/runtime/jit.py:JITCallable.__init__`
+# assumes `def` is at the start of a line. When vLLM >= 0.28.0 warms up multi-decorated kernels
+# (e.g. `minimax_m3/common/ops/index_topk.py` wrapped with `@triton.heuristics`), the regex fails,
+# raising `AttributeError: 'NoneType' object has no attribute 'start'`.
+# TODO: Remove once upstream vLLM/Triton safely handles multi-decorated kernel source inspection.
+try:
+    import triton.runtime.jit
+
+    _orig_jit_callable_init = triton.runtime.jit.JITCallable.__init__
+
+    def _patched_jit_callable_init(self, fn):
+        try:
+            _orig_jit_callable_init(self, fn)
+        except AttributeError as e:
+            if "'NoneType' object has no attribute 'start'" in str(e):
+                self.fn = fn
+                self.signature = inspect.signature(fn)
+                self.raw_src, self.starting_line_number = inspect.getsourcelines(fn)
+                self._fn_name = triton.runtime.jit.get_full_name(fn)
+                self._hash_lock = triton.runtime.jit.threading.RLock()
+                src = textwrap.dedent("".join(self.raw_src))
+                m = re.search(r"(?:^|\n)\s*def\s+[\w_]+\s*\(", src)
+                if m:
+                    def_pos = src.find("def", m.start())
+                    src = src[def_pos:]
+                else:
+                    lines = src.splitlines()
+                    def_lines = [i for i, line in enumerate(lines) if "def " in line]
+                    if def_lines:
+                        src = "\n".join(lines[def_lines[0] :])
+                self._src = src
+                self.hash = None
+            else:
+                raise
+
+    triton.runtime.jit.JITCallable.__init__ = _patched_jit_callable_init
+except Exception:  # noqa: BLE001, S110
+    pass
 
 import torch
 from peft import PeftConfig
