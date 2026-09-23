@@ -1,5 +1,5 @@
 name: Release Step 1 - Release on GitHub
-run-name: bump version to ${{ github.event_name == 'workflow_dispatch' && inputs.version || replace(github.ref_name, 'release/', '') }}
+run-name: bump version to ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -19,10 +19,24 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    env:
-      # Same string workflow_dispatch passes as inputs.version. Tag pushes use the suffix after release/.
-      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || replace(github.ref_name, 'release/', '') }}
     steps:
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"
+          else
+            version="${GITHUB_REF_NAME#release/}"
+          fi
+          if [ -z "$version" ]; then
+            echo "Release version is empty" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -33,28 +47,28 @@ jobs:
 
       - name: Update version
         run: |
-          sed -i -E 's/^version = ".*"/version = "${{ env.RELEASE_VERSION }}"/' pyproject.toml
-          sed -i -E 's/^__version__ = ".*"/__version__ = "${{ env.RELEASE_VERSION }}"/' mostlyai/engine/__init__.py
+          sed -i -E 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' pyproject.toml
+          sed -i -E 's/^__version__ = ".*"/__version__ = "${{ steps.version.outputs.version }}"/' mostlyai/engine/__init__.py
 
       - name: Commit and Push
         run: |
-          BRANCH_NAME="release-${{ env.RELEASE_VERSION }}"
+          BRANCH_NAME="release-${{ steps.version.outputs.version }}"
           git checkout -B $BRANCH_NAME
           git add pyproject.toml mostlyai/engine/__init__.py
-          git commit -m "build: bump version to ${{ env.RELEASE_VERSION }}"
+          git commit -m "build: bump version to ${{ steps.version.outputs.version }}"
           git push -f origin $BRANCH_NAME
 
       - name: Create and Merge PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pr_id=$(gh pr list --head release-${{ env.RELEASE_VERSION }} --base main --json number --jq '.[0].number')
+          pr_id=$(gh pr list --head release-${{ steps.version.outputs.version }} --base main --json number --jq '.[0].number')
           if [ -z "$pr_id" ]; then
             pr_id=$(gh pr create \
-              --title "build: release ${{ env.RELEASE_VERSION }}" \
-              --body "Release version ${{ env.RELEASE_VERSION }}." \
+              --title "build: release ${{ steps.version.outputs.version }}" \
+              --body "Release version ${{ steps.version.outputs.version }}." \
               --base main \
-              --head release-${{ env.RELEASE_VERSION }})
+              --head release-${{ steps.version.outputs.version }})
           fi
           gh pr merge $pr_id --squash
 
@@ -62,6 +76,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create ${{ env.RELEASE_VERSION }} \
-            --title "Release ${{ env.RELEASE_VERSION }}" \
+          gh release create ${{ steps.version.outputs.version }} \
+            --title "Release ${{ steps.version.outputs.version }}" \
             --generate-notes
