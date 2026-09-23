@@ -32,14 +32,17 @@ JSON_NULL = "null"
 
 
 def prepend_grammar_root_with_space(grammar: str) -> str:
-    # XGrammar always starts with "{" when enforcing JSON Schema
-    # training is done on strings like ` {...} {...}`
-    # later, generation is done with prompt like ` {...}`
-    # so the first output token must be a space
-    start_of_grammar = 'root ::= "{"'
-    start_of_grammar_with_space = 'root ::= " {"'
-    assert start_of_grammar in grammar
-    return grammar.replace(start_of_grammar, start_of_grammar_with_space)
+    # JSON-schema grammars start at "{". Training strings look like ` {...} {...}`
+    # and generation prompts look like ` {...}`, so the first output token must be a space.
+    # xgrammar <=0.2.3 emits `root ::= "{"`. xgrammar 0.2.7 emits `root ::= (("{"`.
+    replacements = (
+        ('root ::= "{"', 'root ::= " {"'),
+        ('root ::= (("{"', 'root ::= ((" {"'),
+    )
+    for start_of_grammar, start_of_grammar_with_space in replacements:
+        if start_of_grammar in grammar:
+            return grammar.replace(start_of_grammar, start_of_grammar_with_space)
+    raise AssertionError("unrecognized xgrammar root rule")
 
 
 def ensure_seed_can_be_tokenized(seed_data: pd.DataFrame, tokenizer: PreTrainedTokenizerBase) -> pd.DataFrame:

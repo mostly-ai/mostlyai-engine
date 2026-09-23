@@ -16,8 +16,10 @@ import json
 
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel
+from xgrammar.testing import _json_schema_to_ebnf
 
-from mostlyai.engine._language.xgrammar_utils import create_schemas
+from mostlyai.engine._language.xgrammar_utils import create_schemas, prepend_grammar_root_with_space
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
 
 
@@ -44,3 +46,17 @@ def test_create_schemas_normalizes_seed_nans_to_json_null():
         schema_json = json.dumps(schema.model_json_schema(), allow_nan=False)
         parsed = json.loads(schema_json)
         assert parsed["properties"]["country"]["const"] is None
+
+
+def test_prepend_grammar_root_with_space_legacy_ebnf():
+    grammar = 'root ::= "{"\n'
+    assert prepend_grammar_root_with_space(grammar) == 'root ::= " {"\n'
+
+
+def test_prepend_grammar_root_with_space_current_xgrammar():
+    class Target(BaseModel):
+        bio: str
+
+    updated = prepend_grammar_root_with_space(_json_schema_to_ebnf(Target))
+    assert 'root ::= ((" {"' in updated
+    assert 'root ::= (("{"' not in updated
