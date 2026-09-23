@@ -28,8 +28,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Use branch from trigger, or default to main
-          ref: ${{ github.event.workflow_run.head_branch || inputs.ref || 'main' }}
+          # workflow_dispatch Step 1 runs on a branch (main), so head_branch is that branch.
+          # A release/* tag push sets head_branch to the tag, which is the commit before Step 1
+          # merges the bump. Publish main in that case, same tree a dispatch from main publishes.
+          ref: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'release/') && 'main' || github.event.workflow_run.head_branch || inputs.ref || 'main' }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
