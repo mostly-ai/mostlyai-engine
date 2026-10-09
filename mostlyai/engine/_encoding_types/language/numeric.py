@@ -133,11 +133,13 @@ def encode_language_numeric(values: pd.Series, stats: dict, _: pd.Series | None 
 def decode_language_numeric(x: pd.Series, stats: dict[str, str]) -> pd.Series:
     x = pd.to_numeric(x, errors="coerce")
     x = x.round(stats["max_scale"])
+    # Nullable pandas numeric dtypes expose their corresponding NumPy dtype.
+    np_dtype = np.dtype(getattr(x.dtype, "numpy_dtype", x.dtype))
     if stats["min"] is not None:
-        reduced_min = np.dtype(x.dtype).type(stats["min"])
+        reduced_min = np_dtype.type(stats["min"])
         x.loc[x < reduced_min] = reduced_min
     if stats["max"] is not None:
-        reduced_max = np.dtype(x.dtype).type(stats["max"])
+        reduced_max = np_dtype.type(stats["max"])
         x.loc[x > reduced_max] = reduced_max
     dtype = "Int64" if stats["max_scale"] == 0 else float
     return x.astype(dtype)
