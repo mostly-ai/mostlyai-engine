@@ -16,11 +16,32 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 from pydantic import BaseModel
 from xgrammar.testing import _json_schema_to_ebnf
 
+from mostlyai.engine._encoding_types.language.numeric import analyze_language_numeric, analyze_reduce_language_numeric
 from mostlyai.engine._language.xgrammar_utils import create_schemas, prepend_grammar_root_with_space
 from mostlyai.engine.domain import ModelEncodingType, RareCategoryReplacementMethod
+
+
+@pytest.mark.parametrize("values", [[1e-10, 2e-10], [-2e-10, -1e-10], [1.00000000001, 1.00000000002]])
+def test_create_schemas_with_small_fractions(values):
+    values = pd.Series(values, name="value")
+    ids = pd.Series(range(len(values)), name="id")
+    stats = analyze_reduce_language_numeric([analyze_language_numeric(values, ids)], value_protection=False)
+    schema = next(
+        create_schemas(
+            size=1,
+            stats={"columns": {"value": stats}},
+            rare_category_replacement_method=RareCategoryReplacementMethod.constant,
+        )
+    )
+    field = schema.model_json_schema()["properties"]["value"]
+    assert field["type"] == "number"
+    assert field["minimum"] == values.min()
+    assert field["maximum"] == values.max()
+    assert _json_schema_to_ebnf(schema)
 
 
 def test_create_schemas_normalizes_seed_nans_to_json_null():

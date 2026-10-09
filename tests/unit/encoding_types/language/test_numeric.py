@@ -27,6 +27,30 @@ from mostlyai.engine.domain import ModelEncodingType
 
 
 class TestLanguageNumericAnalyze:
+    @pytest.mark.parametrize(
+        "values, expected_scale",
+        [
+            ([1e-10, 2e-10], 10),
+            ([-1e-10, -2e-10], 10),
+            ([1.00000000001, 1.00000000002], 11),
+            ([0.123456789, 0.234567891], 9),
+            ([0.0, 1.0, 2.0], 0),
+            ([1.2, 3.45], 2),
+            ([1e-10, np.nan], 10),
+        ],
+    )
+    def test_analyze_preserves_fractional_precision(self, values, expected_scale):
+        values = pd.Series(values, name="value")
+        ids = pd.Series(range(len(values)), name="id")
+
+        stats = analyze_language_numeric(values, ids)
+        assert stats["max_scale"] == expected_scale
+
+        reduced = analyze_reduce_language_numeric([stats], value_protection=False)
+        encoded = encode_language_numeric(values, reduced)
+        decoded = decode_language_numeric(encoded.astype(str).astype(object), reduced)
+        pd.testing.assert_series_equal(decoded, values, check_dtype=False, check_exact=True)
+
     def test_analyze_language_numeric(self):
         values = pd.Series([0, 1, 2, 3, 4, 5] * ANALYZE_MIN_MAX_TOP_N, name="value")
         ids = pd.Series(range(len(values)), name="id")
