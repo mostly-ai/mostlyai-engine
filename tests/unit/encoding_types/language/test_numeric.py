@@ -80,6 +80,13 @@ class TestLanguageNumericEncode:
 
 
 class TestLanguageNumericDecode:
+    @pytest.mark.parametrize("dtype", [object, "string", "string[pyarrow]"])
+    def test_decode_integer_strings_with_missing_values(self, dtype, int_stats):
+        values = pd.Series(["1", "100", "25", None, "invalid"], dtype=dtype)
+        expected = pd.Series([17, 91, 25, pd.NA, pd.NA], dtype="Int64")
+        decoded = decode_language_numeric(values, int_stats)
+        pd.testing.assert_series_equal(decoded, expected)
+
     @pytest.fixture
     def int_stats(self):
         return {
@@ -100,9 +107,9 @@ class TestLanguageNumericDecode:
             "min": 17.0,
         }
 
-    @pytest.fixture
-    def sample_values(self):
-        return pd.Series(["25.3541", "99.99", "-312.0", "61", None, "35.10091", "-1.223"])
+    @pytest.fixture(params=[object, "string", "string[pyarrow]"])
+    def sample_values(self, request):
+        return pd.Series(["25.3541", "99.99", "-312.0", "61", None, "35.10091", "-1.223"], dtype=request.param)
 
     @pytest.mark.parametrize(
         "stats_name, expected_dtype",
