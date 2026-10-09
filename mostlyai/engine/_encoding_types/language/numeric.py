@@ -43,8 +43,8 @@ def analyze_language_numeric(values: pd.Series, root_keys: pd.Series, _: pd.Seri
 
     # determine max scale
     def count_scale(num: float) -> int:
-        # represent number as fixed point string, remove trailing zeros and decimal point
-        num = format(num, "f").rstrip("0").rstrip(".")
+        # preserve fractional precision without scientific notation or trailing zeros
+        num = np.format_float_positional(num, unique=True, trim="-")
         if "." in num:
             # in case of decimal, return number of digits after decimal point
             return len(num.split(".")[1])

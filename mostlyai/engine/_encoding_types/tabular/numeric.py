@@ -77,6 +77,7 @@ NUMERIC_DISCRETE_NULL_TOKEN = CATEGORICAL_NULL_TOKEN
 # maximum and minimum precision that is being considered
 NUMERIC_DIGIT_MAX_DECIMAL = 18
 NUMERIC_DIGIT_MIN_DECIMAL = -8
+NUMERIC_DIGIT_MAX_SCALE = 20
 
 
 def _type_safe_numeric_series(numeric_array: np.ndarray | list, pd_dtype: str) -> pd.Series:
@@ -136,7 +137,11 @@ def split_sub_columns_digit(
         # rely on `np.format_float_positional` to determine string representation of absolute values
         values_str = (
             values.abs()
-            .apply(lambda x: np.format_float_positional(x, unique=True, pad_left=50, pad_right=20, precision=20))
+            .apply(
+                lambda x: np.format_float_positional(
+                    x, unique=True, pad_left=50, pad_right=NUMERIC_DIGIT_MAX_SCALE, precision=NUMERIC_DIGIT_MAX_SCALE
+                )
+            )
             # convert to string[pyarrow] for faster processing
             .astype("string[pyarrow]")
             # replace nan with pd.NA for faster processing
@@ -199,7 +204,13 @@ def analyze_numeric(
     max_n = max_values.sort_values(ascending=False).head(ANALYZE_MIN_MAX_TOP_N).astype("float").tolist()
 
     # split values into digits; used for digit numeric encoding, plus to determine precision
-    df_split = split_sub_columns_digit(values)
+    # Extend the default digit window for fine fractions, up to the formatter's precision.
+    max_scale = max(
+        (len(np.format_float_positional(v, unique=True, trim="-").partition(".")[2]) for v in non_na_values),
+        default=0,
+    )
+    min_decimal = min(NUMERIC_DIGIT_MIN_DECIMAL, -min(max_scale, NUMERIC_DIGIT_MAX_SCALE))
+    df_split = split_sub_columns_digit(values, min_decimal=min_decimal)
     is_not_nan = df_split["nan"] == 0
     has_nan = sum(df_split["nan"]) > 0
     has_neg = sum(df_split["neg"]) > 0
@@ -238,9 +249,9 @@ def analyze_reduce_numeric(
     # check if there are negative values
     has_neg = any([j["has_neg"] for j in stats_list])
     # determine precision to apply rounding of sampled values during generation
-    keys = stats_list[0]["max_digits"].keys()
-    min_digits = {k: min([j["min_digits"][k] for j in stats_list]) for k in keys}
-    max_digits = {k: max([j["max_digits"][k] for j in stats_list]) for k in keys}
+    keys = sorted({k for stats in stats_list for k in stats["max_digits"]}, key=lambda k: int(k[1:]), reverse=True)
+    min_digits = {k: min([j["min_digits"].get(k, 0) for j in stats_list]) for k in keys}
+    max_digits = {k: max([j["max_digits"].get(k, 0) for j in stats_list]) for k in keys}
     non_zero_prec = [k for k in keys if max_digits[k] > 0 and k.startswith("E")]
     min_decimal = min([int(k[1:]) for k in non_zero_prec]) if len(non_zero_prec) > 0 else 0
 

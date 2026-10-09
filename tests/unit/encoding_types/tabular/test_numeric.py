@@ -87,6 +87,44 @@ class TestSplitSubColumnsDigit:
         pd.testing.assert_frame_equal(actual, expected)
 
 
+@pytest.mark.parametrize(
+    "encoding_type",
+    [
+        ModelEncodingType.tabular_numeric_digit,
+        ModelEncodingType.tabular_numeric_discrete,
+        ModelEncodingType.tabular_numeric_auto,
+        ModelEncodingType.tabular_numeric_binned,
+    ],
+)
+@pytest.mark.parametrize(
+    "numbers, scale", [([1e-10, 2e-10], 10), ([-2e-10, -1e-10], 10), ([1.00000000001, 1.00000000002], 11)]
+)
+def test_numeric_preserves_fine_fractions(encoding_type, numbers, scale):
+    values = pd.Series(numbers * 30, name="value")
+    ids = pd.Series(range(len(values)), name="id")
+    analyzed = analyze_numeric(values, ids, encoding_type=encoding_type)
+    stats = analyze_reduce_numeric([analyzed], value_protection=False, encoding_type=encoding_type)
+    assert stats["min_decimal"] == -scale
+    encoded = encode_numeric(values, stats)
+    decoded = decode_numeric(encoded, stats)
+    pd.testing.assert_series_equal(decoded, values, check_dtype=False, check_names=False, check_exact=True)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_numeric_merges_partition_precision(reverse):
+    partitions = [pd.Series([1.2, 2.3], name="value"), pd.Series([1e-10, 2e-10], name="value")]
+    analyzed = [analyze_numeric(values, pd.Series(range(len(values)), name="id")) for values in partitions]
+    if reverse:
+        analyzed.reverse()
+    stats = analyze_reduce_numeric(
+        analyzed, value_protection=False, encoding_type=ModelEncodingType.tabular_numeric_digit
+    )
+    assert stats["min_decimal"] == -10
+    values = pd.concat(partitions, ignore_index=True)
+    decoded = decode_numeric(encode_numeric(values, stats), stats)
+    pd.testing.assert_series_equal(decoded, values, check_dtype=False, check_names=False, check_exact=True)
+
+
 class TestDigitAnalyze:
     def test_positive_integers_and_fractions(self):
         fractions = pd.Series(np.repeat(np.linspace(0, 0.9999, 100), 10))
@@ -166,12 +204,12 @@ class TestDigitAnalyze:
             9223372036854775807: 2000,
         }
 
-    def test_precision_higher_than_limit(self):
+    def test_precision_beyond_default_digit_window(self):
         values = pd.Series([0.111111112222] * 5000 + [0.999999998888] * 5000, name="vals")
         ids = pd.Series(range(len(values)), name="subject_id")
         stats = analyze_numeric(values, ids)
-        assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "11111111")
-        assert stats["max_digits"] == _digit_to_int("0000000000000000000" + "99999999")
+        assert stats["min_digits"] == _digit_to_int("0000000000000000000" + "111111112222")
+        assert stats["max_digits"] == _digit_to_int("0000000000000000000" + "999999998888")
         assert stats["min_n"] == [0.111111112222] * ANALYZE_MIN_MAX_TOP_N
         assert stats["max_n"] == [0.999999998888] * ANALYZE_MIN_MAX_TOP_N
 
