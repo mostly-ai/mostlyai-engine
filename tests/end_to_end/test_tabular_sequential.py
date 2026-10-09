@@ -17,6 +17,9 @@ import shutil
 import numpy as np
 import pandas as pd
 import pytest
+import torch
+from opacus.optimizers import DPOptimizer
+from opacus.utils.uniform_sampler import UniformWithReplacementSampler
 
 from mostlyai.engine import analyze, encode, split
 from mostlyai.engine._common import read_json
@@ -528,6 +531,57 @@ class TestTabularTrainingStrategy:
             ctx_primary_key="id",
         )
         return workspace_dir
+
+    @pytest.mark.parametrize("empty_batch_index", [0, 1])
+    def test_dp_empty_batch(self, workspace_before_training, monkeypatch, empty_batch_index):
+        # Force first/later Poisson batches to be empty instead of relying on chance.
+        original_iter = UniformWithReplacementSampler.__iter__
+        original_step = DPOptimizer.step
+        empty_steps = []
+
+        def sample_with_empty_batch(sampler):
+            for index, batch in enumerate(original_iter(sampler)):
+                yield [] if index == empty_batch_index else batch
+
+        def observe_step(optimizer, *args, **kwargs):
+            empty = all(len(gradient) == 0 for gradient in optimizer.grad_samples)
+            if empty:
+                accounting_steps = []
+                original_hook = optimizer.step_hook
+
+                def account(optimizer):
+                    accounting_steps.append(True)
+                    original_hook(optimizer)
+
+                optimizer.step_hook = account
+            result = original_step(optimizer, *args, **kwargs)
+            if empty:
+                optimizer.step_hook = original_hook
+                assert not optimizer._is_last_step_skipped
+                assert accounting_steps == [True]
+                assert all(torch.isfinite(parameter.grad).all() for parameter in optimizer.params)
+                assert any(torch.count_nonzero(parameter.grad) for parameter in optimizer.params)
+                empty_steps.append(True)
+            return result
+
+        monkeypatch.setattr(UniformWithReplacementSampler, "__iter__", sample_with_empty_batch)
+        monkeypatch.setattr(DPOptimizer, "step", observe_step)
+        dp = DifferentialPrivacyConfig()
+        analyze(workspace_dir=workspace_before_training, differential_privacy=dp)
+        encode(workspace_dir=workspace_before_training)
+        train(
+            workspace_dir=workspace_before_training,
+            model="MOSTLY_AI/Small",
+            max_epochs=1,
+            differential_privacy=dp,
+            model_state_strategy=ModelStateStrategy.reset,
+            batch_size=32,
+            gradient_accumulation_steps=2,
+        )
+        assert empty_steps
+        workspace = Workspace(workspace_before_training)
+        progress = pd.read_csv(workspace.model_progress_messages_path)
+        assert progress.iloc[-1]["dp_eps"] > 0
 
     @pytest.mark.parametrize(
         "differential_privacy",

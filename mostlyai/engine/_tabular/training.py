@@ -154,6 +154,8 @@ class BatchCollator:
         self.use_nested_ctxseq = use_nested_ctxseq
 
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
+        if not batch:
+            return {}
         batch = pd.DataFrame(batch)
         if self.is_sequential and self.max_sequence_window:
             batch = self._slice_sequences(batch, self.max_sequence_window)
@@ -678,6 +680,9 @@ def train(
                 max_grad_norm=dp_config.get("max_grad_norm"),
                 poisson_sampling=True,
             )
+            # Our dictionary collator represents empty batches as {}, including the first
+            # batch, which Opacus cannot infer from the raw dictionary dataset.
+            trn_dataloader.collate_fn = batch_collator
             # this further wraps the dataloader with batch_sampler=BatchSplittingSampler to achieve gradient accumulation
             # it will split the sampled logical batches into smaller sub-batches with batch_size
             trn_dataloader = wrap_data_loader(
@@ -712,22 +717,31 @@ def train(
                 except StopIteration:
                     trn_data_iter = iter(trn_dataloader)
                     step_data = next(trn_data_iter)
-                # forward pass + calculate sample losses
-                step_losses = _calculate_sample_losses(argn, step_data)
-                # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
-                #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
-                #  than the batch size in both flat and sequential case.
-                # calculate total step loss
-                step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
                 if with_dp:
-                    # opacus handles the gradient accumulation internally
                     optimizer.zero_grad(set_to_none=True)
-                # backward pass
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
-                    if with_dp:
-                        warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
-                    step_loss.backward()
+                if with_dp and not step_data:
+                    # Poisson sampling can produce empty logical batches. Bypass the
+                    # RNN forward pass, but retain Opacus noise and accounting below.
+                    for parameter in optimizer.params:
+                        parameter.grad_sample = parameter.new_empty((0, *parameter.shape))
+                    step_losses = torch.empty(0, device=device)
+                else:
+                    # forward pass + calculate sample losses
+                    step_losses = _calculate_sample_losses(argn, step_data)
+                    # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
+                    #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
+                    #  than the batch size in both flat and sequential case.
+                    step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
+                    # backward pass
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore", category=FutureWarning, message="Using a non-full backward hook*"
+                        )
+                        if with_dp:
+                            warnings.filterwarnings(
+                                "ignore", category=UserWarning, message="Full backward hook is firing*"
+                            )
+                        step_loss.backward()
                 accumulated_steps += 1
                 # explicitly count the number of processed samples as the actual batch size can vary when DP is on
                 samples += step_losses.shape[0]
