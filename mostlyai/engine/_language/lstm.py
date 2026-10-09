@@ -140,13 +140,16 @@ class LSTMFromScratchLMHeadModel(PreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, **kwargs
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs
     ) -> dict[str, torch.Tensor]:
         """
         This function is mandatory so that the model is able to use the Hugging Face `.generate()` method.
         Since `.generate()` works with left-padded sequences but the model is trained with right-padded sequences,
         we need to convert the padding side here to make it work properly.
         """
+        # Transformers may omit an all-ones mask for an unpadded batch.
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
         lengths = attention_mask.sum(dim=1)
         return {
             "input_ids": self.left_to_right_padding(input_ids, lengths),
