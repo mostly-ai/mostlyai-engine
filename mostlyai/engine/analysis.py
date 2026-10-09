@@ -17,6 +17,7 @@ Provides analysis functionality of the engine
 """
 
 import logging
+import os
 import time
 from collections.abc import Iterable
 from pathlib import Path
@@ -24,7 +25,7 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, cpu_count, delayed, parallel_config
+from joblib import Parallel, cpu_count, delayed
 
 from mostlyai.engine._common import (
     ANALYZE_REDUCE_MIN_MAX_N,
@@ -251,18 +252,21 @@ def _analyze_partition(
     else:
         ctx_root_keys = ctx_primary_keys.rename("__rkey")
 
-    # analyze all target columns
-    with parallel_config("loky", n_jobs=n_jobs):
-        results = Parallel()(
-            delayed(_analyze_col)(
-                values=tgt_df[column],
-                encoding_type=encoding_type,
-                context_keys=tgt_context_keys,
-            )
-            for column, encoding_type in tgt_encoding_types.items()
-        )
-        tgt_column_stats = {column: stats for column, stats in zip(tgt_encoding_types.keys(), results)}
+    # Unique row IDs suffice for root-level counts; reuse them across columns.
+    tgt_root_keys = pd.Series(np.arange(len(tgt_df)), index=tgt_df.index, name="root_keys")
 
+    # analyze all target columns
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(_analyze_col)(
+            values=tgt_df[column],
+            root_keys=tgt_root_keys,
+            parent_pid=os.getpid(),
+            encoding_type=encoding_type,
+            context_keys=tgt_context_keys,
+        )
+        for column, encoding_type in tgt_encoding_types.items()
+    )
+    tgt_column_stats = {column: stats for column, stats in zip(tgt_encoding_types.keys(), results)}
     # collect target sequence length stats
     tgt_seq_len = _analyze_seq_len(
         tgt_context_keys=tgt_context_keys,
@@ -293,17 +297,16 @@ def _analyze_partition(
 
         # analyze all context columns
         assert isinstance(ctx_encoding_types, dict)
-        with parallel_config("loky", n_jobs=n_jobs):
-            results = Parallel()(
-                delayed(_analyze_col)(
-                    values=ctx_df[column],
-                    encoding_type=encoding_type,
-                    root_keys=ctx_root_keys,
-                )
-                for column, encoding_type in ctx_encoding_types.items()
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(_analyze_col)(
+                values=ctx_df[column],
+                parent_pid=os.getpid(),
+                encoding_type=encoding_type,
+                root_keys=ctx_root_keys,
             )
-            ctx_column_stats = {column: stats for column, stats in zip(ctx_encoding_types.keys(), results)}
-
+            for column, encoding_type in ctx_encoding_types.items()
+        )
+        ctx_column_stats = {column: stats for column, stats in zip(ctx_encoding_types.keys(), results)}
         # persist context stats
         assert isinstance(ctx_stats_path, Path) and ctx_stats_path.exists()
         ctx_stats_file = ctx_stats_path / f"part.{partition_id}.json"
@@ -516,8 +519,10 @@ def _analyze_col(
     encoding_type: ModelEncodingType,
     root_keys: pd.Series | None = None,
     context_keys: pd.Series | None = None,
+    parent_pid: int | None = None,
 ) -> dict:
-    set_random_state(worker=True)
+    if os.getpid() != parent_pid:
+        set_random_state(worker=True)
 
     stats: dict = {"encoding_type": encoding_type}
 
@@ -526,7 +531,7 @@ def _analyze_col(
         return stats
 
     if root_keys is None:
-        root_keys = pd.Series([str(i) for i in range(len(values))], name="root_keys")
+        root_keys = pd.Series(np.arange(len(values)), index=values.index, name="root_keys")
 
     if is_sequential(values):
         # analyze sequential column

@@ -150,3 +150,49 @@ class TestAnalyzeCol:
             "has_nan": False,
             "seq_len": {"cnt_lengths": {0: 2, 1: 2, 3: 1}},
         }
+
+
+def test_synthetic_integer_roots_preserve_counts():
+    for values in (
+        pd.Series(["a", "a", None, "b"], name="x"),
+        pd.Series([["a", "a"], ["b"], [], ["a", None]], name="x"),
+    ):
+        expected = _analyze_col(
+            values,
+            ModelEncodingType.tabular_categorical,
+            root_keys=pd.Series([str(i) for i in range(len(values))], name="root_keys"),
+        )
+        assert _analyze_col(values, ModelEncodingType.tabular_categorical) == expected
+
+
+def test_threaded_analysis_shares_roots_without_reseeding(tmp_path, monkeypatch):
+    from joblib import parallel_config
+    from pandas.testing import assert_frame_equal
+
+    from mostlyai.engine import analysis
+
+    frame = pd.DataFrame({"id": [1, 1, 2, 3], "x": ["a", "a", "b", None], "y": ["c", "d", "c", "d"]})
+    original = frame.copy(deep=True)
+    partition = tmp_path / "part.000000-trn.parquet"
+    frame.to_parquet(partition)
+    stats_path = tmp_path / "stats"
+    stats_path.mkdir()
+    columns = {"x": ModelEncodingType.tabular_categorical, "y": ModelEncodingType.tabular_categorical}
+    _analyze_partition(partition, stats_path, columns, tgt_context_key="id")
+    expected = read_json(stats_path / "part.000000-trn.json")
+    monkeypatch.setattr(analysis.pd, "read_parquet", lambda *args, **kwargs: frame)
+    roots = []
+    analyze_col = analysis._analyze_col
+
+    def capture_roots(*args, **kwargs):
+        roots.append(kwargs["root_keys"])
+        return analyze_col(*args, **kwargs)
+
+    monkeypatch.setattr(analysis, "_analyze_col", capture_roots)
+    monkeypatch.setattr(analysis, "set_random_state", lambda **kwargs: (_ for _ in ()).throw(AssertionError("reseed")))
+    with parallel_config(backend="threading"):
+        _analyze_partition(partition, stats_path, columns, tgt_context_key="id", n_jobs=2)
+    assert read_json(stats_path / "part.000000-trn.json") == expected
+    assert roots[0] is roots[1]
+    assert roots[0].dtype == np.dtype("int64")
+    assert_frame_equal(frame, original)

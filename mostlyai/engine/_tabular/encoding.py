@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, cpu_count, delayed, parallel_config
+from joblib import Parallel, cpu_count, delayed
 
 from mostlyai.engine._common import (
     ARGN_COLUMN,
@@ -238,9 +238,7 @@ def encode_df(
             )
         )
     if delayed_encodes:
-        with parallel_config("loky", n_jobs=n_jobs):
-            df_columns.extend(Parallel()(delayed_encodes))
-
+        df_columns.extend(Parallel(n_jobs=n_jobs)(delayed_encodes))
     df = pd.concat(df_columns, axis=1) if df_columns else pd.DataFrame()
     return df, ctx_primary_key, tgt_context_key
 
