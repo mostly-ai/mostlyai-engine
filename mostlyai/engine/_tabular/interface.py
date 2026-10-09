@@ -190,6 +190,7 @@ class TabularARGN(BaseEstimator):
 
         # Add target column if provided
         if y is not None:
+            X_df = X_df.copy()
             y_array = np.asarray(y)
             # Infer target column name if not already set
             if not hasattr(self, "_target_column") or self._target_column is None:
@@ -203,6 +204,8 @@ class TabularARGN(BaseEstimator):
                 else:
                     # Fall back to default name
                     self._target_column = "target"
+            if self._target_column in X_df.columns:
+                raise ValueError(f"Target column '{self._target_column}' already exists in X")
             X_df.loc[:, self._target_column] = y_array
 
         # Get workspace directory
