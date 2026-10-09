@@ -237,3 +237,58 @@ class TestLanguageEncode:
         assert formatted_tgt_df.shape[0] == tgt_df.shape[0]
         assert "col_str" in tgt_dict.keys()
         assert "__primary_key" not in tgt_dict.keys()
+
+
+def test_threaded_encoding_preserves_input_and_results(monkeypatch):
+    from joblib import parallel_config
+
+    from mostlyai.engine._tabular import encoding
+
+    frame = pd.DataFrame({"x": ["a", None, "b"], "y": ["b", "a", "a"]}, index=[3, 5, 9])
+    original = frame.copy(deep=True)
+    stats = {
+        "columns": {
+            col: {
+                "encoding_type": ModelEncodingType.tabular_categorical,
+                "codes": {"_RARE_": 0, "<<NULL>>": 1, "a": 2, "b": 3},
+            }
+            for col in frame
+        }
+    }
+    expected, _, _ = encoding.encode_df(frame, stats)
+    monkeypatch.setattr(encoding, "set_random_state", lambda **kwargs: (_ for _ in ()).throw(AssertionError("reseed")))
+    with parallel_config(backend="threading"):
+        actual, _, _ = encoding.encode_df(frame, stats, n_jobs=2)
+    assert_frame_equal(actual, expected)
+    assert_frame_equal(frame, original)
+
+
+@pytest.mark.parametrize("kind", ["numeric", "datetime"])
+def test_threaded_encoding_numeric_datetime_immutability(kind):
+    from joblib import parallel_config
+
+    from mostlyai.engine._encoding_types.tabular.datetime import analyze_datetime, analyze_reduce_datetime
+    from mostlyai.engine._encoding_types.tabular.numeric import analyze_numeric, analyze_reduce_numeric
+    from mostlyai.engine._tabular.encoding import encode_df
+
+    values = pd.Series([1.1, 2.2, 3.3, 4.4] if kind == "numeric" else pd.date_range("2025-01-01", periods=4))
+    frame = pd.DataFrame({"x": values, "y": values}, index=[0, 1, 2, 3])
+    frame.index = [3, 5, 7, 9]
+    original = frame.copy(deep=True)
+    roots = pd.Series(np.arange(len(frame)), index=frame.index, name="roots")
+    columns = {}
+    for col in frame:
+        if kind == "numeric":
+            encoding_type = ModelEncodingType.tabular_numeric_digit
+            stats = analyze_reduce_numeric(
+                [analyze_numeric(frame[col], roots)], value_protection=False, encoding_type=encoding_type
+            )
+        else:
+            encoding_type = ModelEncodingType.tabular_datetime
+            stats = analyze_reduce_datetime([analyze_datetime(frame[col], roots)], value_protection=False)
+        columns[col] = stats | {"encoding_type": encoding_type}
+    expected, _, _ = encode_df(frame, {"columns": columns})
+    with parallel_config(backend="threading"):
+        actual, _, _ = encode_df(frame, {"columns": columns}, n_jobs=2)
+    assert_frame_equal(actual, expected)
+    assert_frame_equal(frame, original)
