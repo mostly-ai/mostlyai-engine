@@ -567,7 +567,8 @@ def log_prob(
 
     # Check column order of input data when flexible generation is disabled
     if not enable_flexible_generation:
-        check_column_order(list(data.columns), all_columns)
+        data_columns_argn = get_argn_column_names(tgt_stats["columns"], list(data.columns))
+        check_column_order(data_columns_argn, all_columns)
 
     # Encode full data to get observed codes for all columns
     full_encoded, _, _ = encode_df(df=data, stats=tgt_stats)

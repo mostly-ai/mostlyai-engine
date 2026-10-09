@@ -49,6 +49,16 @@ def simple_tabular_data():
 class TestTabularARGNBasic:
     """Test basic TabularARGN functionality: fit and unconditional sampling."""
 
+    def test_fit_rejects_target_column_collision(self, simple_tabular_data):
+        X_original = simple_tabular_data.copy(deep=True)
+        y = pd.Series(np.zeros(len(simple_tabular_data)), name="age")
+        argn = TabularARGN(verbose=0)
+
+        with pytest.raises(ValueError, match="Target column 'age' already exists in X"):
+            argn.fit(X=simple_tabular_data, y=y)
+
+        pd.testing.assert_frame_equal(simple_tabular_data, X_original)
+
     def test_fit_and_unconditional_sample(self, simple_tabular_data, tmp_path_factory):
         """Test fit() and unconditional sample()."""
         data = simple_tabular_data
@@ -174,7 +184,9 @@ class TestTabularARGNClassification:
             verbose=0,
             workspace_dir=tmp_path_factory.mktemp("workspace"),
         )
+        X_original = X.copy(deep=True)
         argn.fit(X=X, y=y)
+        pd.testing.assert_frame_equal(X, X_original)
 
         # Test single target prediction
         test_X = X.head(10)
@@ -671,6 +683,13 @@ class TestTabularARGNLogProb:
 
         # Different observations should generally have different log probs
         assert len(np.unique(log_probs)) > 1
+
+    def test_log_prob_training_column_order(self, fitted_log_prob_model_no_flex, log_prob_data):
+        log_probs = fitted_log_prob_model_no_flex.log_prob(log_prob_data.head(10))
+
+        assert log_probs.shape == (10,)
+        assert np.isfinite(log_probs).all()
+        assert (log_probs <= 0).all()
 
     def test_log_prob_wrong_column_order_raises(self, fitted_log_prob_model_no_flex, log_prob_data):
         """Test log_prob raises error with different column order when flexible generation is disabled."""
