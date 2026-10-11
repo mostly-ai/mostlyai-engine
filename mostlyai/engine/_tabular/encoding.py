@@ -407,19 +407,20 @@ def pad_tgt_sequences(df: pd.DataFrame, context_key: str, padding_value: int = 0
         Padded target data frame.
     """
 
-    def pad_row(x):
-        return pd.concat(
-            [
-                x,
-                pd.DataFrame(
-                    {col: [padding_value] for col in x.columns if col not in [context_key]}
-                    | {context_key: [x.iloc[0][context_key]]}
-                ),
-            ],
-            axis=0,
-        )
-
-    return df.groupby(context_key)[df.columns].apply(pad_row).reset_index(drop=True)
+    # Match groupby's default exclusion of missing context keys.
+    df = df.loc[df[context_key].notna()]
+    keys = df[context_key].drop_duplicates()
+    padding = pd.DataFrame(
+        {col: padding_value for col in df.columns if col != context_key}
+        | {context_key: keys.to_numpy()},
+        columns=df.columns,
+    )
+    # Stable sorting retains event order and puts the appended padding last per key.
+    return (
+        pd.concat([df, padding], ignore_index=True)
+        .sort_values(context_key, kind="stable")
+        .reset_index(drop=True)
+    )
 
 
 def pad_ctx_sequences(df: pd.DataFrame, padding_value: int = 0) -> pd.DataFrame:
