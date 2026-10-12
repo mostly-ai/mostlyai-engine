@@ -292,3 +292,25 @@ def test_threaded_encoding_numeric_datetime_immutability(kind):
         actual, _, _ = encode_df(frame, {"columns": columns}, n_jobs=2)
     assert_frame_equal(actual, expected)
     assert_frame_equal(frame, original)
+
+
+@pytest.mark.parametrize("padding_value", [0, 7])
+@pytest.mark.parametrize("string_keys", [False, True])
+def test_pad_tgt_sequences_preserves_event_order(padding_value, string_keys):
+    keys = ["b", "a", "b", "a"] if string_keys else [2, 1, 2, 1]
+    df = pd.DataFrame({"key": keys, "value": [10, 20, 30, 40]}, index=[9, 3, 7, 1])
+    original = df.copy(deep=True)
+    first, second = ("a", "b") if string_keys else (1, 2)
+    expected = pd.DataFrame(
+        {"key": [first] * 3 + [second] * 3, "value": [20, 40, padding_value, 10, 30, padding_value]}
+    )
+
+    assert_frame_equal(pad_tgt_sequences(df, "key", padding_value), expected)
+    assert_frame_equal(df, original)
+
+
+def test_pad_tgt_sequences_missing_keys():
+    df = pd.DataFrame({"key": ["b", None, "a"], "value": [1, 2, 3]})
+    expected = pd.DataFrame({"key": ["a", "a", "b", "b"], "value": [3, 0, 1, 0]})
+
+    assert_frame_equal(pad_tgt_sequences(df, "key"), expected)

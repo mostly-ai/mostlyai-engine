@@ -565,7 +565,8 @@ class TestTabularFlatWithContext:
         )
         analyze(workspace_dir=workspace_dir)
         encode(workspace_dir=workspace_dir)
-        train(max_epochs=10, enable_flexible_generation=True, workspace_dir=workspace_dir)
+        # Allow the context dependencies to converge before checking generation quality.
+        train(max_epochs=20, enable_flexible_generation=True, workspace_dir=workspace_dir)
         return workspace_dir
 
     def test_standard_generation(self, workspace_after_training, input_data, ctx_encoding_types, tgt_encoding_types):

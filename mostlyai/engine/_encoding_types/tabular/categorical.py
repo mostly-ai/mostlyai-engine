@@ -54,8 +54,12 @@ def analyze_categorical(
     if safe_escape:
         values = safe_categorical_escape(values)
     # count distinct root_keys per categorical value for rare-category protection
-    df = pd.concat([root_keys, values], axis=1)
-    cnt_values = df.groupby(values.name)[root_keys.name].nunique().to_dict()
+    if root_keys.index.equals(values.index) and root_keys.is_unique and not root_keys.hasnans:
+        # Flat rows have one root each, so category frequencies equal distinct-root counts.
+        cnt_values = values.value_counts().sort_index().to_dict()
+    else:
+        df = pd.concat([root_keys, values], axis=1)
+        cnt_values = df.groupby(values.name)[root_keys.name].nunique().to_dict()
     stats = {"has_nan": sum(values.isna()) > 0, "cnt_values": cnt_values}
     return stats
 
