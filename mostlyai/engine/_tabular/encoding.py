@@ -411,16 +411,11 @@ def pad_tgt_sequences(df: pd.DataFrame, context_key: str, padding_value: int = 0
     df = df.loc[df[context_key].notna()]
     keys = df[context_key].drop_duplicates()
     padding = pd.DataFrame(
-        {col: padding_value for col in df.columns if col != context_key}
-        | {context_key: keys.to_numpy()},
+        {col: padding_value for col in df.columns if col != context_key} | {context_key: keys.to_numpy()},
         columns=df.columns,
     )
     # Stable sorting retains event order and puts the appended padding last per key.
-    return (
-        pd.concat([df, padding], ignore_index=True)
-        .sort_values(context_key, kind="stable")
-        .reset_index(drop=True)
-    )
+    return pd.concat([df, padding], ignore_index=True).sort_values(context_key, kind="stable").reset_index(drop=True)
 
 
 def pad_ctx_sequences(df: pd.DataFrame, padding_value: int = 0) -> pd.DataFrame:

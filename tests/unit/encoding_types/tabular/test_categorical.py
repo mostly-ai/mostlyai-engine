@@ -285,6 +285,7 @@ class TestCategoricalEscape:
             pd.testing.assert_series_equal(values_1, dec_1, check_dtype=False, check_names=False)
         pd.testing.assert_series_equal(values_2, dec_2, check_dtype=False, check_names=False)
 
+
 @pytest.mark.parametrize("roots", [[0, 1, 2, 3, 4], [0, 0, 1, 1, 2], [0, 1, None, 3, 4]])
 def test_categorical_counts_match_distinct_roots(roots):
     values = pd.Series(["a", "a", "b", None, "b"], name="value")

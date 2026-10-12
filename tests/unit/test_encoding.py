@@ -293,6 +293,7 @@ def test_threaded_encoding_numeric_datetime_immutability(kind):
     assert_frame_equal(actual, expected)
     assert_frame_equal(frame, original)
 
+
 @pytest.mark.parametrize("padding_value", [0, 7])
 @pytest.mark.parametrize("string_keys", [False, True])
 def test_pad_tgt_sequences_preserves_event_order(padding_value, string_keys):
