@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
-from joblib.externals.loky import get_reusable_executor
 
 from mostlyai import engine
 from mostlyai.engine import analyze, encode, generate, split, train
@@ -33,16 +32,6 @@ from .conftest import MockData
 
 @pytest.fixture(scope="module")
 def input_data():
-    # Keep the quality fixture independent of the RNG state left by other tests.
-    random_state = np.random.get_state()
-    try:
-        np.random.seed(42)
-        return _make_input_data()
-    finally:
-        np.random.set_state(random_state)
-
-
-def _make_input_data():
     n_train = 10_000
     n_samples = 10_000 * 2  # the second half is for TestTabularFlatWithContext
     mock_data = MockData(n_samples=n_samples)
@@ -564,37 +553,27 @@ class TestTabularFlatWithContext:
         # due to privacy-protected sequence lengths, we can end up having to process sequential data as flat data
         tgt_df.loc[0, "id"] = "1"
 
-        # Fresh workers inherit the same seed as the parent for analysis and encoding.
-        get_reusable_executor().shutdown(wait=True)
-        engine.set_random_state(42)
-        try:
-            split(
-                tgt_data=tgt_df,
-                tgt_context_key="id",
-                tgt_encoding_types=tgt_encoding_types,
-                ctx_data=ctx_df,
-                ctx_primary_key="id",
-                ctx_encoding_types=ctx_encoding_types,
-                n_partitions=4,
-                workspace_dir=workspace_dir,
-            )
-            analyze(workspace_dir=workspace_dir)
-            encode(workspace_dir=workspace_dir)
-            train(max_epochs=10, enable_flexible_generation=True, workspace_dir=workspace_dir)
-            return workspace_dir
-        finally:
-            get_reusable_executor().shutdown(wait=True)
-            engine.set_random_state(None)
+        split(
+            tgt_data=tgt_df,
+            tgt_context_key="id",
+            tgt_encoding_types=tgt_encoding_types,
+            ctx_data=ctx_df,
+            ctx_primary_key="id",
+            ctx_encoding_types=ctx_encoding_types,
+            n_partitions=4,
+            workspace_dir=workspace_dir,
+        )
+        analyze(workspace_dir=workspace_dir)
+        encode(workspace_dir=workspace_dir)
+        # Allow the context dependencies to converge before checking generation quality.
+        train(max_epochs=20, enable_flexible_generation=True, workspace_dir=workspace_dir)
+        return workspace_dir
 
     def test_standard_generation(self, workspace_after_training, input_data, ctx_encoding_types, tgt_encoding_types):
         orig_tgt = input_data[0][["id"] + list(tgt_encoding_types.keys())]
         syn_ctx = input_data[1][["id"] + list(ctx_encoding_types.keys())]
         workspace_dir = workspace_after_training
-        engine.set_random_state(43)
-        try:
-            generate(ctx_data=syn_ctx, workspace_dir=workspace_dir)
-        finally:
-            engine.set_random_state(None)
+        generate(ctx_data=syn_ctx, workspace_dir=workspace_dir)
         syn_tgt = pd.read_parquet(workspace_dir / "SyntheticData")
 
         match_producer = (syn_tgt.loc[syn_ctx["product_type"] == "A", "product_type_id"] == ord("A")).mean()
