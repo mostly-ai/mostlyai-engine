@@ -700,3 +700,18 @@ def test_compute_log_histogram_with_nan_inf():
     values_all_invalid = np.array([np.nan, np.inf, -np.inf])
     hist_empty = compute_log_histogram(values_all_invalid, bins=64)
     assert sum(hist_empty) == 0
+
+
+@pytest.mark.parametrize("max_seq_len", [100, 3_000_000_000, 10_000_000_000, 208_996_368_089_136, 10**19])
+@pytest.mark.parametrize("prefix", ["", "sidx__"])
+def test_decode_large_positional_values(max_seq_len, prefix):
+    from mostlyai.engine._common import decode_positional_column
+
+    expected = [0, max_seq_len - 1, max_seq_len]
+    encoded = pd.DataFrame(
+        {
+            f"{prefix}E{d}": pd.Series([(v // 10**d) % 10 for v in expected], dtype="int32")
+            for d in range(len(str(max_seq_len)))
+        }
+    )
+    assert decode_positional_column(encoded, max_seq_len, prefix).tolist() == expected
