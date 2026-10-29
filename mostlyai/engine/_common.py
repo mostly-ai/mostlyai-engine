@@ -540,7 +540,11 @@ def decode_positional_column(df_encoded: pd.DataFrame, max_seq_len: int, prefix:
     else:
         # decode positional column as numeric_digit
         n_digits = len(str(max_seq_len))
-        vals = sum([df_encoded[f"{prefix}E{d}"] * 10 ** int(d) for d in list(range(n_digits))])
+        # Promote before multiplying: int32 can wrap even when the place
+        # value itself fits. Very large DP bounds also need Python integers
+        # when the full encoded decimal range no longer fits in int64.
+        dtype = "int64" if n_digits < 19 else "object"
+        vals = sum(df_encoded[f"{prefix}E{d}"].astype(dtype) * 10**d for d in range(n_digits))
     return vals
 
 
