@@ -2432,7 +2432,7 @@ wheels = [
 
 [[package]]
 name = "mostlyai-engine"
-version = "2.7.3"
+version = "2.7.4"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
