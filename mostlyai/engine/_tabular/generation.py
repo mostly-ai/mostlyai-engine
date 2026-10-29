@@ -867,6 +867,19 @@ def generate(
             ctx_primary_keys.rename(ctx_primary_key, inplace=True)
             ctx_data = ctx_primary_keys.to_frame()
 
+        if sample_size == 0:
+            # Empty parents are valid (including after DP generation). Persist
+            # a typed part so downstream tables and reports can still read it,
+            # without constructing tensors or regrouping empty sequences.
+            encoding_types = {name: stats["encoding_type"] for name, stats in tgt_stats["columns"].items()}
+            syn = apply_encoding_type_dtypes(pd.DataFrame(columns=list(encoding_types)), encoding_types)
+            if tgt_context_key:
+                keys = ctx_data[ctx_primary_key].iloc[:0] if ctx_primary_key in ctx_data else pd.Series(dtype="string")
+                syn.insert(0, tgt_context_key, keys)
+            syn = _post_process_decoding(syn, tgt_primary_key=tgt_primary_key)
+            persist_data_part(syn, output_path, f"{0:06}.{0:06}")
+            return
+
         if seed_data is None:
             # create on-the-fly seed data
             seed_data = pd.DataFrame(columns=[tgt_context_key])

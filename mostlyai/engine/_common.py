@@ -483,6 +483,15 @@ def find_distinct_bins(x: list[Any], n: int, n_max: int = 1_000) -> list[Any]:
 
 
 def apply_encoding_type_dtypes(df: pd.DataFrame, encoding_types: dict[str, ModelEncodingType]) -> pd.DataFrame:
+    if len(df) == 0:
+        # DataFrame.apply may skip empty columns or discard their converted dtypes.
+        return pd.DataFrame(
+            {
+                name: _get_type_converter(encoding_types[name])(df[name]) if name in encoding_types else df[name]
+                for name in df.columns
+            },
+            index=df.index,
+        )
     return df.apply(lambda x: _get_type_converter(encoding_types[x.name])(x) if x.name in encoding_types else x)
 
 
