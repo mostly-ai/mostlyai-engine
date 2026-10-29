@@ -160,3 +160,18 @@ def test_split_sub_columns_datetime():
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ]
     pd.testing.assert_frame_equal(df, pd.DataFrame(vals, columns=cols))
+
+
+def test_dp_datetime_bounds_outside_supported_range(monkeypatch):
+    values = pd.Series(pd.date_range("2015-01-01", periods=365), name="date")
+    partition = analyze_datetime(values, pd.Series(range(len(values)), name="id"))
+    monkeypatch.setattr(
+        "mostlyai.engine._encoding_types.tabular.datetime.dp_approx_bounds", lambda *args: (-1e19, 1e19)
+    )
+    stats = analyze_reduce_datetime([partition], value_protection_epsilon=0.005)
+    assert stats["min"] == "1677-09-22"
+    assert stats["max"] == "2262-04-11"
+    # Extreme generated date components must also decode into the supported range.
+    encoded = pd.DataFrame({column: [0, cardinality - 1] for column, cardinality in stats["cardinalities"].items()})
+    decoded = decode_datetime(encoded, stats)
+    assert decoded.tolist() == [pd.Timestamp("1677-09-22"), pd.Timestamp("2262-04-11")]

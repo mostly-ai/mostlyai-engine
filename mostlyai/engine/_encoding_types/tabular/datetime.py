@@ -115,6 +115,13 @@ def analyze_reduce_datetime(
                 log_hist = [sum(bin) for bin in zip(*[j["log_hist"] for j in stats_list])]
                 reduced_min, reduced_max = dp_approx_bounds(log_hist, value_protection_epsilon)
                 if reduced_min is not None and reduced_max is not None:
+                    # DP noise can select histogram bins outside the decoder's
+                    # nanosecond range. Use fixed bounds (DP post-processing),
+                    # rounded inward to whole days to support date-only columns.
+                    min_us = pd.Timestamp.min.ceil("D").value // 1_000
+                    max_us = pd.Timestamp.max.floor("D").value // 1_000
+                    reduced_min = min(max(reduced_min, min_us), max_us)
+                    reduced_max = min(max(reduced_max, min_us), max_us)
                     # convert back to the original string format
                     reduced_min = pd.to_datetime(int(reduced_min), unit="us").strftime(dt_format)
                     reduced_max = pd.to_datetime(int(reduced_max), unit="us").strftime(dt_format)
