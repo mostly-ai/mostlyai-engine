@@ -66,7 +66,7 @@ On Linux, one can explicitly install the CPU-only variant of PyTorch together wi
 
 ```bash
 uv pip install --index-strategy unsafe-first-match -U \
-  torch==2.11.0+cpu torchvision==0.26.0+cpu torchaudio==2.11.0+cpu \
+  torch==2.14.0+cpu torchvision==0.29.0+cpu torchaudio==2.11.0+cpu \
   mostlyai-engine \
   --extra-index-url https://download.pytorch.org/whl/cpu
 ```
