@@ -30,7 +30,7 @@ jobs:
         run: |
           uv sync --frozen --only-group dev --only-group docs
           uv export --frozen --no-dev --no-default-groups --no-emit-project --no-hashes --no-emit-package torch --no-emit-package torchvision --no-emit-package torchaudio --output-file /tmp/runtime-constraints.txt
-          uv pip install --constraint /tmp/runtime-constraints.txt --index-strategy unsafe-first-match torch==2.13.0+cpu torchvision==0.28.0+cpu torchaudio==2.11.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
+          uv pip install --constraint /tmp/runtime-constraints.txt --index-strategy unsafe-first-match torch==2.14.0+cpu torchvision==0.29.0+cpu torchaudio==2.11.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Run | Tests -> unit
         run: uv run --no-sync pytest tests/unit
@@ -66,7 +66,7 @@ jobs:
         run: |
           uv sync --frozen --only-group dev
           uv export --frozen --no-dev --no-default-groups --no-emit-project --no-hashes --no-emit-package torch --no-emit-package torchvision --no-emit-package torchaudio --output-file /tmp/runtime-constraints.txt
-          uv pip install --constraint /tmp/runtime-constraints.txt --index-strategy unsafe-first-match torch==2.13.0+cpu torchvision==0.28.0+cpu torchaudio==2.11.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
+          uv pip install --constraint /tmp/runtime-constraints.txt --index-strategy unsafe-first-match torch==2.14.0+cpu torchvision==0.29.0+cpu torchaudio==2.11.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Run tests -> end_to_end all except sequential
         run: uv run --no-sync pytest --ignore=tests/end_to_end/test_tabular_sequential.py --ignore=tests/end_to_end/test_tabular_sequential_context.py tests/end_to_end/
