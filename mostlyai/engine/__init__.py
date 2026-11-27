@@ -24,15 +24,15 @@ from mostlyai.engine.splitting import split
 from mostlyai.engine.training import train
 
 __all__ = [
-    "split",
+    "LanguageModel",
+    "TabularARGN",
     "analyze",
     "encode",
-    "train",
     "generate",
     "init_logging",
     "set_random_state",
-    "TabularARGN",
-    "LanguageModel",
+    "split",
+    "train",
 ]
 __version__ = "2.7.4"
 

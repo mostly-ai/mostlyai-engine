@@ -79,28 +79,28 @@ class HuggingFaceEngine(LanguageEngine):
     ) -> tuple[list[int], EngineMetrics]:
         do_sample = sampling_temperature > 0.0
 
-        tokenize_kwargs = dict(
-            tokenizer=self.tokenizer,
-            return_tensors="pt",
-            add_bos_token=True,
-            add_eos_token=False,
-            padding=True,
-            truncation=True,
-            max_length=self.tokenizer_max_length,  # truncates input
-        )
+        tokenize_kwargs = {
+            "tokenizer": self.tokenizer,
+            "return_tensors": "pt",
+            "add_bos_token": True,
+            "add_eos_token": False,
+            "padding": True,
+            "truncation": True,
+            "max_length": self.tokenizer_max_length,  # truncates input
+        }
         t_tokenize = time.time()
         inputs = tokenize_fn(text=text, **tokenize_kwargs).to(self.device)
         tokenize_time = time.time() - t_tokenize
 
-        generate_kwargs = dict(
-            do_sample=do_sample,
-            max_new_tokens=self.max_new_tokens,
-            temperature=sampling_temperature if do_sample else None,
-            top_p=sampling_top_p if do_sample else None,
-            bos_token_id=self.tokenizer.bos_token_id,
-            pad_token_id=self.tokenizer.pad_token_id,
-            eos_token_id=self.tokenizer.eos_token_id,
-        )
+        generate_kwargs = {
+            "do_sample": do_sample,
+            "max_new_tokens": self.max_new_tokens,
+            "temperature": sampling_temperature if do_sample else None,
+            "top_p": sampling_top_p if do_sample else None,
+            "bos_token_id": self.tokenizer.bos_token_id,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+        }
 
         t_generate = time.time()
         outputs = self._model.generate(**inputs, **generate_kwargs, logits_processor=self._logits_processors)

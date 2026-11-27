@@ -114,7 +114,7 @@ def test_latlong_grid(tmp_path):
 
 def test_random_latlong_with_na(tmp_path):
     # Test random coordinates within a latlong range + NAs
-    latlong_range = dict(lat_min=15, lat_max=16, long_min=75, long_max=76)
+    latlong_range = {"lat_min": 15, "lat_max": 16, "long_min": 75, "long_max": 76}
     root_keys = pd.Series(np.arange(100), name="user_id")
     values1 = pd.Series(np.array(_random_latlong_array(**latlong_range) + ["ERR"] * 30 + [pd.NA] * 20))
     values2 = pd.Series(np.array(_random_latlong_array(**latlong_range, cnt=100)))
@@ -162,7 +162,7 @@ def test_latlong_na(tmp_path):
         "quad_codes": {f"QUAD{num}": {} for num in range(12, 27, 2)},
     }
     assert stats == {
-        "cardinalities": {pos: 1 for pos in characters.keys()},
+        "cardinalities": {pos: 1 for pos in characters},
         "has_nan": False,
         "quad_codes": {},
         "quadtile_characters": {

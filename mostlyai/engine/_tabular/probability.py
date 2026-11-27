@@ -285,7 +285,7 @@ def _generate_marginal_probs(
             argn_column=target_stats[ARGN_COLUMN],
             argn_sub_column=sub_col,
         )
-        for sub_col in target_stats["cardinalities"].keys()
+        for sub_col in target_stats["cardinalities"]
     ]
 
     # Convert column names to ARGN format for model
@@ -354,7 +354,7 @@ def predict_proba(
     _LOG.info(f"PREDICT_PROBA started for targets: {target_columns}")
 
     # Initialize model
-    model, tgt_stats, ctx_stats, tgt_cardinalities, all_columns, fixed_probs, device, enable_flexible_generation = (
+    model, tgt_stats, ctx_stats, _tgt_cardinalities, all_columns, fixed_probs, device, enable_flexible_generation = (
         _initialize_model(
             workspace=workspace,
             rare_category_replacement_method=rare_category_replacement_method,
@@ -460,7 +460,7 @@ def predict_proba(
                 prev_target_col = target_columns[i]
                 encoded_val = prev_combo[i]
                 prev_target_stats = tgt_stats["columns"][prev_target_col]
-                for sub_col_key in prev_target_stats["cardinalities"].keys():
+                for sub_col_key in prev_target_stats["cardinalities"]:
                     full_sub_col_name = get_argn_name(
                         argn_processor=prev_target_stats[ARGN_PROCESSOR],
                         argn_table=prev_target_stats[ARGN_TABLE],

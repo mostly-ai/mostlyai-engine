@@ -83,13 +83,13 @@ def get_model_units(model: nn.Module) -> dict[str, Any]:
         name[name.find("sequential_context@") :]: [module.hidden_size] * module.num_layers
         for name, module in model.named_modules()
         if ".sequential_context@" in name
-        if isinstance(module, nn.LSTM) or isinstance(module, DPLSTM)
+        if isinstance(module, (nn.LSTM, DPLSTM))
     }
     history_units = {
         name[name.find("history@") :]: [module.hidden_size] * module.num_layers
         for name, module in model.named_modules()
         if ".history@" in name
-        if isinstance(module, nn.LSTM) or isinstance(module, DPLSTM)
+        if isinstance(module, (nn.LSTM, DPLSTM))
     }
     regressor_units = {
         name[name.find("regressor@") :]: [layer.out_features for layer in module]
@@ -116,11 +116,11 @@ def get_model_units(model: nn.Module) -> dict[str, Any]:
 def _embedding_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int) -> int:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_output_dim = dict(
-        S=max(10, int(2 * np.ceil(dim_input**0.15))),
-        M=max(10, int(3 * np.ceil(dim_input**0.25))),
-        L=max(10, int(4 * np.ceil(dim_input**0.33))),
-    )
+    model_size_output_dim = {
+        "S": max(10, int(2 * np.ceil(dim_input**0.15))),
+        "M": max(10, int(3 * np.ceil(dim_input**0.25))),
+        "L": max(10, int(4 * np.ceil(dim_input**0.33))),
+    }
     return min(dim_input, model_size_output_dim[model_size])
 
 
@@ -133,11 +133,11 @@ def _column_embedding_heuristic(
 ) -> int:
     if isinstance(model_size, dict):
         return model_size.get(id, dim_input)
-    model_size_output_dim = dict(
-        S=int(4 + n_sub_cols),
-        M=int(10 + n_sub_cols),
-        L=int(16 + n_sub_cols),
-    )
+    model_size_output_dim = {
+        "S": int(4 + n_sub_cols),
+        "M": int(10 + n_sub_cols),
+        "L": int(16 + n_sub_cols),
+    }
     compress = compress_enabled and n_sub_cols > 2
     dim_output = model_size_output_dim[model_size] if compress else dim_input
     # dim_output should always be at most dim_input
@@ -147,7 +147,7 @@ def _column_embedding_heuristic(
 def _regressor_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, cardinality: int) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[4], M=[16], L=[16, 16])
+    model_size_layers = {"S": [4], "M": [16], "L": [16, 16]}
     dims = [dim_input]
     layers = model_size_layers[model_size]
     # first layers depend on input dimension
@@ -164,7 +164,7 @@ def _regressor_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, 
 def _flat_context_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[2], M=[8], L=[32])
+    model_size_layers = {"S": [2], "M": [8], "L": [32]}
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input, np.e)))
     dims = [unit * coefficient for unit in layers]
@@ -177,7 +177,7 @@ def _sequential_context_heuristic(
 ) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[4], M=[16], L=[64, 64])
+    model_size_layers = {"S": [4], "M": [16], "L": [64, 64]}
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input * seq_len_median, np.e)))
     dims = [unit * coefficient for unit in layers]
@@ -188,7 +188,7 @@ def _sequential_context_heuristic(
 def _history_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, seq_len_median: int) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[16], M=[64], L=[128, 128])
+    model_size_layers = {"S": [16], "M": [64], "L": [128, 128]}
     layers = model_size_layers[model_size]
     coefficient = round(np.log(max(dim_input * seq_len_median, np.e)))
     dims = [unit * coefficient for unit in layers]
@@ -508,7 +508,7 @@ class SequentialContextCompressor(nn.Module):
     def forward(self, x) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         sequential_contexts = []
         sequential_context_masks = []
-        for table, _ in self.ctxseq_table_sub_columns.items():
+        for table in self.ctxseq_table_sub_columns:
             # pass through sequential context table embeddings
             table_embeddings, mask = self.embedders[table](x)
             sequential_context_masks.append(mask)
@@ -1476,7 +1476,7 @@ class SequentialModel(nn.Module):
                 if is_0th_step and sub_col.startswith(RIDX_SUB_COLUMN_PREFIX):
                     # overwrite output for RIDX sub-columns on 0th step with SLEN sub-columns
                     slen_sub_col = sub_col.replace(RIDX_SUB_COLUMN_PREFIX, SLEN_SUB_COLUMN_PREFIX)
-                    out = outputs[slen_sub_col] if slen_sub_col in outputs else out
+                    out = outputs.get(slen_sub_col, out)
                 outputs[sub_col] = out
 
                 # update current sub column embedding

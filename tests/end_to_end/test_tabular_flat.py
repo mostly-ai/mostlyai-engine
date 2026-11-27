@@ -225,7 +225,7 @@ def test_imputation(input_data, tmp_path_factory):
         workspace_dir=workspace_dir,
     )
     syn = pd.read_parquet(workspace_dir / "SyntheticData")
-    for k in tgt_encoding_types.keys():
+    for k in tgt_encoding_types:
         assert syn[k].isna().mean() == 0
 
 
@@ -498,7 +498,7 @@ def test_reproducibility(input_data, tmp_path_factory, cleanup_joblib_pool):
     assert ws_1_artifacts["encoded_data"].equals(ws_2_artifacts["encoded_data"]), (
         "reproducibility of encode step failed"
     )
-    for key in ws_1_artifacts["model_weights"].keys():
+    for key in ws_1_artifacts["model_weights"]:
         assert torch.equal(ws_1_artifacts["model_weights"][key], ws_2_artifacts["model_weights"][key]), (
             "reproducibility of train step failed"
         )

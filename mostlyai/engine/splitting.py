@@ -110,22 +110,22 @@ def split(
     with ProgressCallbackWrapper(update_progress) as progress:
         # validate input
         if tgt_primary_key and tgt_primary_key not in tgt_data:
-            raise Exception("tgt_primary_key not found in tgt_data")
+            raise Exception("tgt_primary_key not found in tgt_data")  # noqa: TRY002
         if tgt_primary_key and tgt_data[tgt_primary_key].duplicated().any():
-            raise Exception("tgt_primary_key must be unique")
+            raise Exception("tgt_primary_key must be unique")  # noqa: TRY002
         if ctx_data is not None:
             if tgt_context_key is None:
-                raise Exception("tgt_context_key must be provided")
+                raise Exception("tgt_context_key must be provided")  # noqa: TRY002
             if tgt_context_key not in tgt_data:
-                raise Exception("tgt_context_key not found in tgt_data")
+                raise Exception("tgt_context_key not found in tgt_data")  # noqa: TRY002
             if ctx_primary_key is None:
-                raise Exception("ctx_primary_key must be provided")
+                raise Exception("ctx_primary_key must be provided")  # noqa: TRY002
             if ctx_primary_key not in ctx_data:
-                raise Exception("ctx_primary_key not found in ctx_data")
+                raise Exception("ctx_primary_key not found in ctx_data")  # noqa: TRY002
             if ctx_data[ctx_primary_key].duplicated().any():
-                raise Exception("ctx_primary_key must be unique")
+                raise Exception("ctx_primary_key must be unique")  # noqa: TRY002
             if not tgt_data[tgt_context_key].isin(ctx_data[ctx_primary_key]).all():
-                raise Exception("tgt_primary_keys must match ctx_primary_keys")
+                raise Exception("tgt_primary_keys must match ctx_primary_keys")  # noqa: TRY002
 
         # prepare data
         if ctx_data is None and tgt_context_key is not None:
@@ -177,7 +177,7 @@ def split(
         # check if tgt_encoding_types are consistent with model_type
         for col, enc_type in tgt_encoding_types.items():
             if not enc_type.startswith(model_type):
-                raise Exception("Mismatch between model_type and model_encoding_types")
+                raise Exception("Mismatch between model_type and model_encoding_types")  # noqa: TRY002
 
         # split into trn/val
         tmp_key = "__key"

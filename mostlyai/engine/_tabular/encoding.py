@@ -220,7 +220,7 @@ def encode_df(
     # data columns
     stats = stats or {"columns": {}}
     delayed_encodes = []
-    for column in stats["columns"].keys():
+    for column in stats["columns"]:
         if column not in df:
             # skip encoding for columns that are not present in the data
             continue

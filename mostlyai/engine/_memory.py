@@ -25,7 +25,7 @@ _LOG = logging.getLogger(__name__)
 def get_available_vram_for_heuristics() -> int:
     if not torch.cuda.is_available():
         return 0
-    free, total = torch.cuda.mem_get_info()
+    _free, total = torch.cuda.mem_get_info()
     return total
 
 

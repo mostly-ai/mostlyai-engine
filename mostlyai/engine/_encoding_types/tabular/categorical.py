@@ -86,7 +86,7 @@ def analyze_reduce_categorical(
         categories = known_categories
     no_of_rare_categories = len(known_categories) - len(categories)
     # add special token for MISSING categories, if any are present
-    if any([j["has_nan"] for j in stats_list]):
+    if any(j["has_nan"] for j in stats_list):
         categories = [CATEGORICAL_NULL_TOKEN] + categories
     # add special token for UNKNOWN categories at first position
     categories = [CATEGORICAL_UNKNOWN_TOKEN] + categories
@@ -101,7 +101,7 @@ def analyze_reduce_categorical(
 def encode_categorical(values: pd.Series, stats: dict, _: pd.Series | None = None) -> pd.DataFrame:
     # ensure a safe representation of values: 1. string dtype; 2. escape reserved tokens
     values = safe_categorical_escape(safe_convert_string(values))
-    known_categories = [str(k) for k in stats["codes"].keys()]
+    known_categories = [str(k) for k in stats["codes"]]
     values = values.copy()
     if CATEGORICAL_NULL_TOKEN in known_categories:
         values[values.isna()] = CATEGORICAL_NULL_TOKEN

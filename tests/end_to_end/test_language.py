@@ -61,8 +61,8 @@ def prepare_encoded_dataset(
         ctx_encoding_types = ctx_encoding_types or {}
         ctx_primary_key = tgt_context_key = TEMPORARY_PRIMARY_KEY
         data[ctx_primary_key] = list(range(data.shape[0]))
-        ctx_columns = [ctx_primary_key, *[key for key in ctx_encoding_types.keys()]]
-        tgt_columns = [tgt_context_key, *[key for key in tgt_encoding_types.keys()]]
+        ctx_columns = [ctx_primary_key, *[key for key in ctx_encoding_types]]
+        tgt_columns = [tgt_context_key, *[key for key in tgt_encoding_types]]
         ctx_df = data[ctx_columns]
         tgt_df = data[tgt_columns]
     split(

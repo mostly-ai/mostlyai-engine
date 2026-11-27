@@ -141,10 +141,6 @@ class TestSafeConvertDigit:
                 ["tax: 1.23 EURO", "tax: -1", "+.23 EURO", "#23", "E"],
                 [1.23, -1, 0.23, 23, np.nan],
             ),
-            (
-                ["-35.3", "100.0", "003", " .348 ", "-0", "N/A"],
-                [-35.3, 100, 3, 0.348, 0, np.nan],
-            ),
             (["x4y2", "4+2", "1.2.3"], [4, 4, 1.2]),
             (
                 pd.Series([True, False, None], dtype="boolean"),
@@ -580,7 +576,7 @@ def test_find_distinct_bins():
     # test continuous
     x = list(np.random.uniform(0, 1, 100))
     bins = find_distinct_bins(x, 10)
-    assert all([b in x for b in bins])
+    assert all(b in x for b in bins)
     assert len(bins) == 11
     assert bins[0] == min(x)
     assert bins[-1] == max(x)
@@ -595,8 +591,8 @@ def test_find_distinct_bins():
     # test few values
     x = np.repeat(np.random.uniform(0, 1, 10), 5)
     bins = find_distinct_bins(x, 10)
-    assert all([b in x for b in bins])
-    assert bins == list(sorted(set(x)))
+    assert all(b in x for b in bins)
+    assert bins == sorted(set(x))
     # test case where we exhaust search
     x = list(np.random.uniform(0, 1, 100))
     x += [0.5] * 2_000

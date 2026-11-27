@@ -141,7 +141,7 @@ def _binary_to_latlong(data: pd.Series) -> pd.Series:
         Transform from a quadtile to its (lat, long) float representation
         For example: '-+AAAAAABCCBBBDADBBCCADDCBCCBB' -> (30.87, 133.11331)
         """
-        if not quadtile or not len(quadtile) == len(PLACEHOLDER_QUADTILE_ENTRY):
+        if not quadtile or len(quadtile) != len(PLACEHOLDER_QUADTILE_ENTRY):
             return None, None
 
         latitude_sign = 1 if quadtile[0] == "+" else -1
@@ -278,7 +278,7 @@ def analyze_reduce_latlong(
     value_protection_epsilon: float | None = None,
 ) -> dict:
     # check if there are missing values
-    has_nan = any([j["has_nan"] for j in stats_list])
+    has_nan = any(j["has_nan"] for j in stats_list)
     unk_cat_aliases = [""]  # na / unknown (unseen) category
 
     quads = list(stats_list[0]["quad_codes"].keys()) if len(stats_list) else []
@@ -300,7 +300,7 @@ def analyze_reduce_latlong(
             rare_min = get_stochastic_rare_threshold(
                 min_threshold=RARE_CATEGORY_THRESHOLD
             )  # FIXME: should this be 20 + noise?
-            categories = [k for k in cnt_values.keys() if cnt_values[k] >= rare_min]
+            categories = [k for k in cnt_values if cnt_values[k] >= rare_min]
         categories = ([CATEGORICAL_UNKNOWN_TOKEN] + [cat for cat in categories if cat not in unk_cat_aliases])[
             :MAX_UNIQUE_VALUES_PER_QUAD
         ]  # UNK + remaining possible values

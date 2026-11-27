@@ -99,7 +99,7 @@ def get_dynamic_gpu_memory_utilization(utilization_ratio: float = 0.9) -> float:
         # Ensure utilization is within reasonable bounds (0.1 to 0.95)
         return max(0.1, min(0.95, utilization))
 
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Fallback to provided ratio if anything goes wrong
         return utilization_ratio
 
@@ -155,15 +155,15 @@ class VLLMEngine(LanguageEngine):
     def generate(
         self, text: list[str], sampling_temperature: float, sampling_top_p: float
     ) -> tuple[list[int], EngineMetrics]:
-        tokenize_kwargs = dict(
-            tokenizer=self.tokenizer,
-            return_tensors=None,
-            add_bos_token=True,
-            add_eos_token=False,
-            padding=False,
-            truncation=True,
-            max_length=self.tokenizer_max_length,  # truncates input
-        )
+        tokenize_kwargs = {
+            "tokenizer": self.tokenizer,
+            "return_tensors": None,
+            "add_bos_token": True,
+            "add_eos_token": False,
+            "padding": False,
+            "truncation": True,
+            "max_length": self.tokenizer_max_length,  # truncates input
+        }
         t_tokenize = time.time()
         inputs = tokenize_fn(text=text, **tokenize_kwargs)
         tokenize_time = time.time() - t_tokenize

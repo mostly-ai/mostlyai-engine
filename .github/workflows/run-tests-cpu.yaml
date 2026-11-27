@@ -32,6 +32,9 @@ jobs:
           uv export --frozen --no-dev --no-default-groups --no-emit-project --no-hashes --no-emit-package torch --no-emit-package torchvision --no-emit-package torchaudio --output-file /tmp/runtime-constraints.txt
           uv pip install --constraint /tmp/runtime-constraints.txt --index-strategy unsafe-first-match torch==2.14.0+cpu torchvision==0.29.0+cpu torchaudio==2.11.0+cpu . --extra-index-url https://download.pytorch.org/whl/cpu
 
+      - name: Lint | Type Check (ty, non-blocking)
+        run: uv run --no-sync ty check --exit-zero --output-format concise
+
       - name: Run | Tests -> unit
         run: uv run --no-sync pytest tests/unit
 

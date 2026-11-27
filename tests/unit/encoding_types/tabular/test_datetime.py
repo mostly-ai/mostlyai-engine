@@ -136,7 +136,7 @@ def test_datetime_min_max_overlapping():
     root_keys = pd.Series(list(range(100)), name="id")
     values = pd.Series([pd.to_datetime(f"01-01-{2000 + y}") for y in range(100)], name="value")
     stats = analyze_reduce_datetime([analyze_datetime(values, root_keys)])
-    for pos, card in stats["cardinalities"].items():
+    for card in stats["cardinalities"].values():
         assert card > 0
 
 

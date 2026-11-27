@@ -365,7 +365,7 @@ def _analyze_reduce(
     if value_protection_epsilon is not None and n_dp_splits > 0:
         _LOG.info(f"epsilon for analyzing each column and sequence length: {value_protection_epsilon / n_dp_splits}")
 
-    for column in encoding_types:
+    for column in encoding_types:  # noqa: PLC0206
         encoding_type = encoding_types[column]
         column_stats_list = [item["columns"][column] for item in stats_list]
         column_stats_list = [

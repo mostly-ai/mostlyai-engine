@@ -106,10 +106,7 @@ Generate new synthetic samples conditionally:
 
 ```python
 # prepare seed
-seed_data = pd.DataFrame({
-    "age": [25, 50],
-    "education": ["Bachelors", "HS-grad"]
-})
+seed_data = pd.DataFrame({"age": [25, 50], "education": ["Bachelors", "HS-grad"]})
 
 # conditional sampling
 argn.sample(seed_data=seed_data)
@@ -131,7 +128,6 @@ data_imputed = argn.impute(data_with_missings)
 
 # impute missing values each with their point estimates
 data_imputed = argn.impute(data_with_missings, n_draws=100)
-
 ```
 
 ### Predictions / Classification
@@ -177,28 +173,29 @@ Assess any marginal conditional probability, for one or more target columns:
 ```python
 # extract class probabilities for a categorical
 argn.predict_proba(
-    X=pd.DataFrame({
-        "age": [25, 30, 35],
-        "sex": ["Male", "Female", "Male"],
-    }),
-    target="income"
+    X=pd.DataFrame(
+        {
+            "age": [25, 30, 35],
+            "sex": ["Male", "Female", "Male"],
+        }
+    ),
+    target="income",
 )
 
 # extract bin probabilities for a numerical
 argn.predict_proba(
-    X=pd.DataFrame({
-        # "age": [25, 30, 35],
-        "sex": ["Male", "Female", "Male"],
-        "occupation": ["Craft-repair", "Craft-repair", "Craft-repair"]
-    }),
-    target="capital_gain"
+    X=pd.DataFrame(
+        {
+            # "age": [25, 30, 35],
+            "sex": ["Male", "Female", "Male"],
+            "occupation": ["Craft-repair", "Craft-repair", "Craft-repair"],
+        }
+    ),
+    target="capital_gain",
 )
 
 # extract two-way marginals
-argn.predict_proba(
-    X=data_test[["age", "race"]],
-    target=["sex", "income"]
-)
+argn.predict_proba(X=data_test[["age", "race"]], target=["sex", "income"])
 ```
 
 ### Log Probability
@@ -248,13 +245,15 @@ argn.sample(n_samples=5)
 Generate new synthetic samples conditionally (using custom context and seed):
 
 ```python
-ctx_data = pd.DataFrame({
-    "id": ["Player1", "Player2"],
-    "weight": [170, 160],
-    "height": [70, 68],
-    "bats": ["R", "L"],
-    "throws": ["R", "L"],
-})
+ctx_data = pd.DataFrame(
+    {
+        "id": ["Player1", "Player2"],
+        "weight": [170, 160],
+        "height": [70, 68],
+        "bats": ["R", "L"],
+        "throws": ["R", "L"],
+    }
+)
 argn.sample(ctx_data=ctx_data)
 ```
 
@@ -279,8 +278,8 @@ data = pd.read_csv("https://github.com/user-attachments/files/23486562/airbnb20k
 lm = LanguageModel(
     model="MOSTLY_AI/LSTMFromScratch-3m",
     tgt_encoding_types={
-        'neighbourhood': 'LANGUAGE_CATEGORICAL',
-        'title': 'LANGUAGE_TEXT',
+        "neighbourhood": "LANGUAGE_CATEGORICAL",
+        "title": "LANGUAGE_TEXT",
     },
     max_training_time=10,  # 10 minutes
     verbose=1,
@@ -302,9 +301,11 @@ lm.sample(
 
 ```python
 # prepare seed
-seed_data = pd.DataFrame({
-    "neighbourhood": ["Westminster", "Hackney"],
-})
+seed_data = pd.DataFrame(
+    {
+        "neighbourhood": ["Westminster", "Hackney"],
+    }
+)
 
 # conditional sampling with seed values
 lm.sample(

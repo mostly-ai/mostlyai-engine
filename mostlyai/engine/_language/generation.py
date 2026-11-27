@@ -73,8 +73,8 @@ def decode_buffered_samples(
         try:
             parsed_x = json_repair.loads(x, stream_stable=True)
             if not isinstance(parsed_x, dict):
-                raise ValueError("parsed_x has to be a dictionary")
-        except Exception:
+                raise ValueError("parsed_x has to be a dictionary")  # noqa: TRY004
+        except Exception:  # noqa: BLE001
             parsed_x = {}
         return [parsed_x.get(c, INVALID_VALUE) for c in columns]
 
@@ -112,7 +112,7 @@ def decode_buffered_samples(
     if ctx_keys.name != DUMMY_CONTEXT_KEY:
         tgt_data = pd.concat([ctx_keys, tgt_data], axis=1)
 
-    for col in tgt_stats["columns"].keys():
+    for col in tgt_stats["columns"]:
         col_stats = tgt_stats["columns"][col]
         if col_stats["encoding_type"] == ModelEncodingType.language_numeric:
             tgt_data[col] = decode_language_numeric(tgt_data[col], col_stats)
@@ -272,8 +272,7 @@ def generate(
         batch_size = batch_size or engine.get_default_batch_size()
         _LOG.info(f"model loading time: {time.time() - t0:.2f}s")
 
-        if batch_size > sample_size:
-            batch_size = sample_size
+        batch_size = min(batch_size, sample_size)
         _LOG.info(f"{batch_size=}")
 
         seed_data = ensure_seed_can_be_tokenized(seed_data, engine.tokenizer)
