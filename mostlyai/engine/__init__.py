@@ -34,7 +34,7 @@ __all__ = [
     "split",
     "train",
 ]
-__version__ = "2.7.4"
+__version__ = "2.8.0"
 
 # suppress specific warning related to os.fork() in multi-threaded processes
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*multi-threaded.*fork.*")
