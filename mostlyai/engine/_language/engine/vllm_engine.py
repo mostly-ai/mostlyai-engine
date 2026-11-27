@@ -14,51 +14,8 @@
 
 from __future__ import annotations
 
-import inspect
-import re
-import textwrap
 import time
 from os import PathLike
-
-# Workaround for vLLM / Triton kernel warmup issue (https://github.com/vllm-project/vllm/issues/49920)
-# In Triton 3.7.x, `re.search(r"^def\s+\w+\s*\(", src, re.MULTILINE)` in `triton/runtime/jit.py:JITCallable.__init__`
-# assumes `def` is at the start of a line. When vLLM >= 0.28.0 warms up multi-decorated kernels
-# (e.g. `minimax_m3/common/ops/index_topk.py` wrapped with `@triton.heuristics`), the regex fails,
-# raising `AttributeError: 'NoneType' object has no attribute 'start'`.
-# TODO: Remove once upstream vLLM/Triton safely handles multi-decorated kernel source inspection.
-try:
-    import triton.runtime.jit
-
-    _orig_jit_callable_init = triton.runtime.jit.JITCallable.__init__
-
-    def _patched_jit_callable_init(self, fn):
-        try:
-            _orig_jit_callable_init(self, fn)
-        except AttributeError as e:
-            if "'NoneType' object has no attribute 'start'" in str(e):
-                self.fn = fn
-                self.signature = inspect.signature(fn)
-                self.raw_src, self.starting_line_number = inspect.getsourcelines(fn)
-                self._fn_name = triton.runtime.jit.get_full_name(fn)
-                self._hash_lock = triton.runtime.jit.threading.RLock()
-                src = textwrap.dedent("".join(self.raw_src))
-                m = re.search(r"(?:^|\n)\s*def\s+[\w_]+\s*\(", src)
-                if m:
-                    def_pos = src.find("def", m.start())
-                    src = src[def_pos:]
-                else:
-                    lines = src.splitlines()
-                    def_lines = [i for i, line in enumerate(lines) if "def " in line]
-                    if def_lines:
-                        src = "\n".join(lines[def_lines[0] :])
-                self._src = src
-                self.hash = None
-            else:
-                raise
-
-    triton.runtime.jit.JITCallable.__init__ = _patched_jit_callable_init
-except Exception:  # noqa: BLE001, S110
-    pass
 
 import torch
 from peft import PeftConfig
@@ -73,35 +30,6 @@ from vllm.sampling_params import StructuredOutputsParams
 from mostlyai.engine._language.common import is_bf16_supported
 from mostlyai.engine._language.engine.base import EngineMetrics, LanguageEngine
 from mostlyai.engine._language.tokenizer_utils import tokenize_fn
-
-
-def get_dynamic_gpu_memory_utilization(utilization_ratio: float = 0.9) -> float:
-    """
-    Calculate dynamic GPU memory utilization based on available memory.
-
-    Args:
-        utilization_ratio: Fraction of available GPU memory to use (default: 0.9)
-
-    Returns:
-        GPU memory utilization as a fraction.
-    """
-    if not torch.cuda.is_available():
-        return utilization_ratio  # fallback for non-GPU environments
-
-    try:
-        # Get free and total memory from CUDA
-        free_memory, total_memory = torch.cuda.mem_get_info()
-
-        # Use specified ratio of free memory
-        target_memory = free_memory * utilization_ratio
-        utilization = target_memory / total_memory
-
-        # Ensure utilization is within reasonable bounds (0.1 to 0.95)
-        return max(0.1, min(0.95, utilization))
-
-    except Exception:  # noqa: BLE001
-        # Fallback to provided ratio if anything goes wrong
-        return utilization_ratio
 
 
 class VLLMEngine(LanguageEngine):
@@ -133,7 +61,6 @@ class VLLMEngine(LanguageEngine):
             # enforce_eager=True,  # results in big slowdown, but is needed when running pytest locally
             disable_log_stats=True,
             tensor_parallel_size=torch.cuda.device_count(),
-            gpu_memory_utilization=get_dynamic_gpu_memory_utilization(),
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
@@ -147,7 +74,7 @@ class VLLMEngine(LanguageEngine):
         self._prepared_schemas = None
 
     def get_default_batch_size(self) -> int:
-        return 192
+        return 1024
 
     def supports_json_enforcing(self) -> bool:
         return True
