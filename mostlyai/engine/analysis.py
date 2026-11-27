@@ -434,7 +434,7 @@ def _analyze_reduce(
             # only get the lengths from the first column of a ctxseq table and reuse the stats later
             if table_name not in ctxseq_stats:
                 ctxseq_stats[table_name] = _analyze_reduce_seq_len(
-                    stats_list=[column_stats_list[0]["seq_len"]], **value_protection_args
+                    stats_list=[item["seq_len"] for item in column_stats_list], **value_protection_args
                 )
                 _LOG.info(f"analyzed sequence length for context table `{table_name}`")
             stats_col["seq_len"] = ctxseq_stats[table_name]
