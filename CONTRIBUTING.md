@@ -23,7 +23,7 @@ Thanks for your interest in contributing to Synthetic Data Engine! Follow these 
 
 3. **Create a virtual environment and install dependencies**:
    ```bash
-   uv sync --frozen --extra cpu --python=3.11  # For CPU-only
+   uv sync --frozen --python=3.11  # For CPU
    source .venv/bin/activate
    ```
    If using GPU, run:
@@ -53,7 +53,7 @@ Thanks for your interest in contributing to Synthetic Data Engine! Follow these 
 
 3. **Implement your changes.**
 
-4. **Run tests and pre-commit hooks**:
+4. **Run tests and pre-commit hooks** (optionally `ty check` for type checks; not yet enforced in CI):
    ```bash
    pytest
    prek run
