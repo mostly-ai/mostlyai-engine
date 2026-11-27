@@ -1,6 +1,6 @@
 name: Complete Workflow
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 env:
   PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
@@ -21,7 +21,7 @@ jobs:
     secrets: inherit
   run-tests-gpu:
     if: |
-      github.event_name == 'push' &&
-      contains(github.event.head_commit.message, '[gpu]')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[gpu]'))
     uses: ./.github/workflows/run-tests-gpu.yaml
     secrets: inherit

@@ -10,6 +10,7 @@ env:
 jobs:
   run-tests-gpu:
     runs-on: gha-gpu-public-internal
+    timeout-minutes: 90
     container:
       image: nvidia/cuda:13.0.2-cudnn-runtime-ubuntu24.04
       options: --gpus all
