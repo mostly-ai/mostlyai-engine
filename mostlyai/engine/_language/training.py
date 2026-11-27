@@ -713,8 +713,9 @@ def train(
                     # forward pass + calculate sample losses
                     with forward_ctx_mgr:
                         outputs = model(**step_data)
-                    # FIXME approximation, should be divided by total sum of number of tokens in the batch
-                    #  as in _calculate_per_label_losses, also the final sample may be smaller than the batch size.
+                    # note: outputs.loss is the mean over the tokens of this micro-batch, so with gradient accumulation
+                    #  each micro-batch gets equal weight, regardless of its token count. Validation loss is weighted
+                    #  exactly per token (see _calculate_val_loss). The last batch may be smaller than the batch size.
                     if with_dp:
                         warnings.filterwarnings("ignore", category=UserWarning, message="Full backward hook is firing*")
                         step_loss = outputs.loss

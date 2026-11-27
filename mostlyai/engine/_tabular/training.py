@@ -722,9 +722,10 @@ def train(
                 else:
                     # forward pass + calculate sample losses
                     step_losses = _calculate_sample_losses(argn, step_data)
-                    # FIXME in sequential case, this is an approximation, it should be divided by total sum of masks in the
-                    #  entire batch to get the average loss per sample. Less importantly the final sample may be smaller
-                    #  than the batch size in both flat and sequential case.
+                    # note: in the sequential case, each sample loss is already divided by the masked step count of the
+                    #  whole batch (see _calculate_sample_losses), so this mean is the per-step loss divided by the batch
+                    #  size. AdamW is largely invariant to that constant scale, but per-sample gradient clipping under DP
+                    #  is not. The last batch of an epoch may be smaller than the batch size.
                     step_loss = torch.mean(step_losses) / (1 if with_dp else gradient_accumulation_steps)
                     # backward pass
                     with warnings.catch_warnings():
