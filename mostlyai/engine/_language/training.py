@@ -477,9 +477,8 @@ def train(
                 differential_privacy=with_dp,
             )
             tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, **tokenizer_args)
-            if tokenizer.eos_token is None:
-                if getattr(model_config, "eos_token_id", None) is not None:
-                    tokenizer.eos_token_id = model_config.eos_token_id
+            if tokenizer.eos_token is None and getattr(model_config, "eos_token_id", None) is not None:
+                tokenizer.eos_token_id = model_config.eos_token_id
             if tokenizer.bos_token is None:
                 if getattr(model_config, "bos_token_id", None) is not None:
                     tokenizer.bos_token_id = model_config.bos_token_id

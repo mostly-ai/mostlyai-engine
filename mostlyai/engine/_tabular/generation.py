@@ -148,7 +148,7 @@ def _resolve_gen_column_order(
             + [target_column_argn]
         )
 
-    if rebalancing:
+    if rebalancing:  # noqa: SIM102
         # rebalance column should be at the beginning in the generation model
         # rebalancing has higher priority than imputation
         if rebalancing.column in column_stats:
@@ -438,7 +438,7 @@ def _fix_imputation_probs(
         col_stats = stats["columns"][col]
         encoding_type = col_stats["encoding_type"]
         # null_name will be either None, "na" or "nan"
-        null_subcol = next(iter([k[4:] for k in col_stats.keys() if k in ["has_na", "has_nan"]]), None)
+        null_subcol = next(iter([k[4:] for k in col_stats if k in ["has_na", "has_nan"]]), None)
         if null_subcol is not None and col_stats[f"has_{null_subcol}"]:
             # column has separate null sub column and there are some nulls
             code_null = 1
@@ -546,7 +546,7 @@ def _decode_df(
                 argn_column=column_stats[ARGN_COLUMN],
                 argn_sub_column=sub_col,
             )
-            for sub_col in column_stats["cardinalities"].keys()
+            for sub_col in column_stats["cardinalities"]
         ]
         # fetch column-specific sub_columns from data
         df_encoded_col = df_encoded[sub_columns]
@@ -773,9 +773,9 @@ def generate(
         has_slen = has_ridx = has_sdec = None
         if is_sequential:
             if isinstance(model_units, dict):
-                has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-                has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units.keys())
-                has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units.keys())
+                has_slen = any(SLEN_SUB_COLUMN_PREFIX in k for k in model_units)
+                has_ridx = any(RIDX_SUB_COLUMN_PREFIX in k for k in model_units)
+                has_sdec = any(SDEC_SUB_COLUMN_PREFIX in k for k in model_units)
             else:
                 has_slen, has_ridx, has_sdec = DEFAULT_HAS_SLEN, DEFAULT_HAS_RIDX, DEFAULT_HAS_SDEC
 
@@ -1269,7 +1269,7 @@ def generate(
                     [ctx_keys]
                     + [
                         pd.Series(out_dct[sub_col].detach().cpu().numpy(), dtype="int32", name=sub_col)
-                        for sub_col in tgt_cardinalities.keys()
+                        for sub_col in tgt_cardinalities
                     ],
                     axis=1,
                 )

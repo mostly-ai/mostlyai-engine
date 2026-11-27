@@ -369,7 +369,7 @@ def get_sub_columns_nested(
         "tables": PREFIX_COLUMN,
         "columns": PREFIX_SUB_COLUMN,
     }[groupby]
-    out: dict[str, list[str]] = dict()
+    out: dict[str, list[str]] = {}
     for sub_col in sub_columns:
         key = sub_col.split(splitby)[0]
         out[key] = out.get(key, []) + [sub_col]
@@ -461,7 +461,7 @@ def find_distinct_bins(x: list[Any], n: int, n_max: int = 1_000) -> list[Any]:
     """
     # return immediately if we have less distinct values than `n`
     if len(x) <= n or len(set(x)) <= n:
-        return list(sorted(set(x)))
+        return sorted(set(x))
     no_of_quantiles = n
     # increase quantiles until we have found `n` distinct bins
     while no_of_quantiles <= n_max:
@@ -470,7 +470,7 @@ def find_distinct_bins(x: list[Any], n: int, n_max: int = 1_000) -> list[Any]:
         no_of_distinct_quantiles = len(set(qs))
         # return if we have found `n` distinct quantiles
         if no_of_distinct_quantiles >= n + 1:
-            bins = list(sorted(set(qs)))
+            bins = sorted(set(qs))
             if len(bins) > n + 1:
                 # handle edge case where we have more than `n` + 1 bins; this can happen if we have a eg 100 bins for
                 # no_of_quantiles=200, but then 102 bins for no_of_quantiles=201.
@@ -479,7 +479,7 @@ def find_distinct_bins(x: list[Any], n: int, n_max: int = 1_000) -> list[Any]:
         # we need to increase at least by number of missing quantiles to acchieve `n` distinct quantiles
         no_of_quantiles += 1 + max(0, n - no_of_distinct_quantiles)
     # in case we fail to find `n` distinct bins before `n_max` we return largest set of bins
-    return list(sorted(set(qs)))
+    return sorted(set(qs))
 
 
 def apply_encoding_type_dtypes(df: pd.DataFrame, encoding_types: dict[str, ModelEncodingType]) -> pd.DataFrame:
@@ -523,7 +523,7 @@ def skip_if_error(func: Callable) -> Callable:
     def skip_if_error_wrapper(*args, **kwargs) -> Any:
         try:
             return func(*args, **kwargs)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOG.warning(f"{func.__qualname__} failed with {type(e)}: {e}")
 
     return skip_if_error_wrapper

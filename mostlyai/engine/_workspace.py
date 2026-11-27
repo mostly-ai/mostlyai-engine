@@ -64,7 +64,7 @@ class JsonPathDesc(PathDesc):
 
 def fetch_sorted_glob(pattern: str):
     def fetch_func(path: Path):
-        return sorted(list(path.glob(pattern)))
+        return sorted(path.glob(pattern))
 
     return fetch_func
 

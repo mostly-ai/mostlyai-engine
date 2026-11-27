@@ -271,7 +271,7 @@ class TabularARGN(BaseEstimator):
             try:
                 self._temp_dir.cleanup()
                 self._temp_dir = None  # Mark as cleaned up
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
     def __enter__(self):
@@ -344,7 +344,7 @@ class TabularARGN(BaseEstimator):
 
             # For sequential models: if ctx_data was not explicitly provided and n_samples is specified,
             # take a random sample of the training ctx_data
-            if not ctx_data_explicit and n_samples is not None and self.tgt_context_key is not None:
+            if not ctx_data_explicit and n_samples is not None and self.tgt_context_key is not None:  # noqa: SIM102
                 if len(ctx_data_df) > n_samples:
                     ctx_data_df = ctx_data_df.sample(n=n_samples, random_state=self.random_state)
 

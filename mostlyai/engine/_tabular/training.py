@@ -176,13 +176,7 @@ class BatchCollator:
                     ),
                     dim=-1,
                 )
-            elif column.startswith(TGT) and not self.is_sequential:
-                # construct column tensor in single step
-                tensors[column] = torch.unsqueeze(
-                    torch.tensor(batch[column].values, dtype=torch.int64, device=self.device),
-                    dim=-1,
-                )
-            elif column.startswith(CTXFLT):
+            elif column.startswith(TGT) and not self.is_sequential or column.startswith(CTXFLT):
                 # construct column tensor in single step
                 tensors[column] = torch.unsqueeze(
                     torch.tensor(batch[column].values, dtype=torch.int64, device=self.device),

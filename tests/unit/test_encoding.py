@@ -231,12 +231,12 @@ class TestLanguageEncode:
         ctx_dict = json.loads(ctx)
         tgt_dict = json.loads(tgt)
         assert formatted_ctx_df.shape[0] == ctx_df.shape[0]
-        assert "col_obj" in ctx_dict["table0"].keys()
-        assert "actual_primary_key" not in ctx_dict["table0"].keys()
-        assert "__primary_key" not in ctx_dict["table3"].keys()
+        assert "col_obj" in ctx_dict["table0"]
+        assert "actual_primary_key" not in ctx_dict["table0"]
+        assert "__primary_key" not in ctx_dict["table3"]
         assert formatted_tgt_df.shape[0] == tgt_df.shape[0]
-        assert "col_str" in tgt_dict.keys()
-        assert "__primary_key" not in tgt_dict.keys()
+        assert "col_str" in tgt_dict
+        assert "__primary_key" not in tgt_dict
 
 
 def test_threaded_encoding_preserves_input_and_results(monkeypatch):

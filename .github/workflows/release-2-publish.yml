@@ -34,7 +34,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'release/') && 'main' || github.event.workflow_run.head_branch || inputs.ref || 'main' }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # v7.1.5
         with:
           enable-cache: true
 

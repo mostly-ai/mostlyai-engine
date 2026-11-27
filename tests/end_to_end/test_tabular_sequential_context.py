@@ -206,7 +206,7 @@ class TestFourTableSetup:
         yield df_ctx, df_syn, df_tgt
 
     def test_match_sums(self, scp_train):
-        df_ctx, df_syn, df_tgt = scp_train
+        _df_ctx, df_syn, df_tgt = scp_train
 
         expected_sums = df_tgt.sums
         syn = df_syn.sort_values(by="id", kind="stable").reset_index(drop=True)
@@ -268,7 +268,7 @@ class TestFlatWithSequentialContext:
         yield df_ctx, df_syn, df_tgt
 
     def test_category_accuracy(self, scp_train):
-        df_ctx, df_syn, df_tgt = scp_train
+        df_ctx, df_syn, _df_tgt = scp_train
 
         # test if synthetic categories match expected categories based on sequence sums
         expected_categories = df_ctx["events"].apply(lambda x: "high" if sum(x) > 2 else "low")

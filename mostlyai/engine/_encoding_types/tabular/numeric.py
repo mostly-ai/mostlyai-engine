@@ -245,9 +245,9 @@ def analyze_reduce_numeric(
     encoding_type: ModelEncodingType | None = ModelEncodingType.tabular_numeric_auto,
 ) -> dict:
     # check for occurrence of NaN values
-    has_nan = any([j["has_nan"] for j in stats_list])
+    has_nan = any(j["has_nan"] for j in stats_list)
     # check if there are negative values
-    has_neg = any([j["has_neg"] for j in stats_list])
+    has_neg = any(j["has_neg"] for j in stats_list)
     # determine precision to apply rounding of sampled values during generation
     keys = sorted({k for stats in stats_list for k in stats["max_digits"]}, key=lambda k: int(k[1:]), reverse=True)
     min_digits = {k: min([j["min_digits"].get(k, 0) for j in stats_list]) for k in keys}
@@ -280,12 +280,12 @@ def analyze_reduce_numeric(
     else:
         max_decimal = 0
     # don't allow more digits than the capped value for it
-    decimal_cap = [d[1:] for d in keys][0]
+    decimal_cap = next(d[1:] for d in keys)
     decimal_cap = int(decimal_cap) if decimal_cap.isnumeric() else NUMERIC_DIGIT_MAX_DECIMAL
     max_decimal = min(max(min_decimal, max_decimal), decimal_cap)
 
     # sum up cnt_values (if they exist for all partitions)
-    has_cnt_values = all([j["cnt_values"] for j in stats_list])
+    has_cnt_values = all(j["cnt_values"] for j in stats_list)
     if has_cnt_values:
         # sum up all counts for each categorical value
         cnt_values: dict[str, int] = {}
@@ -505,7 +505,7 @@ def _decode_numeric_discrete(df_encoded: pd.DataFrame, stats: dict) -> pd.Series
             valid_values = pd.Series(
                 [
                     str(k)
-                    for k in stats["codes"].keys()
+                    for k in stats["codes"]
                     if k not in [NUMERIC_DISCRETE_UNKNOWN_TOKEN, NUMERIC_DISCRETE_NULL_TOKEN]
                 ]
             )

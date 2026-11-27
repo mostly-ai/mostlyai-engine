@@ -200,7 +200,7 @@ def test_split_mixed_tgt_raises(tmp_path):
             "cat": ["A", "B"] * 50,
         }
     )
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         split(
             tgt_data=tgt_df,
             tgt_encoding_types={
@@ -208,7 +208,7 @@ def test_split_mixed_tgt_raises(tmp_path):
                 "cat": ModelEncodingType.language_text,
             },
         )
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         split(
             tgt_data=tgt_df,
             tgt_encoding_types={

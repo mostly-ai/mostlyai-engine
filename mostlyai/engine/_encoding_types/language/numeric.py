@@ -69,7 +69,7 @@ def analyze_reduce_language_numeric(
     value_protection_epsilon: float | None = None,
 ) -> dict:
     # check for occurrence of NaN values
-    has_nan = any([j["has_nan"] for j in stats_list])
+    has_nan = any(j["has_nan"] for j in stats_list)
 
     # determine max scale
     max_scale = max([j["max_scale"] for j in stats_list])

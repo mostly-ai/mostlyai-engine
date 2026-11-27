@@ -15,7 +15,7 @@
 import logging
 
 import torch
-import torch.nn as nn
+from torch import nn
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, GenerationMixin, PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutput
 

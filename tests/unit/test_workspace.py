@@ -70,7 +70,7 @@ class TestWorkspace:
         ws = Workspace(ws_path)
 
         assert ws.tgt_keys.read_handler == read_json
-        ws.tgt_keys.read() == {"context_key": "__primary_key"}
+        assert ws.tgt_keys.read() == {"context_key": "__primary_key"}
         assert ws.tgt_keys.write_handler == write_json
         with mock.patch.object(ws.tgt_keys, "write_handler") as write_mock:
             new_key_data = {"new_key": "test_key"}

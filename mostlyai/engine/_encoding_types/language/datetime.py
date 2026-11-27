@@ -55,7 +55,7 @@ def analyze_reduce_language_datetime(
     value_protection_epsilon: float | None = None,
 ) -> dict:
     # check if there are missing values
-    has_nan = any([j["has_nan"] for j in stats_list])
+    has_nan = any(j["has_nan"] for j in stats_list)
     reduced_min_n = sorted([v for min_n in [j["min_n"] for j in stats_list] for v in min_n], reverse=False)
     reduced_max_n = sorted([v for max_n in [j["max_n"] for j in stats_list] for v in max_n], reverse=True)
     if value_protection:

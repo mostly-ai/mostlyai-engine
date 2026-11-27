@@ -81,7 +81,7 @@ def analyze_reduce_character(
         codes[pos] = {categories[i]: i for i in range(len(categories))}
     # determine cardinalities
     cardinalities = {}
-    has_nan = any([s["has_nan"] for s in stats_list])
+    has_nan = any(s["has_nan"] for s in stats_list)
     if has_nan:
         cardinalities["nan"] = 2  # binary
     for sub_col, sub_col_codes in codes.items():
@@ -155,7 +155,7 @@ def decode_character(df_encoded: pd.DataFrame, stats: dict) -> pd.Series:
                     pd.Categorical.from_codes(df_encoded[sub_col], categories=stats["codes"][sub_col]),
                     dtype="string",
                 )
-                for sub_col in stats["codes"].keys()
+                for sub_col in stats["codes"]
             },
         )
         values = df_decoded.apply(lambda item: "".join(item), axis=1, result_type="reduce").astype(

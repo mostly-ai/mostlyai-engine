@@ -32,9 +32,9 @@ Thanks for your interest in contributing to Synthetic Data Engine! Follow these 
    source .venv/bin/activate
    ```
 
-4. **Install pre-commit hooks**:
+4. **Install pre-commit hooks** (via [prek](https://github.com/j178/prek), a drop-in replacement for pre-commit):
    ```bash
-   pre-commit install
+   prek install
    ```
 
 ## Development Workflow
@@ -56,7 +56,7 @@ Thanks for your interest in contributing to Synthetic Data Engine! Follow these 
 4. **Run tests and pre-commit hooks**:
    ```bash
    pytest
-   pre-commit run
+   prek run
    ```
 
 5. **Commit your changes with a descriptive message**:

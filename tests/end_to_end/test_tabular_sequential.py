@@ -717,7 +717,7 @@ def test_seed_generation(tmp_path):
         )
 
     # check that the sequence lengths are inversely correlated with the number of MINUS steps
-    avg_seq_lens = {name: syn_dict[name].groupby(key_col).size().mean() for name in seed_data_dict.keys()}
+    avg_seq_lens = {name: syn_dict[name].groupby(key_col).size().mean() for name in seed_data_dict}
     assert avg_seq_lens["minuses"] < avg_seq_lens["balanced"] < avg_seq_lens["pluses"]
 
 

@@ -88,7 +88,7 @@ def analyze_reduce_datetime(
     value_protection_epsilon: float | None = None,
 ) -> dict:
     # check if there are missing values
-    has_nan = any([j["has_nan"] for j in stats_list])
+    has_nan = any(j["has_nan"] for j in stats_list)
     # determine min/max values for each part
     keys = stats_list[0]["min_values"].keys()
     min_values = {k: min([j["min_values"][k] for j in stats_list]) for k in keys}

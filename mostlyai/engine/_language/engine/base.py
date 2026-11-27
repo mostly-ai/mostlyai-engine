@@ -53,7 +53,6 @@ class LanguageEngine(ABC):
         Default implementation does nothing.
         Engines that support JSON constraints should override this method.
         """
-        pass
 
     def can_reuse_schemas(self) -> bool:
         """Whether the engine can reuse JSON schema constraints across batches with different sizes.
