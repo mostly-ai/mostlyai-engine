@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # workflow_dispatch Step 1 runs on a branch (main), so head_branch is that branch.
           # A release/* tag push sets head_branch to the tag, which is the commit before Step 1
@@ -34,12 +34,12 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'release/') && 'main' || github.event.workflow_run.head_branch || inputs.ref || 'main' }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # v7.1.5
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version-file: "pyproject.toml"
 
