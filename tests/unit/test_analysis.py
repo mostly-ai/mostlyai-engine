@@ -196,3 +196,44 @@ def test_threaded_analysis_shares_roots_without_reseeding(tmp_path, monkeypatch)
     assert roots[0] is roots[1]
     assert roots[0].dtype == np.dtype("int64")
     assert_frame_equal(frame, original)
+
+
+def test_analyze_reduce_ctxseq_seq_len_across_partitions(tmp_path):
+    from mostlyai.engine._workspace import Workspace
+    from mostlyai.engine.analysis import _analyze_reduce
+
+    ws = Workspace(tmp_path)
+    ws.ctx_stats_path.mkdir(parents=True, exist_ok=True)
+    part0 = {
+        "columns": {
+            "events": _analyze_col(
+                pd.Series([[1, 2]] * 5, name="events"),
+                ModelEncodingType.tabular_categorical,
+            )
+        }
+    }
+    part1 = {
+        "columns": {
+            "events": _analyze_col(
+                pd.Series([list(range(1, 11))] * 5, name="events"),
+                ModelEncodingType.tabular_categorical,
+            )
+        }
+    }
+    write_json(part0, ws.ctx_stats_path / "part.000000-trn.json")
+    write_json(part1, ws.ctx_stats_path / "part.000000-val.json")
+
+    _analyze_reduce(
+        all_stats=ws.ctx_all_stats,
+        out_stats=ws.ctx_stats,
+        keys={"primary_key": "id"},
+        mode="ctx",
+        value_protection=False,
+    )
+    reduced = ws.ctx_stats.read()
+    assert reduced["columns"]["events"]["seq_len"] == {
+        "min": 2,
+        "max": 10,
+        "median": 6,
+        "value_protection": False,
+    }
