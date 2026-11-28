@@ -1,6 +1,6 @@
 [project]
 name = "mostlyai-engine"
-version = "2.8.1"
+version = "2.8.2"
 description = "Synthetic Data Engine"
 requires-python = ">=3.11,<3.14"
 readme = "README.md"
